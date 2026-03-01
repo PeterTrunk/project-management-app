@@ -9,7 +9,7 @@
         public Guid EntityId { get; set; }
         public string Action { get; set; } = string.Empty;
         public string? Payload { get; set; } 
-        public DateTime CreatedAd { get; set; }
+        public DateTime CreatedAt { get; set; }
 
         public Project Project { get; set; } = null!;
         public User Actor { get; set; } = null!;

@@ -9,8 +9,8 @@
         public string CommitSha {  get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public string AuthorEmail {  get; set; } = string.Empty;
-        public DateTime CommitedAt { get; set; }
+        public DateTime CommittedAt { get; set; }
 
-        public ProjectTask? ProjektTask { get; set; }
+        public ProjectTask? ProjectTask { get; set; }
     }
 }
