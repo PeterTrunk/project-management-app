@@ -16,8 +16,16 @@
 ## Development Environment Setup & Database Design
 Docker Compose environment setup with PostgreSQL, MinIO (S3-compatible object storage), and Nginx reverse proxy. PostgreSQL schema design using dbdiagram.io, defining all core entities (users, projects, tasks, sprints, labels, comments, attachments, activity_log) with proper relations, constraints, and indexing strategy. Project repository initialization with backend (ASP.NET Core) and frontend (Svelte) folder structure.
 
+Kihagyott elemek (tudatos döntés):
+- MinIO és Nginx konfiguráció — a Git Webhook & MinIO héten kerül sorra
+- Svelte frontend inicializálás — még nincs kipróbálható funkció
+
 ## EF Core Models, Migrations & Database Infrastructure
 Entity Framework Core Code First model classes and initial migration. Npgsql provider configuration for PostgreSQL. Database triggers for automated fields (updated_at, task_key generation). Statistical views for reporting queries. Seed data for development and testing.
+
+Kihagyott elemek (tudatos döntés):
+- Statisztikai view-ok — a Statistics Dashboard héten (10. hét) kerül sorra
+- task_key generálás — a CRUD API héten kerül sorra a ProjectCounter alapján
 
 ## Authentication & Authorization (JWT + RBAC)
 JWT-based authentication with login and registration endpoints. Password hashing with BCrypt. Role-based access control implementation (Project Admin, Project Manager, Lead Developer, Developer). JWT token handling on the Svelte frontend (localStorage). Protected API endpoints with authorization policies.
