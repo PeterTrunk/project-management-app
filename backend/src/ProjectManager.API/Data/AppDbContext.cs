@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Data;
@@ -6,6 +7,40 @@ namespace ProjectManager.API.Data;
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    //CreatedAt és UpdatedAt automatikus kezelése - triggerek helyett
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        //Speciális működés
+        var now = DateTime.UtcNow;
+
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                // Új entitásnál mindkét mező beállítódik
+                TrySetProperty(entry, "CreatedAt", now);
+                TrySetProperty(entry, "UpdatedAt", now);
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                //Különben csak UpdatedAt
+                TrySetProperty(entry, "UpdatedAt", now);
+            }
+        }
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void TrySetProperty(EntityEntry entry, string propertyName, object value)
+    {
+        var property = entry.Properties
+            .FirstOrDefault(p => p.Metadata.Name == propertyName);
+        if (property != null)
+        {
+            property.CurrentValue = value;
+        }
+    }
+
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
