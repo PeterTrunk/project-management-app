@@ -61,7 +61,8 @@ public class AppDbContext : DbContext
     public DbSet<CommitLink> CommitLinks => Set<CommitLink>();
     public DbSet<PrLink> PrLinks => Set<PrLink>();
     public DbSet<ProjectCounter> ProjectCounters => Set<ProjectCounter>();
-    
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -92,6 +93,40 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(u => u.Email)
                   .IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            //Constraints
+            entity.Property(rt => rt.IsRevoked)
+                  .IsRequired()
+                  .HasDefaultValue(false);
+
+            entity.Property(rt => rt.CreatedAt)
+                  .IsRequired();
+
+            entity.Property(rt => rt.Token)
+                  .IsRequired();
+
+            entity.Property(rt => rt.ExpiresAt)
+                  .IsRequired();
+
+            entity.Property(rt => rt.UserId)
+                  .IsRequired();
+
+            entity.HasOne(rt => rt.User)
+                  .WithMany(u => u.RefreshTokens)
+                  .HasForeignKey(rt => rt.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            //Indexes
+            entity.HasIndex(rt => rt.Token)
+                  .IsUnique();
+
+            //Foreign keys
+            entity.HasOne(rt => rt.User)
+                  .WithMany(u => u.RefreshTokens)
+                  .HasForeignKey(rt => rt.UserId);
         });
         
         modelBuilder.Entity<Role>(entity =>

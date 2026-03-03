@@ -32,12 +32,24 @@ namespace ProjectManager.API.Services.Auth
             //Token előállítás
             var token = CreateToken(user);
 
+            //Refresh Token
+            var refreshTokenEntry = new RefreshToken
+            {
+                Token = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+            await _context.SaveChangesAsync();
+
             return new AuthResponseDto
             {
                 Token = token,
                 UserId = user.Id,
                 Email = user.Email,
-                DisplayName = user.DisplayName
+                DisplayName = user.DisplayName,
+                RefreshToken = refreshTokenEntry.Token
             };
         }
         private string CreateToken(User user)
@@ -76,9 +88,6 @@ namespace ProjectManager.API.Services.Auth
             user.DisplayName = dto.DisplayName;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
-            user.CreatedAt = DateTime.UtcNow;
-            user.UpdatedAt = DateTime.UtcNow;
-
             //A felvétel DB-be + mentés
             await _context.AddAsync(user);
             await _context.SaveChangesAsync();
@@ -86,13 +95,107 @@ namespace ProjectManager.API.Services.Auth
             //Token előállítás
             var token = CreateToken(user);
 
+            //Refresh Token
+            var refreshTokenEntry = new RefreshToken
+            {
+                Token = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+            await _context.SaveChangesAsync();
+
             return new AuthResponseDto
             {
                 Token = token,
                 UserId = user.Id,
                 Email = user.Email,
-                DisplayName = user.DisplayName
+                DisplayName = user.DisplayName,
+                RefreshToken = refreshTokenEntry.Token
             };
+        }
+
+        public async Task<AuthResponseDto> RefreshTokenAsync(string refreshToken)
+        {
+            var refreshTokenEntry = await _context.RefreshTokens.FirstOrDefaultAsync(rf =>
+                rf.Token == refreshToken);
+
+            if (refreshTokenEntry == null)
+                throw new Exception("Token nem található!");
+            if (refreshTokenEntry.IsRevoked)
+                throw new Exception("Token felfüggesztve!");
+            if (refreshTokenEntry.ExpiresAt < DateTime.UtcNow)
+                throw new Exception("Token lejárt!");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u =>
+                u.Id == refreshTokenEntry.UserId);
+
+            if (user == null)
+                throw new Exception("Felhasználó nem található");
+
+            var accessToken = CreateToken(user);
+
+            RefreshToken newRefreshTokenEntry = new RefreshToken
+            {
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                Token = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+            };
+
+            //Egy Transaction: - Token rotation
+            refreshTokenEntry.IsRevoked = true;
+            await _context.RefreshTokens.AddAsync(newRefreshTokenEntry);
+            await _context.SaveChangesAsync();
+            
+            return new AuthResponseDto
+            {
+                DisplayName = user.DisplayName,
+                Token = accessToken,
+                Email = user.Email,
+                UserId = user.Id,
+                RefreshToken = newRefreshTokenEntry.Token
+            };
+        }
+
+        public async Task LogoutAsync(string refreshToken)
+        {
+            var refreshTokenEntry = await _context.RefreshTokens.FirstOrDefaultAsync(rf =>
+                rf.Token == refreshToken);
+
+            if (refreshTokenEntry == null)
+                throw new Exception("Token nem található!");
+
+            refreshTokenEntry.IsRevoked = true;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<UserProfileDto> MeAsync(Guid userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található");
+
+            return new UserProfileDto
+            {
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                UserId = user.Id
+            };
+        }
+
+        public async Task ChangePasswordAsync(Guid userId, ChangePasswordDto dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
+
+            if (user == null)
+                throw new Exception("Felhasználó nem található");
+            
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+                throw new Exception("Hibás jelenlegi jelszó!");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            await _context.SaveChangesAsync();
         }
     }
 }

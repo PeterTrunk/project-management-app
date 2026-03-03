@@ -17,5 +17,6 @@ namespace ProjectManager.API.Model
         public ICollection<TaskAssignment> Assignments { get; set; } = new List<TaskAssignment>();
         public ICollection<Comment> Comments { get; set; } = new List<Comment>();
         public ICollection<Attachment> UploadedFiles { get; set; } = new List<Attachment>();
+        public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }
