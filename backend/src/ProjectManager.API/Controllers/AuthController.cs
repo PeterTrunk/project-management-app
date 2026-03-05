@@ -11,8 +11,8 @@ namespace ProjectManager.API.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthService _authservice;   
-
+        private readonly IAuthService _authservice;
+        
         public AuthController(IAuthService authservice)
         {
             _authservice = authservice;

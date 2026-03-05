@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using ProjectManager.API.Authorization.Handlers;
+using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.Auth;
 using System.Text;
@@ -56,6 +59,19 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
+//RBAC - Role Based Access Control
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("ProjectViewer", policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement("Viewer")))
+    .AddPolicy("ProjectMember", policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement("Member")))
+    .AddPolicy("ProjectMaintainer", policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement("Maintainer")))
+    .AddPolicy("ProjectOwner", policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement("Owner")));
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
