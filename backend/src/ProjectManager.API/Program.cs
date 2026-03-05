@@ -68,8 +68,8 @@ builder.Services.AddAuthorizationBuilder()
         policy.Requirements.Add(new ProjectRoleRequirement("Viewer")))
     .AddPolicy("ProjectMember", policy =>
         policy.Requirements.Add(new ProjectRoleRequirement("Member")))
-    .AddPolicy("ProjectMaintainer", policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement("Maintainer")))
+    .AddPolicy("ProjectAdmin", policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement("Admin")))
     .AddPolicy("ProjectOwner", policy =>
         policy.Requirements.Add(new ProjectRoleRequirement("Owner")));
 

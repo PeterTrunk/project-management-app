@@ -37,7 +37,7 @@ namespace ProjectManager.API.Authorization.Handlers
 
             var roleHierarchy = new List<string>
             {
-                "Viewer", "Member", "Maintainer", "Owner"
+                "Viewer", "Member", "Admin", "Owner"
             };
 
             var userRoleIndex = roleHierarchy.IndexOf(member.ProjectRole);
