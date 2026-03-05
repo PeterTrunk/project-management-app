@@ -28,7 +28,24 @@ Kihagyott elemek (tudatos döntés):
 - task_key generálás — a CRUD API héten kerül sorra a ProjectCounter alapján
 
 ## Authentication & Authorization (JWT + RBAC)
-JWT-based authentication with login and registration endpoints. Password hashing with BCrypt. Role-based access control implementation (Project Admin, Project Manager, Lead Developer, Developer). JWT token handling on the Svelte frontend (localStorage). Protected API endpoints with authorization policies.
+JWT-based authentication with login, registration, refresh, logout, 
+profile and password change endpoints. Password hashing with BCrypt. 
+Token rotation: short-lived access token + long-lived refresh token 
+stored in PostgreSQL (RevocationHandler alapú visszavonással).
+Role-based access control implementation with 4 project roles: 
+Owner, Maintainer, Member, Viewer - hierarchikus jogosultság ellenőrzéssel
+(Owner >= Maintainer >= Member >= Viewer). Custom AuthorizationHandler 
+route-alapú projectId kinyeréssel. 4 policy definiálva:
+ProjectOwner, ProjectMaintainer, ProjectMember, ProjectViewer.
+
+Kihagyott elemek (tudatos döntés):
+- Svelte frontend JWT token handling (localStorage) — 
+  frontend inicializálás a CRUD API hét után kerül sorra
+- Role nevek eltérnek az eredetitől — általánosabb, 
+  iparági standard elnevezések (Owner/Maintainer/Member/Viewer) 
+  amelyek bármilyen csapattípusra alkalmazhatók.
+
+
 
 ## Project & Task CRUD API
 RESTful API endpoints for project and task management: creation, reading, updating, and deletion. Task model with priority, status, due date, and assignee. Label and comment CRUD operations. Input validation with FluentValidation. Swagger/OpenAPI documentation for all endpoints.
