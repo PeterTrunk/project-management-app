@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace ProjectManager.API.DTOs.Task
+namespace ProjectManager.API.DTOs.ProjectTask
 {
     public class CreateTaskDto
     {

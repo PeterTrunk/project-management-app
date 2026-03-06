@@ -1,7 +1,7 @@
 ﻿using FluentValidation;
 using ProjectManager.API.DTOs.Task;
 
-namespace ProjectManager.API.Validators.Task
+namespace ProjectManager.API.DTOs.ProjectTask
 {
     public class UpdateTaskDtoValidator : AbstractValidator<UpdateTaskDto>
     {
