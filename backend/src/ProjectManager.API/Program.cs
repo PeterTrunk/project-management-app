@@ -8,6 +8,7 @@ using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.Auth;
+using ProjectManager.API.Services.ProjectService;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,6 +77,8 @@ builder.Services.AddAuthorizationBuilder()
 
 //FliendValidation Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+builder.Services.AddScoped<IProjectService, ProjectService>();
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
