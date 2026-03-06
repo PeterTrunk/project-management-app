@@ -1,3 +1,4 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -72,6 +73,9 @@ builder.Services.AddAuthorizationBuilder()
         policy.Requirements.Add(new ProjectRoleRequirement("Admin")))
     .AddPolicy("ProjectOwner", policy =>
         policy.Requirements.Add(new ProjectRoleRequirement("Owner")));
+
+//FliendValidation Validators
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 

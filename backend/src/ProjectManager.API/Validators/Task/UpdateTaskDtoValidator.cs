@@ -1,0 +1,24 @@
+﻿using FluentValidation;
+using ProjectManager.API.DTOs.Task;
+
+namespace ProjectManager.API.Validators.Task
+{
+    public class UpdateTaskDtoValidator : AbstractValidator<UpdateTaskDto>
+    {
+        public UpdateTaskDtoValidator()
+        {
+            RuleFor(d => d.Title)
+                .MaximumLength(200)
+                .When(d => d.Title != null);
+
+            RuleFor(d => d.Description)
+                .MaximumLength(250)
+                .When(d => d.Description != null);
+
+            RuleFor(d => d.Priority)
+                .Must(p => new[] { "low", "normal", "high", "critical" }.Contains(p))
+                .WithMessage("Érvénytelen prioritás érték: low, normal, high, critical")
+                .When(d => d.Priority != null);
+        }
+    }
+}
