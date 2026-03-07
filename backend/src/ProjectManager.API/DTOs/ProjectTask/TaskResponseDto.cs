@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.DTOs.Task
+﻿using ProjectManager.API.DTOs.Shared;
+
+namespace ProjectManager.API.DTOs.ProjectTask
 {
     public class TaskResponseDto
     {
@@ -11,6 +13,7 @@
         public List<string> LabelNames { get; set; } = new List<string>();
         public List<string> CommitLinks { get; set; } = new List<string>();
         public List<string> PrLinks { get; set; } = new List<string>();
+        public List<AttachmentDto> Attachments { get; set; } = new List<AttachmentDto>();
         public string CreatedByName { get; set; } = string.Empty;
         public string TaskKey { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;

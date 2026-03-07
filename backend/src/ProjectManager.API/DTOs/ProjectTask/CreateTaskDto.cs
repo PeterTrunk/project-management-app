@@ -7,7 +7,8 @@ namespace ProjectManager.API.DTOs.ProjectTask
         [Required]
         public string Title { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public Guid? BoardId { get; set; }
+        public Guid BoardId { get; set; }
+        public Guid ColumnId { get; set; }
         public Guid? SprintId { get; set; }
         public string? Priority { get; set; }
         public int? EstimateInMinutes { get; set; }

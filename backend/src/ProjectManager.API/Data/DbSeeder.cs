@@ -351,24 +351,24 @@ namespace ProjectManager.API.Data
             };
 
             // Task 6 — Backlog (nincs sprinthez rendelve)
-            var task6 = new ProjectTask
-            {
-                Id = Guid.NewGuid(),
-                ProjectId = project.Id,
-                BoardId = board.Id,
-                ColumnId = null,        // backlog — nincs oszlop
-                SprintId = null,        // backlog — nincs sprint
-                TaskKey = "PM-6",
-                Title = "Project and Task CRUD API",
-                Description = "RESTful endpoints for project and task management with FluentValidation.",
-                Status = "todo",
-                Priority = "normal",
-                Position = 1.0f,
-                EstimateInMinutes = 300,
-                CreatedById = owner.Id
-            };
+            //var task6 = new ProjectTask
+            //{
+            //    Id = Guid.NewGuid(),
+            //    ProjectId = project.Id,
+            //    BoardId = board.Id,
+            //    ColumnId = null,        // backlog — nincs oszlop
+            //    SprintId = null,        // backlog — nincs sprint
+            //    TaskKey = "PM-6",
+            //    Title = "Project and Task CRUD API",
+            //    Description = "RESTful endpoints for project and task management with FluentValidation.",
+            //    Status = "todo",
+            //    Priority = "normal",
+            //    Position = 1.0f,
+            //    EstimateInMinutes = 300,
+            //    CreatedById = owner.Id
+            //};
 
-            context.ProjectTasks.AddRange(task1, task2, task3, task4, task5, task6);
+            context.ProjectTasks.AddRange(task1, task2, task3, task4, task5);
             await context.SaveChangesAsync();
 
             // ProjectCounter frissítése — 6 task lett létrehozva
@@ -397,9 +397,9 @@ namespace ProjectManager.API.Data
                 new LabelTask { TaskId = task3.Id, LabelId = labelFeature.Id },
                 new LabelTask { TaskId = task4.Id, LabelId = labelBackend.Id },
                 new LabelTask { TaskId = task4.Id, LabelId = labelFeature.Id },
-                new LabelTask { TaskId = task5.Id, LabelId = labelBackend.Id },
-                new LabelTask { TaskId = task6.Id, LabelId = labelBackend.Id },
-                new LabelTask { TaskId = task6.Id, LabelId = labelFrontend.Id }
+                new LabelTask { TaskId = task5.Id, LabelId = labelBackend.Id }
+                //new LabelTask { TaskId = task6.Id, LabelId = labelBackend.Id },
+                //new LabelTask { TaskId = task6.Id, LabelId = labelFrontend.Id }
             );
             await context.SaveChangesAsync();
 

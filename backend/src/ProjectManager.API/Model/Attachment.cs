@@ -1,6 +1,4 @@
-﻿using System.Numerics;
-
-namespace ProjectManager.API.Model
+﻿namespace ProjectManager.API.Model
 {
     public class Attachment
     {
@@ -10,7 +8,7 @@ namespace ProjectManager.API.Model
         public Guid UploadedById { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
-        public BigInteger SizeBytes { get; set; }
+        public long SizeBytes { get; set; }
         public string StoragePath { get; set; } = string.Empty;
         public string AttachmentType {  get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }

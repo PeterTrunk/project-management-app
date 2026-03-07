@@ -1,7 +1,7 @@
 ﻿using FluentValidation;
 using ProjectManager.API.DTOs.Project;
 
-namespace ProjectManager.API.Validators.Project
+namespace ProjectManager.API.Validators.ProjectValidators
 {
     public class CreateProjectDtoValidator : AbstractValidator<CreateProjectDto>
     {

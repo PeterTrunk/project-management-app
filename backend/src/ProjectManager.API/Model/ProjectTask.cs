@@ -5,7 +5,7 @@
         public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
         public Guid BoardId { get; set; }
-        public Guid? ColumnId { get; set; }
+        public Guid ColumnId { get; set; }
         public Guid? SprintId { get; set; }
         public Guid CreatedById { get; set; }
         public string TaskKey { get; set; } = string.Empty;

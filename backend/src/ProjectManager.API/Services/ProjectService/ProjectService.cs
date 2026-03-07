@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Model;
@@ -66,6 +65,30 @@ namespace ProjectManager.API.Services.ProjectService
                 JoinedAt = DateTime.UtcNow
             };
             _context.ProjectMembers.Add(projectMember);
+
+            var board = new Board
+            {
+                ProjectId = project.Id,
+                Name = "Main Board",
+                IsDefault = true
+            };
+            _context.Boards.Add(board);
+
+            var backlogColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "Backlog",
+                MapsToStatus = "backlog",
+                Position = 0
+            };
+            var doneColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "Done",
+                MapsToStatus = "done",
+                Position = 99
+            };
+            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn);
 
             await _context.SaveChangesAsync();
             

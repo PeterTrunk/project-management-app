@@ -1,15 +1,15 @@
 ﻿using FluentValidation;
-using ProjectManager.API.DTOs.Task;
+using ProjectManager.API.DTOs.ProjectTask;
 
-namespace ProjectManager.API.DTOs.ProjectTask
+namespace ProjectManager.API.DTOs.ProjectTaskValidators
 {
-    public class UpdateTaskDtoValidator : AbstractValidator<UpdateTaskDto>
+    public class CreateTaskDtoValidator : AbstractValidator<CreateTaskDto>
     {
-        public UpdateTaskDtoValidator()
+        public CreateTaskDtoValidator()
         {
             RuleFor(d => d.Title)
-                .MaximumLength(200)
-                .When(d => d.Title != null);
+                .NotEmpty()
+                .MaximumLength(200);
 
             RuleFor(d => d.Description)
                 .MaximumLength(250)
