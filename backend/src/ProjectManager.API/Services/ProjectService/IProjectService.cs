@@ -10,5 +10,6 @@ namespace ProjectManager.API.Services.ProjectService
         Task<ProjectResponseDto> UpdateProjectAsync(Guid projectId, UpdateProjectDto dto);
         Task ArchiveProjectAsync(Guid projectId);
         Task UnarchiveProjectAsync(Guid projectId);
+        Task DeleteProjectAsync(Guid projectId);
     }
 }

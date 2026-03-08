@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Services.ProjectService;
 using System.Security.Claims;
@@ -115,6 +114,23 @@ namespace ProjectManager.API.Controllers
             {
                 await _projectservice.UnarchiveProjectAsync(projectId);
                 return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{projectId}")]
+        [Authorize(Policy = "ProjectOwner")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> DeleteProjectAsync(Guid projectId)
+        {
+            try
+            {
+                await _projectservice.DeleteProjectAsync(projectId);
+                return NoContent();
             }
             catch (Exception ex)
             {

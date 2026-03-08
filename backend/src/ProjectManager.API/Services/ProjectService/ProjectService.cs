@@ -13,6 +13,16 @@ namespace ProjectManager.API.Services.ProjectService
         {
             _context = context;
         }
+
+        public async Task DeleteProjectAsync(Guid projectId)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található!");
+            _context.Projects.Remove(project);
+            await _context.SaveChangesAsync();
+        }
+
         public async Task ArchiveProjectAsync(Guid projectId)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
