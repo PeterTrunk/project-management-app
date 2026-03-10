@@ -45,10 +45,32 @@ Kihagyott elemek (tudatos döntés):
   iparági standard elnevezések (Owner/Maintainer/Member/Viewer) 
   amelyek bármilyen csapattípusra alkalmazhatók.
 
-
-
 ## Project & Task CRUD API
 RESTful API endpoints for project and task management: creation, reading, updating, and deletion. Task model with priority, status, due date, and assignee. Label and comment CRUD operations. Input validation with FluentValidation. Swagger/OpenAPI documentation for all endpoints.
+
+Elvégzett munkák:
+- API-nkénti DTO-k.
+- Kiemelt DTO: AttachmentDto (Shared/) - proxy download pattern előkészítve
+- FluentValidation: Project, Task, Label, Comment validátorok
+- IProjectService + ProjectService: Create, GetAll, GetById, Update, Archive, Unarchive, Delete
+  - CreateProjectAsync: auto board + Backlog/Done oszlop létrehozás
+  - ProjectCounter-alapú TaskKey generálás (PM-1, PM-2...)
+- ITaskService + TaskService: Create, GetAll, GetById, Update, Move, Delete
+  - MoveTaskAsync: maps_to_status invariáns betartása (státusz frissítése move operáció esetén)
+  - GetTasksAsync: opcionális boardId/sprintId szűrés, batch aggregáció (későbbi fejlesztésre szorul, lásd lentebb)
+- ILabelService + LabelService: CRUD + task hozzárendelés/eltávolítás
+- ICommentService + CommentService: CRUD + callerId ellenőrzés (csak saját komment törölhető)
+- ProjectController, ProjectTaskController, LabelController, CommentController
+
+Tudatos döntések:
+- ColumnId nem nullable: minden task mindig egy oszlopban van (Backlog is oszlop)
+- SprintId nullable: task létrehozáskor opcionális sprint hozzárendelés (lehetőség projekt szervezés egyszerűsítésére)
+- Board kötelező oszlopai: Backlog (position: 0) és Done (position: 99) auto-létrehozva
+- PrUrl hozzáadva PrLink-hez, CommitUrl hozzáadva CommitLink-hez (webhook előkészítés)
+- Attachment.SizeBytes: BigInteger -> long (PostgreSQL bigint kompatibilitás, hiba lehetőségek csökkentése)
+
+Kihagyott elemek (tudatos döntés):
+- GetTasksAsync: Pagination — jövőbeli fejlesztés, kommentben jelölve (Oka:nagyon sok adatot húzhat be egyetlen kérésben, magas DB Query leterhelés).
 
 ## Svelte Frontend Setup & Core Layout
 Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router. Core layout components: Navbar, project selector, tabbed navigation (Overview, Board, Team, Recent Activity, Statistics, Manager, Team Resources, Project Settings). API service layer with JWT header injection. Auth store and project store setup.
