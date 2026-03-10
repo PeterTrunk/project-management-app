@@ -65,5 +65,21 @@ Endpoints: POST, GET, PATCH, DELETE /api/projects/{projectId}/tasks
 | Task mozgatás | PATCH /api/projects/{projectId}/tasks/{taskId}/move | 200 OK |
 | Task törlése | DELETE /api/projects/{projectId}/tasks/{taskId} | 204 NoContent |
 
-##
+## Label és Comment Endpoints (2026-03-10)
 
+### Label Endpoints
+| Eset | Endpoint | Eredmény |
+|------|----------|----------|
+| Label létrehozás | POST /api/projects/{projectId}/labels | 201 Created |
+| Label listázás | GET /api/projects/{projectId}/labels | 200 OK |
+| Label törlése | DELETE /api/projects/{projectId}/labels/{labelId} | 204 NoContent |
+| Label hozzáadása taskhoz | POST /api/projects/{projectId}/labels/tasks/{taskId}/labels/{labelId} | 200 OK |
+| Label eltávolítása taskból | DELETE /api/projects/{projectId}/labels/tasks/{taskId}/labels/{labelId} | 204 NoContent |
+
+### Comment Endpoints
+| Eset | Endpoint | Eredmény |
+|------|----------|----------|
+| Komment írása | POST /api/projects/{projectId}/tasks/{taskId}/comments | 200 OK |
+| Kommentek listázása | GET /api/projects/{projectId}/tasks/{taskId}/comments | 200 OK |
+| Saját komment törlése | DELETE /api/projects/{projectId}/tasks/{taskId}/comments/{commentId} | 204 NoContent |
+| Cascade delete | Projekt törléskor minden kapcsolódó adat törlődik.
