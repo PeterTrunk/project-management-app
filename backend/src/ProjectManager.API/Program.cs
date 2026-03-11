@@ -65,6 +65,16 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 //RBAC - Role Based Access Control
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
@@ -103,6 +113,7 @@ if (app.Environment.IsDevelopment())
 }
 
 //Middleware hozzáadás
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
