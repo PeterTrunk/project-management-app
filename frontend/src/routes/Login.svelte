@@ -21,6 +21,10 @@
         }
     }
 
+    async function goToRegister() {
+        push('/register');
+    }
+
 </script>
 
 <div>
@@ -32,6 +36,9 @@
         <p>{error}</p>
     {/if}
     <button type="submit">Bejelentkezés</button>
+  </form>
+  <form on:submit={goToRegister}>
+    <button type="submit">Regisztráció</button>
   </form>
 </div>
 
