@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import Router from 'svelte-spa-router';
   import Login from './routes/Login.svelte';
   import Register from './routes/Register.svelte';
