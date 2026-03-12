@@ -6,6 +6,9 @@
     import { projectStore, setProjects, setActiveProject } from '../lib/stores/projectStore';
     import type { ProjectResponse } from '../lib/api/projectApi';
 
+    import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
+    let isProjectCreationOpen = false;
+    
     import { push } from 'svelte-spa-router';
 
     // authStore-ból kinyerjük a user adatokat
@@ -41,6 +44,8 @@
     let activeProject = null;
 </script>
 
+
+
 <div class="app-container">
     <!-- Bal oldal -->
     <aside class="sidebar">
@@ -55,6 +60,7 @@
             {#if projects.length === 0}
                 <p>Nincs még projekt!</p>
             {/if}
+            <button on:click={() => isProjectCreationOpen = true}>+ Új projekt</button>
         </div>
         
         <!-- Alsó rész: user info -->
@@ -84,6 +90,14 @@
             {/if}
         </div>
     </div>
+
+    <!--Modals-->
+    {#if isProjectCreationOpen}
+    <CreateProjectModal 
+        bind:isProjectCreationOpen={isProjectCreationOpen}
+        onClose={loadProjects}
+    />
+    {/if}
 </div>
 
 <style>
