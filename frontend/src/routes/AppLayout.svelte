@@ -103,18 +103,37 @@
         <nav class="topbar">
             <button on:click={() => activeView = 'overview'}>Overview</button>
             <button on:click={() => activeView = 'board'}>Board</button>
+            <button on:click={() => activeView = 'sprints'}>Sprints</button>
             <button on:click={() => activeView = 'team'}>Team</button>
+            <button on:click={() => activeView = 'statistics'}>Statistics</button>
+            <button on:click={() => activeView = 'labels'}>Labels</button>
+            <button on:click={() => activeView = 'teamResources'}>Team Resources</button>
+            <button on:click={() => activeView = 'git'}>Git</button>
+            <button on:click={() => activeView = 'projectSettings'}>Project Settings</button>
         </nav>
         
         <!-- Dinamikus tartalom -->
+        <!--(Overview, Board, Team, Recent Activity, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
         <div class="content">
             {#if activeProject}
                 {#if activeView === 'overview'}
                     <ProjectOverview project={activeProject} />
                 {:else if activeView === 'board'}
                     <p>Board nézet</p>
+                {:else if activeView === 'sprints'}
+                    <p>Sprintek nézet</p>
                 {:else if activeView === 'team'}
                     <p>Team nézet</p>
+                {:else if activeView === 'git'}
+                    <p>Git nézet</p>
+                {:else if activeView === 'statistics'}
+                    <p>Statistics nézet</p>
+                {:else if activeView === 'teamResources'}
+                    <p>Team Resources nézet</p>
+                {:else if activeView === 'labels'}
+                    <p>Cimkék nézet</p>
+                {:else if activeView === 'projectSettings'}
+                    <p>Project Settings nézet</p>
                 {/if}
             {:else}
                 <p>Még nincs kiválasztótt projekt!</p>
