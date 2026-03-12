@@ -75,6 +75,33 @@ Kihagyott elemek (tudatos döntés):
 ## Svelte Frontend Setup & Core Layout
 Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router. Core layout components: Navbar, project selector, tabbed navigation (Overview, Board, Team, Recent Activity, Statistics, Manager, Team Resources, Project Settings). API service layer with JWT header injection. Auth store and project store setup.
 
+UI architektúrával kapcsolatos döntések:
+Layout
+- Discord-szerű single-page layout: bal oldali sidebar + jobb oldali dinamikus tartalom
+- Nincs oldalváltás — aktív nézet változóval vezérelt tartalom
+- Route-ok: "/" (Login), "/register" (Register), "/app" (AppLayout)
+Sidebar
+- Projekt lista (kattintásra aktív projekt beállítása)
+- "+ Új projekt" gomb (CreateProjectModal)
+- Alul: bejelentkezett felhasználó neve + Kijelentkezés gomb
+Navbar opciók:
+  Overview | Board | Sprints | Team | Labels | Git | Statistics | Team Resources | Project Settings
+Nézetek tartalma
+- Overview — projekt alapadatok (név, kulcs, leírás, tulajdonos, dátumok, státusz)
+- Board — Kanban tábla, oszlop létrehozás modal-ban ("+ Oszlop hozzáadása")
+- Sprints — sprint kezelés + backlog taskok + task létrehozás
+- Team — tagok listája/kezelése + Recent Activity feed
+- Labels — projekt szintű label CRUD
+- Git — összekapcsolt commitok/PR-ek + manuálisan hozzáköthető össze nem kötött commitok
+- Statistics — grafikonok, metrikák
+- Team Resources — erőforrás elosztás
+- Project Settings — projekt beállítások, archiválás, törlés
+Modal pattern
+- Projekt létrehozás -> CreateProjectModal
+- Oszlop létrehozás -> CreateColumnModal (Board fülön)
+- Task részletes nézet -> TaskDetailModal (kommentek, commitok, PR-ek, labelek)
+- Label hozzáadás taskhoz -> TaskDetailModal-on belül
+
 ## Kanban Board & Drag-and-Drop
 Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns (To Do, In Progress, Review, Done) with task cards displaying key information (title, priority, assignee, due date, labels). Task detail modal with full information, comment panel, and attachment list. Overdue task visual indicators with color-coded due dates.
 
