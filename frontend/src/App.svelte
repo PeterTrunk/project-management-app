@@ -2,12 +2,12 @@
   import Router from 'svelte-spa-router';
   import Login from './routes/Login.svelte';
   import Register from './routes/Register.svelte';
-  import Dashboard from './routes/Dashboard.svelte';
+  import AppLayout from './routes/AppLayout.svelte';
 
   const routes = {
     '/': Login,
     '/register': Register,
-    '/dashboard': Dashboard,
+    '/app': AppLayout,
     '*': Login  // ismeretlen route: login
   };
 </script>

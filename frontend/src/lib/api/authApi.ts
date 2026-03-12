@@ -44,7 +44,7 @@ export async function refreshAsync(data: RefreshTokenRequest): Promise<AuthRespo
 }
 
 export async function logoutAsync(refreshToken: string): Promise<void> {
-    const response = await apiClient.post('/auth/logout', { refreshToken});
+    await apiClient.post('/auth/logout', { refreshToken});
 }
 
 export async function meAsync(): Promise<AuthResponse> {
@@ -53,6 +53,6 @@ export async function meAsync(): Promise<AuthResponse> {
 }
 
 export async function changePasswordAsync(data: ChangePasswordRequest): Promise<void> {
-    const response = await apiClient.post('/auth/changepassword', data);
+    await apiClient.post('/auth/changepassword', data);
 }
 

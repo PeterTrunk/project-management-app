@@ -15,7 +15,7 @@
                 email: response.email,
                 displayName: response.displayName
             });
-            push('/dashboard');
+            push('/app');
         } catch (e) {
             error = "Hibás email vagy jelszó!";
         }
