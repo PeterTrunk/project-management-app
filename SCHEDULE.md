@@ -16,14 +16,14 @@
 ## Development Environment Setup & Database Design
 Docker Compose environment setup with PostgreSQL, MinIO (S3-compatible object storage), and Nginx reverse proxy. PostgreSQL schema design using dbdiagram.io, defining all core entities (users, projects, tasks, sprints, labels, comments, attachments, activity_log) with proper relations, constraints, and indexing strategy. Project repository initialization with backend (ASP.NET Core) and frontend (Svelte) folder structure.
 
-Kihagyott elemek (tudatos döntés):
+**Kihagyott elemek (tudatos döntés)**
 - MinIO és Nginx konfiguráció — a Git Webhook & MinIO héten kerül sorra
 - Svelte frontend inicializálás — még nincs kipróbálható funkció
 
 ## EF Core Models, Migrations & Database Infrastructure
 Entity Framework Core Code First model classes and initial migration. Npgsql provider configuration for PostgreSQL. Database triggers for automated fields (updated_at, task_key generation). Statistical views for reporting queries. Seed data for development and testing.
 
-Kihagyott elemek (tudatos döntés):
+**Kihagyott elemek (tudatos döntés)**
 - Statisztikai view-ok — a Statistics Dashboard héten (10. hét) kerül sorra
 - task_key generálás — a CRUD API héten kerül sorra a ProjectCounter alapján
 
@@ -38,7 +38,7 @@ Owner, Maintainer, Member, Viewer - hierarchikus jogosultság ellenőrzéssel
 route-alapú projectId kinyeréssel. 4 policy definiálva:
 ProjectOwner, ProjectMaintainer, ProjectMember, ProjectViewer.
 
-Kihagyott elemek (tudatos döntés):
+**Kihagyott elemek (tudatos döntés)**
 - Svelte frontend JWT token handling (localStorage) — 
   frontend inicializálás a CRUD API hét után kerül sorra
 - Role nevek eltérnek az eredetitől — általánosabb, 
@@ -48,7 +48,7 @@ Kihagyott elemek (tudatos döntés):
 ## Project & Task CRUD API
 RESTful API endpoints for project and task management: creation, reading, updating, and deletion. Task model with priority, status, due date, and assignee. Label and comment CRUD operations. Input validation with FluentValidation. Swagger/OpenAPI documentation for all endpoints.
 
-Elvégzett munkák:
+**Elvégzett munkák**
 - API-nkénti DTO-k.
 - Kiemelt DTO: AttachmentDto (Shared/) - proxy download pattern előkészítve
 - FluentValidation: Project, Task, Label, Comment validátorok
@@ -62,31 +62,65 @@ Elvégzett munkák:
 - ICommentService + CommentService: CRUD + callerId ellenőrzés (csak saját komment törölhető)
 - ProjectController, ProjectTaskController, LabelController, CommentController
 
-Tudatos döntések:
+**Tudatos döntések**
 - ColumnId nem nullable: minden task mindig egy oszlopban van (Backlog is oszlop)
 - SprintId nullable: task létrehozáskor opcionális sprint hozzárendelés (lehetőség projekt szervezés egyszerűsítésére)
 - Board kötelező oszlopai: Backlog (position: 0) és Done (position: 99) auto-létrehozva
 - PrUrl hozzáadva PrLink-hez, CommitUrl hozzáadva CommitLink-hez (webhook előkészítés)
 - Attachment.SizeBytes: BigInteger -> long (PostgreSQL bigint kompatibilitás, hiba lehetőségek csökkentése)
 
-Kihagyott elemek (tudatos döntés):
+**Kihagyott elemek (tudatos döntés)**
 - GetTasksAsync: Pagination — jövőbeli fejlesztés, kommentben jelölve (Oka:nagyon sok adatot húzhat be egyetlen kérésben, magas DB Query leterhelés).
 
 ## Svelte Frontend Setup & Core Layout
 Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router. Core layout components: Navbar, project selector, tabbed navigation (Overview, Board, Team, Recent Activity, Statistics, Manager, Team Resources, Project Settings). API service layer with JWT header injection. Auth store and project store setup.
 
-UI architektúrával kapcsolatos döntések:
-Layout
+### Elvégzett munkák
+
+**TypeScript migráció**
+- Svelte projekt átállítva TypeScript-re
+- tsconfig.json létrehozva strict módban, noEmit (Vite kezeli a buildet)
+
+**API Service Layer**
+- client.ts: axios instance JWT request interceptor + 401 response interceptor
+- authApi.ts: loginAsync, registerAsync, refreshAsync, logoutAsync, meAsync, changePasswordAsync, updateProfileAsync
+- projectApi.ts: getProjectsAsync, createProjectAsync, updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProjectAsync, getProjectByIdAsync
+
+**Stores**
+- authStore.ts: token, user, isAuthenticated + login/logout helper függvények
+- projectStore.ts: projects, activeProject + setProjects, setActiveProject, clearProjects
+
+**Validators**
+- Validátorok kiszervezve, validators.ts
+- validateEmail, validateDisplayName, validatePassword, validateProjName, validateDescription 
+- újrafelhasználhatóság
+
+**Oldalak**
+- Login.svelte: form, JWT auth, login után redirect Főoldalra-ra, regisztáció gomb redirect registerációs oldalra
+- Register.svelte: form, validáció (email, displayName, jelszó erősség), redirect Login-ra
+- AppLayout.svelte: fő layout, Discord-szerű single-page design
+
+**Komponensek**
+- CreateProjectModal.svelte: projekt létrehozás, validáció, overlay, Escape bezárás
+- ConfirmModal.svelte: újrafelhasználható megerősítő modal (archive, unarchive, delete, update)
+- ProjectOverview.svelte: projekt alapadatok megjelenítése
+- ProjectSettings.svelte: projekt szerkesztés, archiválás, törlés
+- UserSettingsModal.svelte: profil megtekintés, profil szerkesztés, jelszó változtatás
+
+**Backend kiegészítések**
+- CORS konfiguráció: AllowFrontend policy (localhost:5173)
+- UpdateProfileDto, UpdateUserValidator, UserProfileDto
+- PATCH /api/auth/profile endpoint
+- ChangeUserProfileAsync service metódus
+
+### UI architektúrával kapcsolatos döntések:
+**Layout**
 - Discord-szerű single-page layout: bal oldali sidebar + jobb oldali dinamikus tartalom
-- Nincs oldalváltás — aktív nézet változóval vezérelt tartalom
+- Nincs oldalváltás — aktív nézet változóval vezérelt tartalom, vagy modal felugrik
 - Route-ok: "/" (Login), "/register" (Register), "/app" (AppLayout)
-Sidebar
-- Projekt lista (kattintásra aktív projekt beállítása)
-- "+ Új projekt" gomb (CreateProjectModal)
-- Alul: bejelentkezett felhasználó neve + Kijelentkezés gomb
-Navbar opciók:
+**Navbar opciók:**
   Overview | Board | Sprints | Team | Labels | Git | Statistics | Team Resources | Project Settings
-Nézetek tartalma
+**Nézetek tartalma**
 - Overview — projekt alapadatok (név, kulcs, leírás, tulajdonos, dátumok, státusz)
 - Board — Kanban tábla, oszlop létrehozás modal-ban ("+ Oszlop hozzáadása")
 - Sprints — sprint kezelés + backlog taskok + task létrehozás
@@ -96,11 +130,12 @@ Nézetek tartalma
 - Statistics — grafikonok, metrikák
 - Team Resources — erőforrás elosztás
 - Project Settings — projekt beállítások, archiválás, törlés
-Modal pattern
+**Modal pattern**
 - Projekt létrehozás -> CreateProjectModal
 - Oszlop létrehozás -> CreateColumnModal (Board fülön)
 - Task részletes nézet -> TaskDetailModal (kommentek, commitok, PR-ek, labelek)
 - Label hozzáadás taskhoz -> TaskDetailModal-on belül
+- stb
 
 ## Kanban Board & Drag-and-Drop
 Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns (To Do, In Progress, Review, Done) with task cards displaying key information (title, priority, assignee, due date, labels). Task detail modal with full information, comment panel, and attachment list. Overdue task visual indicators with color-coded due dates.
