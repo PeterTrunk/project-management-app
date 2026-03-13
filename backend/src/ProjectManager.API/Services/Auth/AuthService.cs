@@ -197,5 +197,21 @@ namespace ProjectManager.API.Services.Auth
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             await _context.SaveChangesAsync();
         }
+
+        public async Task<UserProfileDto> ChangeUserProfileAsync(Guid userId, UpdateProfileDto dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található");
+
+            user.DisplayName = dto.DisplayName;
+            await _context.SaveChangesAsync();
+            return new UserProfileDto
+            {
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                UserId = user.Id
+            };
+        }
     }
 }

@@ -20,6 +20,16 @@ interface ChangePasswordRequest {
     newPassword: string;
 }
 
+interface UpdateProfileRequest {
+    displayName: string;
+}
+
+interface UserProfileResponse {
+    userId: string;
+    email: string;
+    displayName: string;
+}
+
 interface AuthResponse {
     token: string;
     refreshToken: string;
@@ -54,5 +64,10 @@ export async function meAsync(): Promise<AuthResponse> {
 
 export async function changePasswordAsync(data: ChangePasswordRequest): Promise<void> {
     await apiClient.post('/auth/changepassword', data);
+}
+
+export async function updateProfileAsync(data: UpdateProfileRequest): Promise<UserProfileResponse> {
+    const response = await apiClient.patch('/auth/profile', data);
+    return response.data;
 }
 

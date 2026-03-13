@@ -12,8 +12,6 @@ interface UpdateProjectRequest {
     isArchived: boolean | null;
 }
 
-
-
 export interface ProjectResponse {
     id: string;
     name: string;

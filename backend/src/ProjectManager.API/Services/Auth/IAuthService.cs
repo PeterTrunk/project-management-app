@@ -10,5 +10,6 @@ namespace ProjectManager.API.Services.Auth
         Task LogoutAsync(string refreshToken);
         Task<UserProfileDto> MeAsync(Guid userId);
         Task ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
+        Task <UserProfileDto> ChangeUserProfileAsync(Guid userId, UpdateProfileDto dto);
     }
 }

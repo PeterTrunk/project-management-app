@@ -12,7 +12,9 @@
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
+    import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
     let isProjectCreationOpen = false;
+    let isUserSettingsOpen = false;
     
     import { push } from 'svelte-spa-router';
 
@@ -93,7 +95,8 @@
         
         <!-- Alsó rész: user info -->
         <div class="sidebar-user">
-            <span> Logged in as: {displayName}</span>
+            <span> Bejelentkezve: {displayName}</span>
+            <button on:click={() => isUserSettingsOpen = true}>Profil</button>
             <button on:click={handleLogout}>Kijelentkezés</button>
         </div>
     </aside>
@@ -148,6 +151,11 @@
     <CreateProjectModal 
         bind:isProjectCreationOpen={isProjectCreationOpen}
         onClose={loadProjects}
+    />
+    {/if}
+    {#if isUserSettingsOpen}
+    <UserSettingsModal 
+        bind:isUserSettingsOpen={isUserSettingsOpen}
     />
     {/if}
 </div>
