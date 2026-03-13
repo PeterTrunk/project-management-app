@@ -1,6 +1,8 @@
 <script lang="ts">
     import { createProjectAsync } from '../../lib/api/projectApi';
     import { setProjects, projectStore } from '../../lib/stores/projectStore';
+    
+    import { validateDescription, validateProjName } from '../validators';
 
     export let isProjectCreationOpen = false;  // AppLayout-ból vezéreljük
 
@@ -11,22 +13,12 @@
     let success = '';
     let error = '';
 
-    function validateProjName(name: string): string | null{
-        if (name.length > 120) return 'A projekt neve nem lehet hosszabb mint 120 karakter!\n';
-        return null;
-    }
-
     function validateProjKey(key: string): string | null{
         let aggregateError = '';
         if(!/^[A-Z0-9]+$/.test(key)) aggregateError += 'Hibás Projekt Kulcsa szignatúra! (Csak számok és nagybetűk, szóköz nélkül.)\n';
         if(key.length > 255) aggregateError += 'Projekt Kulcsa nem lehet hosszabb mint 10 karakter!\n';
         if(key.length < 2) aggregateError += 'Projekt Kulcsa nem lehett rövidebb 2 karakternél!\n';
         return aggregateError === '' ? null : aggregateError;
-    }
-
-    function validateDescription(desc: string): string | null {
-        if (desc.length > 2000) return 'Leírás maximum 2000 karakter hosszú lehet!\n';
-        return null;
     }
 
     async function handleCreateProject() {

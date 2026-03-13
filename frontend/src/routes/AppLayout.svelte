@@ -9,6 +9,7 @@
     import type { ProjectResponse } from '../lib/api/projectApi';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
+    import ProjectSettings from '../lib/components/ProjectSettings.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     let isProjectCreationOpen = false;
@@ -133,7 +134,7 @@
                 {:else if activeView === 'labels'}
                     <p>Cimkék nézet</p>
                 {:else if activeView === 'projectSettings'}
-                    <p>Project Settings nézet</p>
+                    <ProjectSettings project={activeProject} />
                 {/if}
             {:else}
                 <p>Még nincs kiválasztótt projekt!</p>

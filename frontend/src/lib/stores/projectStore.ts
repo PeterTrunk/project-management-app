@@ -1,19 +1,10 @@
 import { writable } from 'svelte/store';
 
-interface Project {
-    id: string;
-    name: string;
-    projKey: string;
-    description: string | null;
-    ownerName: string;
-    isArchived: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-}
+import type { ProjectResponse } from '../api/projectApi';
 
 interface ProjectState {
-    projects: Project[];
-    activeProject: Project | null;
+    projects: ProjectResponse[];
+    activeProject: ProjectResponse | null;
 }
 
 const initialState: ProjectState = {
@@ -23,11 +14,11 @@ const initialState: ProjectState = {
 
 export const projectStore = writable<ProjectState>(initialState);
 
-export function setProjects(projects: Project[]) {
+export function setProjects(projects: ProjectResponse[]) {
     projectStore.update(state => ({ ...state, projects }));
 }
 
-export function setActiveProject(project: Project) {
+export function setActiveProject(project: ProjectResponse | null) {
     projectStore.update(state => ({ ...state, activeProject: project }));
 }
 

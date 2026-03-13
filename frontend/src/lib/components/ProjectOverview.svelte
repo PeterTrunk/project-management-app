@@ -10,9 +10,9 @@
     <p>Projekt tulajdonosa: <span>{project.ownerName}</span></p>
     <p>Projekthez tartozó kulcs: <span>{project.projKey}</span></p>
     <p>Létrehozás ideje: <span>{new Date(project.createdAt).toLocaleDateString('hu-HU')}</span></p>
-    <p>Alap adatok legutobbi változásának ideje: <span>{new Date(project.updatedAt).toLocaleDateString('hu-HU')}</span></p>
+    <p>Adatok legutóbbi változásának ideje: <span>{new Date(project.updatedAt).toLocaleDateString('hu-HU')}</span></p>
     {#if project.isArchived}
-        <p>A Projekt Arhivált állapotú</p>
+        <p>A Projekt <span>Arhivált</span> állapotú</p>
     {:else}
         <p>A Projekt <span>Aktív</span> állapotú.</p>
     {/if}
