@@ -1,0 +1,11 @@
+﻿namespace ProjectManager.API.DTOs.Columns
+{
+    public class CreateColumnDto
+    {
+        public Guid BoardId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string MapsToStatus {  get; set; } = string.Empty;
+        public int? WipLimit { get; set; }
+        public int Position { get; set; }
+    }
+}

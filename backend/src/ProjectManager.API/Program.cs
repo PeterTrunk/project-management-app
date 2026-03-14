@@ -8,6 +8,7 @@ using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.Auth;
+using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.ProjectService;
@@ -95,6 +96,7 @@ builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<ILabelService, LabelService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
+builder.Services.AddScoped<IColumnService, ColumnService>();
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
