@@ -137,8 +137,41 @@ Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router.
 - Label hozzáadás taskhoz -> TaskDetailModal-on belül
 - stb
 
-## Kanban Board & Drag-and-Drop
-Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns (To Do, In Progress, Review, Done) with task cards displaying key information (title, priority, assignee, due date, labels). Task detail modal with full information, comment panel, and attachment list. Overdue task visual indicators with color-coded due dates.
+## Kanban Board & Drag-and-Drop (Ez fejezet leírás frissítve lett)
+Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns with task cards displaying key information (title, priority, assignee, due date, labels). Task detail modal with full information, comment panel, and attachment list. Board CRUD (jelenleg csak projekt létrehozáskor jön létre automatikusan a default board). Column CRUD. A Sprint CRUD.
+Frontend: Board nézet oszlopokkal, task kártyákkal (+ Overdue task visual indicators with color-coded due dates), CreateColumnModal, TaskDetailModal (kommentek, labelek, commit/PR linkek), Sprints nézet sprint kezeléssel és backloggal, valamint CreateTaskModal, 
+
+### Technikai döntések és refaktorálási teendők
+
+**Data Annotations vs FluentValidation duplikáció**
+A projekt korábbi részeiben egyes DTO-knál mindkét validációs megközelítés egyszerre szerepel (Data Annotations + FluentValidation), ami redundáns. A döntés: csak FluentValidation marad.
+
+**Érintett DTO-k (refaktorálás szükséges):**
+- CreateProjectDto
+- UpdateProjectDto
+- CreateTaskDto
+- UpdateTaskDto
+- MoveTaskDto
+- CreateLabelDto
+- CreateCommentDto
+- RegisterDto
+- LoginDto
+- UpdateProfileDto
+
+**Teendő:**
+- Data Annotations attribútumok eltávolítása az érintett DTO-kból
+- FluentValidation szabályok megtartása/kiegészítése ahol szükséges
+
+**Swagger + FluentValidation integráció (következő fázis végén)**
+A Swagger UI jelenleg nem jeleníti meg a FluentValidation szabályokat. (pl.: Name: maxvalue, min., illetve hogy kötelező mezőröl van e szó, stb)
+Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
+- Automatikusan beolvassa a validációs szabályokat
+- minLength, maxLength, pattern megjelenik a Swagger UI-ban
+
+**Column törlési logika**
+Döntés: csak üres oszlop törölhető — ha taskok vannak benne hibaüzenet jelenik meg.
+A felhasználó felelőssége hogy törlés előtt áthelyezze a taskokat.
+WipLimit ellenőrzés: jelenleg nem implementált, jövőbeli fejlesztés.
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
