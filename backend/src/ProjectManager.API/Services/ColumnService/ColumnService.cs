@@ -32,7 +32,7 @@ namespace ProjectManager.API.Services.ColumnService
                 WipLimit = dto.WipLimit,
                 Position = dto.Position,
             };
-            await _context.ColumnDefinitions.AddAsync(column);
+            _context.ColumnDefinitions.Add(column);
             await _context.SaveChangesAsync();
 
             var response = new ColumnResponseDto

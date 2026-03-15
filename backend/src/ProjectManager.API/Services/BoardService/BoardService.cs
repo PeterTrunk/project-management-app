@@ -1,0 +1,109 @@
+﻿using ProjectManager.API.Data;
+using ProjectManager.API.DTOs.Boards;
+using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Model;
+
+namespace ProjectManager.API.Services.BoardService
+{
+    public class BoardService : IBoardService
+    {
+        private readonly AppDbContext _context;
+
+        public BoardService(AppDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<BoardResponseDto> CreateBoardAsync(Guid projectId, CreateBoardDto dto)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var board = new Board
+            {
+                ProjectId = dto.ProjectId,
+                Name = dto.Name,
+                Description = dto.Description,
+                IsDefault = dto.IsDefault
+            };
+            _context.Boards.Add(board);
+            await _context.SaveChangesAsync();
+
+            var response = new BoardResponseDto
+            {
+                Id = board.Id,
+                ProjectId = board.ProjectId,
+                Name = board.Name,
+                Description = board.Description,
+                IsDefault = board.IsDefault,
+                CreatedAt = board.CreatedAt,
+                UpdatedAt = board.UpdatedAt
+            };
+            return response;
+        }
+
+        public async Task DeleteBoardAsync(Guid projectId, Guid boardId)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            if(board == null)
+                throw new Exception("Board nem található");
+            
+            _context.Boards.Remove(board);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<List<BoardResponseDto>> GetBoardsAsync(Guid projectId)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var boards = await _context.Boards
+                .Where(b => b.ProjectId == projectId)
+                .ToListAsync();
+
+            return boards.Select(b => new BoardResponseDto
+            {
+                Id = b.Id,
+                ProjectId = b.ProjectId,
+                Name = b.Name,
+                Description = b.Description,
+                IsDefault = b.IsDefault,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt
+            }).ToList();
+        }
+
+        public async Task<BoardResponseDto> UpdateBoardAsync(Guid projectId, Guid boardId, UpdateBoardDto dto)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            if (board == null)
+                throw new Exception("Board nem található");
+
+            if(dto.Name != null) board.Name = dto.Name;
+            if(dto.Description != null) board.Description = dto.Description;
+            if(dto.IsDefault != null) board.IsDefault = dto.IsDefault.Value;
+            await _context.SaveChangesAsync();
+
+            var response = new BoardResponseDto
+            {
+                Id = board.Id,
+                ProjectId = board.ProjectId,
+                Name = board.Name,
+                Description = board.Description,
+                IsDefault = board.IsDefault,
+                CreatedAt = board.CreatedAt,
+                UpdatedAt = board.UpdatedAt
+            };
+            return response;
+        }
+    }
+}
