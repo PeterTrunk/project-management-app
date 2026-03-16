@@ -8,7 +8,8 @@ namespace ProjectManager.API.Validators.AuthValidators
         public UpdateProfileDtoValidator()
         {
             RuleFor(d => d.DisplayName)
-                .MaximumLength(120);
+                .MaximumLength(120)
+                .MinimumLength(3);
         }
     }
 }

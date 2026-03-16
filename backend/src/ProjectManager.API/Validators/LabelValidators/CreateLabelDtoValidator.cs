@@ -9,7 +9,7 @@ namespace ProjectManager.API.Validators.LabelValidators
         {
             RuleFor(x => x.Name)
                 .NotEmpty()
-                .MaximumLength(50);
+                .MaximumLength(40);
 
             RuleFor(x => x.Color)
                 .NotEmpty()

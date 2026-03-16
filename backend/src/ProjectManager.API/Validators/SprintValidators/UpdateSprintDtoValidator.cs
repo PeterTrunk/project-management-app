@@ -5,7 +5,6 @@ namespace ProjectManager.API.Validators.SprintValidators
 {
     public class UpdateSprintDtoValidator : AbstractValidator<UpdateSprintDto>
     {
-        private static readonly string[] ValidStates = { "Planning", "Active", "Completed" };
         public UpdateSprintDtoValidator()
         {
             RuleFor(s => s.Name)

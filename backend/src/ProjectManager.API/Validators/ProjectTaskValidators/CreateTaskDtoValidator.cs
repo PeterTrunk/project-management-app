@@ -17,8 +17,13 @@ namespace ProjectManager.API.DTOs.ProjectTaskValidators
 
             RuleFor(d => d.Priority)
                 .Must(p => new[] { "low", "normal", "high", "critical" }.Contains(p))
-                .WithMessage("Érvénytelen prioritás érték: low, normal, high, critical")
+                .WithMessage("Érvénytelen prioritás érték, elfogadott értékek: low, normal, high, critical")
                 .When(d => d.Priority != null);
+
+            RuleFor(t => t.DueDate)
+                .GreaterThan(DateTime.UtcNow)
+                .WithMessage("A határidő nem lehet múltbeli dátum!")
+                .When(t => t.DueDate != null);
         }
     }
 }
