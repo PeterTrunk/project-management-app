@@ -15,6 +15,7 @@ using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
+using System.Reflection;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,6 +43,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddSwaggerGen(options =>
 {
+    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    //options.IncludeXmlComments(xmlPath);
+    options.IncludeXmlComments(xmlPath, true);
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -51,7 +57,6 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "Írd be: Bearer {token}"
     });
-
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -67,6 +72,7 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
 
 builder.Services.AddCors(options =>
 {
@@ -102,7 +108,11 @@ builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
 
-
+Console.WriteLine("====================================================================================");
+var xmlFile2 = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+var xmlPath2 = Path.Combine(AppContext.BaseDirectory, xmlFile2);
+Console.WriteLine($"XML path: {xmlPath2}");
+Console.WriteLine("====================================================================================");
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
 //Middleware Pipeline - Sorrendjük kritikus
