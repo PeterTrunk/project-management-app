@@ -91,6 +91,13 @@ namespace ProjectManager.API.Services.ProjectService
                 MapsToStatus = "Backlog",
                 Position = 0
             };
+            var toDoColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "To Do",
+                MapsToStatus = "To Do",
+                Position = 1
+            };
             var doneColumn = new ColumnDefinition
             {
                 BoardId = board.Id,
@@ -98,7 +105,7 @@ namespace ProjectManager.API.Services.ProjectService
                 MapsToStatus = "Done",
                 Position = 99
             };
-            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn);
+            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
 
             await _context.SaveChangesAsync();
             
@@ -123,6 +130,8 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található");
 
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == project.OwnerId);
+            if (owner == null)
+                throw new Exception("Felhasználó nem található!");
             
             var response = new ProjectResponseDto
             {
@@ -172,7 +181,7 @@ namespace ProjectManager.API.Services.ProjectService
 
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == project.OwnerId);
             if (owner == null)
-                throw new Exception("Tulajdonos nem található!");
+                throw new Exception("Tulajdonos nem található");
 
             await _context.SaveChangesAsync();
 

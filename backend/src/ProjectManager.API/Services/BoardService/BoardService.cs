@@ -27,6 +27,30 @@ namespace ProjectManager.API.Services.BoardService
                 IsDefault = dto.IsDefault
             };
             _context.Boards.Add(board);
+
+            var backlogColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "Backlog",
+                MapsToStatus = "Backlog",
+                Position = 0
+            };
+            var toDoColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "To Do",
+                MapsToStatus = "To Do",
+                Position = 1
+            };
+            var doneColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "Done",
+                MapsToStatus = "Done",
+                Position = 99
+            };
+            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
+
             await _context.SaveChangesAsync();
 
             var response = new BoardResponseDto

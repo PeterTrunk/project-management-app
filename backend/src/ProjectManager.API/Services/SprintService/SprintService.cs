@@ -68,6 +68,8 @@ namespace ProjectManager.API.Services.SprintService
             else if (targetSprintId == null)
             {
                 var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == tasks[0].BoardId);
+                if (board == null)
+                    throw new Exception("Board nem található");
                 var backlogColId = await _context.ColumnDefinitions
                     .Where(c => c.BoardId == board.Id && c.MapsToStatus == "Backlog") 
                     //Minden Boardban kell hogy szerepeljen egy backlog oszlop!
