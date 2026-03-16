@@ -88,14 +88,14 @@ namespace ProjectManager.API.Services.ProjectService
             {
                 BoardId = board.Id,
                 Name = "Backlog",
-                MapsToStatus = "backlog",
+                MapsToStatus = "Backlog",
                 Position = 0
             };
             var doneColumn = new ColumnDefinition
             {
                 BoardId = board.Id,
                 Name = "Done",
-                MapsToStatus = "done",
+                MapsToStatus = "Done",
                 Position = 99
             };
             _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn);

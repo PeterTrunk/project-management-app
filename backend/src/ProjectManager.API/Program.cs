@@ -14,6 +14,7 @@ using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
+using ProjectManager.API.Services.SprintService;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -99,6 +100,8 @@ builder.Services.AddScoped<ILabelService, LabelService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
+builder.Services.AddScoped<ISprintService, SprintService>();
+
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
