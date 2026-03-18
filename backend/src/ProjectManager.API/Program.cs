@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -97,8 +98,9 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ProjectOwner", policy =>
         policy.Requirements.Add(new ProjectRoleRequirement("Owner")));
 
-//FliendValidation Validators
+//FluentValidation Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
@@ -108,11 +110,6 @@ builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
 
-Console.WriteLine("====================================================================================");
-var xmlFile2 = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-var xmlPath2 = Path.Combine(AppContext.BaseDirectory, xmlFile2);
-Console.WriteLine($"XML path: {xmlPath2}");
-Console.WriteLine("====================================================================================");
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
 //Middleware Pipeline - Sorrendjük kritikus

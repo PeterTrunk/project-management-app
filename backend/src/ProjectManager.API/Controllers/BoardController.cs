@@ -67,7 +67,7 @@ namespace ProjectManager.API.Controllers
             }
         }
 
-        [HttpPatch]
+        [HttpPatch("{boardId}")]
         [Authorize(Policy = "ProjectAdmin")]
         [ProducesResponseType(typeof(BoardResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
