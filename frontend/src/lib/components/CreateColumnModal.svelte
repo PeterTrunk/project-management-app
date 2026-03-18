@@ -56,7 +56,7 @@
             button.disabled = true;
             success = 'Oszlop létrehozva!';
         } catch (e) {
-            error = 'Hiba történt az oszlop létrehozásakor!'+ e;
+            error = 'Hiba történt az oszlop létrehozásakor!';
         }
     }
 
