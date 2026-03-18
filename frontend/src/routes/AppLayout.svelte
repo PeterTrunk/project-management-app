@@ -1,6 +1,5 @@
 
 <script lang="ts">
-
     import { meAsync } from '../lib/api/authApi';
     import { login } from '../lib/stores/authStore';
     import { authStore, logout } from '../lib/stores/authStore';
@@ -10,11 +9,13 @@
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
+    import BoardView from '../lib/components/BoardView.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
     let isProjectCreationOpen = false;
     let isUserSettingsOpen = false;
+
     
     import { push } from 'svelte-spa-router';
 
@@ -123,7 +124,7 @@
                 {#if activeView === 'overview'}
                     <ProjectOverview project={activeProject} />
                 {:else if activeView === 'board'}
-                    <p>Board nézet</p>
+                    <BoardView/>
                 {:else if activeView === 'sprints'}
                     <p>Sprintek nézet</p>
                 {:else if activeView === 'team'}

@@ -80,39 +80,35 @@
     tabindex="-1"
     >
     <div class="modal-content">
-        <h1>Projekt Létrehozás</h1>
         <form on:submit|preventDefault={handleCreateProject}>
+            <h1>Projekt Létrehozás</h1>
+            Új projekt neve
             <input type="text" placeholder="Projekt Név" bind:value={name}/>
+            Új projekt kulcsa (Végleges érték létrehozás után)
             <input type="text" placeholder="Projekt Kulcs" bind:value={projKey}/>
-            <input type="text" placeholder="Leírás" bind:value={description}/>
+            Projekt leírása
+            <textarea placeholder="Leírás" bind:value={description}></textarea>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
             {#if success}
                 <p id="success">{success}</p>
             {/if}
+            
             <button type="submit" id="create">Létrehozás</button>
-            <br>
+            <button on:click={closeModal}>Bezárás</button>
         </form>
-        <button on:click={closeModal}>Bezárás</button>
     </div>
 </div>
 
 <style>
-#success{
-    color: greenyellow;
-}
-#failed{
-    color: red;
-    white-space: pre-line;
-}
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);  /* sötét háttér */
+    background: rgba(0, 0, 0, 0.5);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -120,9 +116,50 @@
 }
 
 .modal-content {
-    background: rgba(0, 0, 0, 0.5);;
+    background: #1e1e1e;
     padding: 2rem;
     border-radius: 8px;
-    min-width: 400px;
+    width: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
 }
+
+.modal-content h1 {
+    margin-bottom: 0.5rem;
+    font-size: 1.5rem;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+input, textarea {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: white;
+    padding: 0.5rem;
+    font-size: 1rem;
+    width: 100%;
+}
+
+input:focus, textarea:focus {
+    outline: none;
+    border-color: #666;
+}
+
+button {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    width: fit-content;
+    align-self: center;
+}
+
+#success { color: greenyellow; }
+#failed { color: red; white-space: pre-line; }
 </style>

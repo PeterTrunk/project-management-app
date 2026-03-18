@@ -13,8 +13,6 @@
         setActiveProject(updated);
     }
 
-    
-
     import ConfirmModal from '../components/ConfirmModal.svelte';
 
     let isConfirmOpen = false;
