@@ -93,7 +93,48 @@ namespace ProjectManager.API.Services.ColumnService
                 Position = c.Position
             }).ToList();
         }
-        
+
+        public async Task<List<ColumnResponseDto>> OrderColumnsAsync(Guid projectId, Guid boardId, List<ColumnOrderDto> order)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            if (board == null)
+                throw new Exception("Board nem található");
+
+            var columnIds = order.Select(o => o.Id).ToList();
+            var columns = await _context.ColumnDefinitions
+                .Where(c => columnIds.Contains(c.Id))
+                .ToListAsync();
+
+            if (columns.Count != order.Count)
+                throw new Exception("Egy vagy több oszlop nem található!");
+            
+            // Először -1-re állítjuk
+            foreach (var col in columns)
+                col.Position = -1;
+            await _context.SaveChangesAsync();
+
+            // Majd beállítjuk a tényleges order pozíciókat
+            foreach (var item in order)
+            {
+                var col = columns.First(c => c.Id == item.Id);
+                col.Position = item.Position;
+            }
+            await _context.SaveChangesAsync();
+            return columns.Select(c => new ColumnResponseDto
+            {
+                Id = c.Id,
+                BoardId = c.BoardId,
+                Name = c.Name,
+                MapsToStatus = c.MapsToStatus,
+                WipLimit = c.WipLimit,
+                Position = c.Position
+            }).ToList();
+        }
+
         public async Task<ColumnResponseDto> UpdateColumnAsync(Guid projectId, Guid boardId, Guid columnId, UpdateColumnDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
@@ -111,7 +152,6 @@ namespace ProjectManager.API.Services.ColumnService
             if(dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;
             if(dto.WipLimit != null) column.WipLimit = dto.WipLimit;
-            if(dto.Position != null) column.Position = dto.Position.Value;
             await _context.SaveChangesAsync();
 
             var response = new ColumnResponseDto
