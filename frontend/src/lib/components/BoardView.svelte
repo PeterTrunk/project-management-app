@@ -4,11 +4,15 @@
     import { getColumnsAsync } from '../api/columnApi';
     import type { BoardResponse } from '../api/boardApi';
     import type { ColumnResponse } from '../api/columnApi';
+    import { getTasksAsync, type TaskResponse } from '../api/taskApi';
+    import { setTasks, taskStore } from '../stores/taskStore';
     import { projectStore } from '../stores/projectStore';
     import { onMount } from 'svelte';
 
     import CreateColumnModal from './CreateColumnModal.svelte';
+    import CreateTaskModal from './CreateTaskModal.svelte';
     let isColumnCreationOpen = false;
+    let isTaskCreationOpen = false;
 
     onMount(() => {
         if (activeProjectId) {
@@ -19,6 +23,7 @@
     let boards: BoardResponse[] = [];
     let activeBoard: BoardResponse | null = null;
     let columns: ColumnResponse[] = [];
+    let tasks: TaskResponse[] = [];
 
     // store figyelése
     boardStore.subscribe(state => {
@@ -30,6 +35,10 @@
     let activeProjectId = '';
     projectStore.subscribe(state => {
         activeProjectId = state.activeProject?.id ?? '';
+    });
+
+    taskStore.subscribe(state => {
+        tasks = state.tasks;
     });
 
     let isDropdownOpen = false;
@@ -60,10 +69,15 @@
         try {
             const cols = await getColumnsAsync(activeProjectId, board.id);
             setColumns(cols);
+            const _tasks = await getTasksAsync(activeProjectId, board.id);
+            setTasks(_tasks);
         } catch (e) {
-            console.error('Hiba az oszlopok lekérésekor!');
+            console.error('Hiba az oszlopok/taskok lekérésekor!');
         }
     }
+
+    
+
 
     async function handleUpdate() {
         
@@ -98,6 +112,7 @@
         {/if}
     </div>
     <button class="toolbar-btn" on:click={() => isColumnCreationOpen = true}>+ Oszlop hozzáadása</button>
+    <button class="toolbar-btn" on:click={() => isTaskCreationOpen = true}>+ Task hozzáadása</button>
     <button class="toolbar-btn" on:click={() => {handleUpdate()}}>Board módosítása</button>
 </div>
 <div class="board-container">
@@ -122,6 +137,17 @@
         onClose={async () => {
             const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
             setColumns(cols);
+        }}
+    />
+{/if}
+{#if isTaskCreationOpen}
+    <CreateTaskModal 
+        bind:isTaskCreationOpen={isTaskCreationOpen}
+        projectId={activeProjectId}
+        boardId={activeBoard?.id ?? ''}
+        onClose={async () => {
+            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
+            setTasks(_tasks);
         }}
     />
 {/if}

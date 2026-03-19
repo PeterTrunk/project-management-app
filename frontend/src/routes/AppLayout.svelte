@@ -13,8 +13,10 @@
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
+    
     let isProjectCreationOpen = false;
     let isUserSettingsOpen = false;
+    
 
     
     import { push } from 'svelte-spa-router';
