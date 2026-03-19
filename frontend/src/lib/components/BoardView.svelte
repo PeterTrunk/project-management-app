@@ -8,6 +8,8 @@
     import { setTasks, taskStore } from '../stores/taskStore';
     import { projectStore } from '../stores/projectStore';
     import { onMount } from 'svelte';
+    import { reorderColumnsAsync } from '../api/columnApi';
+    import { dndzone } from 'svelte-dnd-action';
 
     import CreateColumnModal from './CreateColumnModal.svelte';
     import CreateTaskModal from './CreateTaskModal.svelte';
@@ -47,6 +49,23 @@
         isDropdownOpen = !isDropdownOpen;
     }
 
+    let isReordering = false;
+    function handleColumnConsider(e: CustomEvent) {
+        columns = e.detail.items;
+    }
+
+    async function handleColumnFinalize(e: CustomEvent) {
+        columns = e.detail.items;
+        // Reorder API hívás
+        const order = columns.map((col, index) => ({
+            id: col.id,
+            position: index
+        }));
+        await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
+        setColumns(columns);
+    }
+
+
     async function loadBoards(projectId: string) {
         try {
             const data = await getBoardsAsync(projectId);
@@ -68,16 +87,14 @@
         setActiveBoard(board);
         try {
             const cols = await getColumnsAsync(activeProjectId, board.id);
-            setColumns(cols);
+            const sortedCols = cols.sort((a, b) => a.position - b.position);
+            setColumns(sortedCols);
             const _tasks = await getTasksAsync(activeProjectId, board.id);
             setTasks(_tasks);
         } catch (e) {
             console.error('Hiba az oszlopok/taskok lekérésekor!');
         }
     }
-
-    
-
 
     async function handleUpdate() {
         
@@ -114,18 +131,26 @@
     <button class="toolbar-btn" on:click={() => isColumnCreationOpen = true}>+ Oszlop hozzáadása</button>
     <button class="toolbar-btn" on:click={() => isTaskCreationOpen = true}>+ Task hozzáadása</button>
     <button class="toolbar-btn" on:click={() => {handleUpdate()}}>Board módosítása</button>
+    <button 
+        class="toolbar-btn" 
+        class:active={isReordering}
+        on:click={() => isReordering = !isReordering}
+    > {isReordering ? '🔓 Átrendezés aktív' : '🔒 Átrendezés'} </button>
+    
 </div>
 <div class="board-container">
     <h2>{activeBoard?.name}</h2>
     <!-- Oszlopok -->
-    <div class="columns-container">
-        {#each columns as column}
+    <div class="columns-container" 
+        use:dndzone={{items: columns, flipDurationMs: 200, dragDisabled: !isReordering}}
+        on:consider={handleColumnConsider}
+        on:finalize={handleColumnFinalize}
+    >
+        {#each columns as column (column.id)}
             <div class="column">
                 <h3>{column.name}</h3>
-                <!-- task kártyák ide jönnek -->
             </div>
         {/each}
-        
     </div>
     
 </div>
@@ -136,7 +161,8 @@
         boardId={activeBoard?.id ?? ''}
         onClose={async () => {
             const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
-            setColumns(cols);
+            const sortedCols = cols.sort((a, b) => a.position - b.position);
+            setColumns(sortedCols);
         }}
     />
 {/if}

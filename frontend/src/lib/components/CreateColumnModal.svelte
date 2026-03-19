@@ -1,8 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { boardStore, setActiveBoard } from '../stores/boardStore';
-    import { createColumnAsync } from '../../lib/api/columnApi';
+    import { createColumnAsync, reorderColumnsAsync } from '../../lib/api/columnApi';
     import { validateColumnStatus, validateColumnName } from '../validators';
+    import type { ColumnResponse } from '../../lib/api/columnApi';
 
     export let isColumnCreationOpen = false;
     export let projectId: string;
@@ -14,8 +15,10 @@
         modalRef?.focus();
     });
 
+    let columns: ColumnResponse[] = [];
     let activeBoardName = '';
     boardStore.subscribe(state => {
+        columns = state.columns;
         activeBoardName = state.activeBoard?.name ?? '';
     });
 
@@ -23,7 +26,7 @@
     let mapsToStatus = '';
     let wipLimit: number | null = null;
     let hasWip: boolean = false;
-    let position = 1;
+    let afterColumnId: string = '';
     let error = '';
     let success = '';
 
@@ -45,16 +48,37 @@
             return;
         }
         try {
-            await createColumnAsync(projectId, boardId, {
+            const newColumn = await createColumnAsync(projectId, boardId, {
                 boardId,
                 name,
                 mapsToStatus,
                 wipLimit: hasWip ? wipLimit : null,
-                position
+                position: 0
             });
+
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
-            success = 'Oszlop létrehozva!';
+            success = 'Oszlop létrehozva!\n';
+
+            // Új sorrend összerakása
+            let ordered = [...columns];
+            const insertAfterIndex = afterColumnId 
+                ? ordered.findIndex(c => c.id === afterColumnId)
+                : -1;
+            
+            ordered.splice(insertAfterIndex + 1, 0, newColumn);
+            
+            const order = ordered.map((col, index) => ({
+                id: col.id,
+                position: index
+            }));
+            try {
+                await reorderColumnsAsync(projectId, boardId, order);
+                success = success + 'Rendezés sikeres!';
+            } catch (e) {
+                error = error + 'Rendezés sikeretelen!';
+            }
+            
         } catch (e) {
             error = 'Hiba történt az oszlop létrehozásakor!';
         }
@@ -90,8 +114,13 @@
                     <input type="number" bind:value={wipLimit}>
                 {/if}
             </div>
-            Oszlop pozíciója
-            <input type="number" bind:value={position}>
+            Legyen ez az oszlop után:
+            <select bind:value={afterColumnId}>
+                <option value="">Legelső oszlop legyen</option>
+                {#each columns as column}
+                    <option value={column.id}>{column.name}</option>
+                {/each}
+            </select>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -161,6 +190,11 @@
         cursor: pointer;
         width: fit-content;
         align-self: center;
+    }
+
+    .toolbar-btn.active {
+        background: #444;
+        border-color: #666;
     }
 
     #success { color: greenyellow; }

@@ -8,11 +8,15 @@ interface CreateColumnRequest {
     position: number;
 }
 
+interface ColumnOrderRequest {
+    id: string;
+    position: number;
+}
+
 interface UpdateColumnRequest {
     name: string | null;
     mapsToStatus: string | null;
     wipLimit: number | null;
-    position: number | null;
 }
 
 export interface ColumnResponse {
@@ -41,4 +45,9 @@ export async function updateColumnAsync(projectId: string, boardId: string, colu
 
 export async function deleteColumnAsync(projectId: string, boardId: string, columnId: string): Promise<void> {
     await apiClient.delete('/projects/'+projectId+'/boards/'+boardId+'/columns/'+columnId);
+}
+
+export async function reorderColumnsAsync(projectId: string, boardId: string, order: ColumnOrderRequest[]): Promise<ColumnResponse[]> {
+    const response = await apiClient.post('/projects/'+projectId+'/boards/'+boardId+'/columns/reorder', order);
+    return response.data;
 }
