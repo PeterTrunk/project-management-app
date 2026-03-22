@@ -11,6 +11,11 @@ interface CreateTaskRequest {
     dueDate: Date | null;
 }
 
+interface MoveTaskRequest {
+    position: number;
+    columnId: string; 
+}
+
 export interface TaskResponse {
     id: string;
     projectId: string;
@@ -34,6 +39,8 @@ export interface TaskResponse {
     updatedAt: Date;
 }
 
+
+
 export async function getTasksAsync(projectId: string, boardId?: string, sprintId?: string): Promise<TaskResponse[]> {
     const response = await apiClient.get('/projects/' + projectId + '/tasks', {
         params: {
@@ -44,12 +51,17 @@ export async function getTasksAsync(projectId: string, boardId?: string, sprintI
     return response.data;
 }
 
-export async function createTaskAsync(projectId: string, data: CreateTaskRequest) {
+export async function createTaskAsync(projectId: string, data: CreateTaskRequest): Promise<TaskResponse> {
     const response = await apiClient.post('/projects/' + projectId + '/tasks', data);
     return response.data;
 }
 
 export async function deleteTaskAsync(projectId: string, taskId: string) {
     const response = await apiClient.delete('/projects/' + projectId + '/tasks/' + taskId);
+}
+
+export async function moveTaskAsync(projectId: string, taskId: string, data: MoveTaskRequest): Promise<TaskResponse> {
+    const response = await apiClient.patch('/projects/' + projectId + '/tasks/' + taskId + '/move', data);
+    return response.data;
 }
 

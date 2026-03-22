@@ -96,7 +96,7 @@
                 <select bind:value={priority}>
                     <option value="">Nincs prioritás</option>
                     <option value="low">Alacsony</option>
-                    <option value="medium">Közepes</option>
+                    <option value="normal">Közepes</option>
                     <option value="high">Magas</option>
                     <option value="critical">Kritikus</option>
                 </select>

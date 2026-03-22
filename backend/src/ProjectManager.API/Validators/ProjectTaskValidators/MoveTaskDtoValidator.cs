@@ -10,7 +10,6 @@ namespace ProjectManager.API.DTOs.ProjectTask
                 .NotEmpty();
 
             RuleFor(d => d.Position)
-                .NotEmpty()
                 .GreaterThanOrEqualTo(0)
                 .WithMessage("A pozíció nem lehet negatív");
         }

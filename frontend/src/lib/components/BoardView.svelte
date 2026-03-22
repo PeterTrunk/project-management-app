@@ -4,7 +4,7 @@
     import { getColumnsAsync } from '../api/columnApi';
     import type { BoardResponse } from '../api/boardApi';
     import type { ColumnResponse } from '../api/columnApi';
-    import { getTasksAsync, type TaskResponse } from '../api/taskApi';
+    import { getTasksAsync, moveTaskAsync, type TaskResponse } from '../api/taskApi';
     import { setTasks, taskStore } from '../stores/taskStore';
     import { projectStore } from '../stores/projectStore';
     import { onMount } from 'svelte';
@@ -27,11 +27,26 @@
     let columns: ColumnResponse[] = [];
     let tasks: TaskResponse[] = [];
 
+    // Oszloponként külön Map-ben tároljuk a taskokat
+    let columnTasks: Record<string, TaskResponse[]> = {};
+
+    // Amikor betöltjük a taskokat, szétválogatjuk oszloponként
+    function distributeTasks(allTasks: TaskResponse[]) {
+        const map: Record<string, TaskResponse[]> = {};
+        columns.forEach(col => {
+            map[col.id] = allTasks
+                .filter(t => t.columnId === col.id)
+                .sort((a, b) => a.position - b.position);
+        });
+        columnTasks = { ...map };  // spread hogy Svelte észrevegye
+    }
+    
     // store figyelése
     boardStore.subscribe(state => {
         boards = state.boards;
         activeBoard = state.activeBoard;
         columns = state.columns;
+        distributeTasks(tasks);
     });
 
     let activeProjectId = '';
@@ -39,8 +54,12 @@
         activeProjectId = state.activeProject?.id ?? '';
     });
 
+    let isDragging = false;
     taskStore.subscribe(state => {
         tasks = state.tasks;
+        if (!isDragging) {
+            distributeTasks(tasks);
+        }
     });
 
     let isDropdownOpen = false;
@@ -49,6 +68,7 @@
         isDropdownOpen = !isDropdownOpen;
     }
 
+    //DND action
     let isReordering = false;
     function handleColumnConsider(e: CustomEvent) {
         columns = e.detail.items;
@@ -65,6 +85,63 @@
         setColumns(columns);
     }
 
+    function handleTaskConsider(e: CustomEvent, columnId: string) {
+        isDragging = true;
+        columnTasks[columnId] = e.detail.items;
+        columnTasks = { ...columnTasks };
+    }
+
+    async function handleTaskFinalize(e: CustomEvent, columnId: string) {
+        const trigger = e.detail.info.trigger;
+    
+        // Csak a céloszlopban kezeljük a finalize-t
+        if (trigger === 'droppedIntoAnother') return;
+        
+        const movedTaskId = e.detail.info.id;
+        
+        columnTasks[columnId] = e.detail.items;
+        Object.keys(columnTasks).forEach(colId => {
+            if (colId !== columnId) {
+                columnTasks[colId] = columnTasks[colId].filter((t: TaskResponse) => t.id !== movedTaskId);
+            }
+        });
+        columnTasks = { ...columnTasks };
+
+        const items = columnTasks[columnId];
+        const movedIndex = items.findIndex((t: TaskResponse) => t.id === movedTaskId);
+
+        let position: number;
+
+        if (items.length === 1) {
+            position = 1;
+        } else if (movedIndex === 0) {
+            position = items[1].position / 2;
+        } else if (movedIndex === items.length - 1) {
+            position = items[movedIndex - 1].position + 1;
+        } else {
+            const before = items[movedIndex - 1].position;
+            const after = items[movedIndex + 1].position;
+            position = (before + after) / 2;
+        }
+        try {
+            //console.log('Kiszámolt pozició:', position);
+            await moveTaskAsync(activeProjectId, movedTaskId, { columnId, position });
+            const updatedTasks = tasks.map(t => 
+                t.id === movedTaskId ? { ...t, columnId, position } : t
+            );
+            isDragging = false;
+            setTasks(updatedTasks);
+        } catch (err: any) {
+            console.error('Backend hiba:');
+            //console.error('Backend hiba:', err.response?.data*);
+            //console.error('Küldött adat:', { columnId, position });
+            //console.error('Backend hiba részletek:', JSON.stringify(err.response?.data?.errors));
+            isDragging = false;
+            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '');
+            setTasks(_tasks);
+        }
+    }
+   
 
     async function loadBoards(projectId: string) {
         try {
@@ -149,6 +226,36 @@
         {#each columns as column (column.id)}
             <div class="column">
                 <h3>{column.name}</h3>
+                <!-- Task kártyák -->
+                <div class="task-list"
+                    use:dndzone={{
+                        items: columnTasks[column.id] ?? [], 
+                        flipDurationMs: 200, 
+                        type: 'task',
+                        dropTargetStyle: { outline: '2px dashed #555' }
+                    }}
+                    on:consider={(e) => handleTaskConsider(e, column.id)}
+                    on:finalize={(e) => handleTaskFinalize(e, column.id)}
+                >
+                    {#each columnTasks[column.id] ?? [] as task (task.id)}
+                        <div class="task-card">
+                            <div class="task-header">
+                                <p class="task-key">{task.taskKey}</p>
+                                {#if task.priority}
+                                    <span class="priority priority-{task.priority}">{task.priority}</span>
+                                {/if}
+                            </div>
+                            <p class="task-title">{task.title}</p>
+                            {#if task.dueDate}
+                                <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
+                            {/if}
+                        </div>
+                        {:else}
+                        <div class="empty-column-placeholder">
+                            Húzz ide egy taskot
+                        </div>
+                    {/each}
+                </div>
             </div>
         {/each}
     </div>
@@ -259,6 +366,9 @@
         padding: 1rem;
         min-width: 250px;
         border: 1px solid #333;
+        min-height: calc(100vh - 200px);  /* mindig leér a képernyő aljáig */
+        display: flex;
+        flex-direction: column;
     }
     
     .column h3 {
@@ -266,4 +376,60 @@
         font-size: 1rem;
         color: #ccc;
     }
+
+    .task-card {
+        background: #2a2a2a;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #333;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .task-list {
+        flex: 1;
+        min-height: 80px;  /* üres oszlopba is lehet húzni */
+    }
+
+    .task-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .empty-column-placeholder {
+        color: #555;
+        text-align: center;
+        padding: 1rem;
+        font-size: 0.85rem;
+        pointer-events: none;
+    }
+
+    .task-card:hover {
+        border-color: #555;
+    }
+
+    .task-key {
+        font-size: 0.75rem;
+        color: #888;
+    }
+
+    .task-title {
+        font-size: 0.9rem;
+    }
+
+    .priority {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        width: fit-content;
+    }
+
+    .priority-low { background: #1a3a1a; color: #4caf50; }
+    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
+    .priority-high { background: #3a1a1a; color: #ff5722; }
+    .priority-critical { background: #4a0000; color: #ff0000; }
 </style>
