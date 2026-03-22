@@ -219,7 +219,12 @@
     <h2>{activeBoard?.name}</h2>
     <!-- Oszlopok -->
     <div class="columns-container" 
-        use:dndzone={{items: columns, flipDurationMs: 200, dragDisabled: !isReordering}}
+            use:dndzone={{
+            items: columns, 
+            flipDurationMs: 200, 
+            dragDisabled: !isReordering,
+            dropTargetStyle: { outline: '2px dashed #555' }
+        }}
         on:consider={handleColumnConsider}
         on:finalize={handleColumnFinalize}
     >
