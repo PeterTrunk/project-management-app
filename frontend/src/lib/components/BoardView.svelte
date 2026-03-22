@@ -5,7 +5,7 @@
     import type { BoardResponse } from '../api/boardApi';
     import type { ColumnResponse } from '../api/columnApi';
     import { getTasksAsync, moveTaskAsync, type TaskResponse } from '../api/taskApi';
-    import { setTasks, taskStore } from '../stores/taskStore';
+    import { setTasks, taskStore, setActiveTask } from '../stores/taskStore';
     import { projectStore } from '../stores/projectStore';
     import { onMount } from 'svelte';
     import { reorderColumnsAsync } from '../api/columnApi';
@@ -13,8 +13,10 @@
 
     import CreateColumnModal from './CreateColumnModal.svelte';
     import CreateTaskModal from './CreateTaskModal.svelte';
+    import TaskDetailModal from './TaskDetailModal.svelte';
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
+    let isTaskDetailOpen = false;
 
     onMount(() => {
         if (activeProjectId) {
@@ -185,6 +187,11 @@
         
     }
 
+    function handleTaskClick(task: TaskResponse) {
+        setActiveTask(task);
+        isTaskDetailOpen = true;
+    }
+
 </script>
 
 <div class="board-toolbar">
@@ -243,7 +250,7 @@
                     on:finalize={(e) => handleTaskFinalize(e, column.id)}
                 >
                     {#each columnTasks[column.id] ?? [] as task (task.id)}
-                        <div class="task-card">
+                        <div class="task-card" on:click={() => handleTaskClick(task)}>
                             <div class="task-header">
                                 <p class="task-key">{task.taskKey}</p>
                                 {#if task.priority}
@@ -286,6 +293,17 @@
         onClose={async () => {
             const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
             setTasks(_tasks);
+        }}
+    />
+{/if}
+{#if isTaskDetailOpen && $taskStore.activeTask}
+    <TaskDetailModal
+        bind:isTaskDetailOpen={isTaskDetailOpen}
+        projectId={activeProjectId}
+        task={$taskStore.activeTask!}
+        onClose={() => {
+            isTaskDetailOpen = false;
+            setActiveTask(null);
         }}
     />
 {/if}

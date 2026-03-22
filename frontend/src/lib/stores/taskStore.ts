@@ -17,7 +17,7 @@ export function setTasks(tasks: TaskResponse[]) {
     taskStore.update(state => ({ ...state, tasks}));
 }
 
-export function setActiveTasks(task: TaskResponse | null) {
+export function setActiveTask(task: TaskResponse | null) {
     taskStore.update(state => ({ ...state, activeTask: task}))
 }
 
