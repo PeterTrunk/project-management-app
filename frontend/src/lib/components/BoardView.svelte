@@ -12,12 +12,27 @@
     import { dndzone } from 'svelte-dnd-action';
 
     import ColumnCard from './ColumnCard.svelte';
+
     import CreateColumnModal from './CreateColumnModal.svelte';
     import CreateTaskModal from './CreateTaskModal.svelte';
     import TaskDetailModal from './TaskDetailModal.svelte';
+    import CreateBoardModal from './CreateBoardModal.svelte';
+    import UpdateBoardModal from './UpdateBoardModal.svelte';
+    import ColumnDetailModal from './ColumnDetailModal.svelte';
+
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
     let isTaskDetailOpen = false;
+    let isBoardCreationOpen = false;
+    let isUpdateBoardOpen = false;
+    let isColumnDetailOpen = false;
+
+    let selectedColumn: ColumnResponse | null = null;
+
+    function handleColumnClick(column: ColumnResponse) {
+        selectedColumn = column;
+        isColumnDetailOpen = true;
+    }
 
     onMount(() => {
         if (activeProjectId) {
@@ -54,7 +69,13 @@
 
     let activeProjectId = '';
     projectStore.subscribe(state => {
-        activeProjectId = state.activeProject?.id ?? '';
+        const newProjectId = state.activeProject?.id ?? '';
+        if (newProjectId !== activeProjectId) {
+            activeProjectId = newProjectId;
+            if (activeProjectId) {
+                loadBoards(activeProjectId);
+            }
+        }
     });
 
     let isDragging = false;
@@ -176,14 +197,6 @@
         }
     }
 
-    async function handleUpdate() {
-        
-    }
-
-    async function handleNewBoard() {
-        
-    }
-
     function handleTaskClick(task: TaskResponse) {
         setActiveTask(task);
         isTaskDetailOpen = true;
@@ -193,7 +206,7 @@
 <div class="board-toolbar">
     <!-- Board választó ha több board van, + new board létrehozás -->
     <div class="dropdown">
-        <button on:click={toggleDropdown}>
+        <button class="toolbar-btn" on:click={toggleDropdown}>
             {activeBoard?.name ?? 'Válassz boardot'} ▼
         </button>
         {#if isDropdownOpen}
@@ -204,13 +217,13 @@
                     </button>
                 {/each}
                 <hr>
-                <button on:click={() => {handleNewBoard}}>+ Új board</button>
+                <button on:click={() => { isBoardCreationOpen = true; isDropdownOpen = false; }}>+ Új board</button>
             </div>
         {/if}
     </div>
     <button class="toolbar-btn" on:click={() => isColumnCreationOpen = true}>+ Oszlop hozzáadása</button>
     <button class="toolbar-btn" on:click={() => isTaskCreationOpen = true}>+ Task hozzáadása</button>
-    <button class="toolbar-btn" on:click={() => {handleUpdate()}}>Board módosítása</button>
+    <button class="toolbar-btn" on:click={() => isUpdateBoardOpen = true}>Board módosítása</button>
     <button 
         class="toolbar-btn" 
         class:active={isReordering}
@@ -238,6 +251,8 @@
                 onConsider={handleTaskConsider}
                 onFinalize={handleTaskFinalize}
                 onTaskClick={handleTaskClick}
+                onColumnClick={handleColumnClick}
+                isReordering={isReordering}
             />
         {/each}
     </div>
@@ -281,8 +296,58 @@
         }}
     />
 {/if}
+{#if isBoardCreationOpen}
+    <CreateBoardModal
+        bind:isBoardCreationOpen={isBoardCreationOpen}
+        projectId={activeProjectId}
+        activeProject={$projectStore.activeProject!}
+        onClose={async () => {
+            const data = await getBoardsAsync(activeProjectId);
+            setBoards(data);
+        }}
+    />
+{/if}
+{#if isUpdateBoardOpen}
+    <UpdateBoardModal
+        bind:isUpdateBoardOpen={isUpdateBoardOpen}
+        projectId={activeProjectId}
+        onClose={async () => {
+            const data = await getBoardsAsync(activeProjectId);
+            setBoards(data);
+        }}
+    />
+{/if}
+{#if isColumnDetailOpen && selectedColumn}
+    <ColumnDetailModal
+        bind:isColumnDetailOpen={isColumnDetailOpen}
+        projectId={activeProjectId}
+        boardId={activeBoard?.id ?? ''}
+        column={selectedColumn}
+        onClose={async () => {
+            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
+            const sortedCols = cols.sort((a, b) => a.position - b.position);
+            setColumns(sortedCols);
+        }}
+    />
+{/if}
 
 <style>
+    .board-container {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 1rem;
+        padding-bottom: 1rem;
+    }
+
+   .columns-container {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        height: calc(100vh - 165px);  /* kicsit több hely alul */
+        min-width: min-content;  /* ← width: max-content helyett */
+    }
+
     .board-toolbar {
         display: flex;
         align-items: center;
@@ -290,7 +355,10 @@
         padding: 0.5rem 1rem;
         background: #1a1a1a;
         border-bottom: 1px solid #333;
-        position: relative;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        width: 100%;
     }
 
     .toolbar-btn {
@@ -309,6 +377,7 @@
 
     .dropdown {
         position: relative;
+        
     }
 
     .dropdown-menu {
@@ -344,16 +413,6 @@
         margin: 0;
     }
 
-    .board-container {
-        flex: 1;
-        overflow-x: auto;
-        padding: 1rem;
-    }
-
-    .columns-container {
-        display: flex;
-        gap: 1rem;
-        align-items: flex-start;
-        height: 100%;
-    }
+    
+    
 </style>

@@ -19,6 +19,20 @@ namespace ProjectManager.API.Services.BoardService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
+            // Ha az új board isDefault = true, akkor a többi boardon hamissá tesszük
+            if (dto.IsDefault)
+            {
+                //Valószínüleg egy lenne, biztonság kedvéért legyen teljes ellenőrzés
+                var currentDefaultBoards = await _context.Boards
+                    .Where(b => b.ProjectId == projectId && b.IsDefault)
+                    .ToListAsync();
+
+                foreach (var defaultBoard in currentDefaultBoards)
+                {
+                    defaultBoard.IsDefault = false;
+                }
+            }
+            
             var board = new Board
             {
                 ProjectId = dto.ProjectId,
@@ -114,7 +128,23 @@ namespace ProjectManager.API.Services.BoardService
 
             if(dto.Name != null) board.Name = dto.Name;
             if(dto.Description != null) board.Description = dto.Description;
-            if(dto.IsDefault != null) board.IsDefault = dto.IsDefault.Value;
+            if (dto.IsDefault != null)
+            {
+                board.IsDefault = dto.IsDefault.Value;
+                if (dto.IsDefault.Value)
+                {
+                    //Valószínüleg egy lenne, biztonság kedvéért legyen teljes ellenőrzés, kivéve az updatelt esetén
+                    var currentDefaultBoards = await _context.Boards
+                        .Where(b => b.ProjectId == projectId && b.IsDefault && b.Id != boardId)
+                        .ToListAsync();
+
+                    foreach (var defaultBoard in currentDefaultBoards)
+                    {
+                        defaultBoard.IsDefault = false;
+                    }
+                }
+            }
+            
             await _context.SaveChangesAsync();
 
             var response = new BoardResponseDto

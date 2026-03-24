@@ -339,6 +339,7 @@
         grid-column: 1 / -1;
         border-bottom: 1px solid #333;
         padding-bottom: 1rem;
+        padding-top: 2.5rem;
     }
 
     .left-column {

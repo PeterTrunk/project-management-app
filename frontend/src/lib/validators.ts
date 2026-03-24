@@ -33,6 +33,18 @@ export function validateEmail(email: string): string | null {
     return aggregateError === '' ? null : aggregateError;
 }
 
+export function validateBoardName(name: string){
+    if(name === '' || name === null) return 'Board név kötelező!'
+    if(name.length > 120) return 'Board név maximum 120 karakter hosszú lehet';
+    if(name.length < 3) return 'Board név minimum 3 karakter hosszú lehet';
+    return null;
+}
+
+export function validateBoardDescription(desc: string){
+    if(desc !=null && desc.length > 500) return 'Board leírás maximum 500 karakter hosszú lehet';
+    return null;
+}
+
 export function validateColumnName(name: string): string | null {
     let aggregateError = '';
     if(name === '' || name === null) aggregateError += 'Név szükséges!\n';

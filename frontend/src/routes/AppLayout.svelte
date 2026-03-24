@@ -226,6 +226,7 @@
         display: flex;
         flex-direction: column;
         height: 100vh;
+        min-width: 0;
     }
 
     .topbar {
@@ -236,11 +237,15 @@
         padding: 0 1rem;
         background: #1e1e1e;
         border-bottom: 1px solid #333;
+        justify-content: space-evenly;
     }
 
     .content {
         flex: 1;
-        overflow-y: auto;
-        padding: 1rem;
+        overflow: hidden;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
     }
 </style>
