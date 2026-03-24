@@ -69,6 +69,7 @@
     }
 
     .priority-low { background: #1a3a1a; color: #4caf50; }
+    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
     .priority-high { background: #3a1a1a; color: #ff5722; }
     .priority-critical { background: #4a0000; color: #ff0000; }
     .priority-normal { background: #2a2a2a; color: #aaa; }

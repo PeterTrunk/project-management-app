@@ -16,6 +16,15 @@ interface MoveTaskRequest {
     columnId: string; 
 }
 
+interface UpdateTaskRequest {
+    title: string | null;
+    description: string | null;
+    priority: string | null;
+    estimateInMinutes: number | null;
+    dueDate: Date | null;
+}
+
+
 export interface TaskResponse {
     id: string;
     projectId: string;
@@ -53,6 +62,11 @@ export async function getTasksAsync(projectId: string, boardId?: string, sprintI
 
 export async function createTaskAsync(projectId: string, data: CreateTaskRequest): Promise<TaskResponse> {
     const response = await apiClient.post('/projects/' + projectId + '/tasks', data);
+    return response.data;
+}
+
+export async function updateTaskAsync(projectId: string, taskId: string, data: UpdateTaskRequest): Promise<TaskResponse> {
+    const response = await apiClient.patch('/projects/' + projectId + '/tasks/' + taskId, data);
     return response.data;
 }
 

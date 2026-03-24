@@ -16,7 +16,7 @@ namespace ProjectManager.API.DTOs.ProjectTaskValidators
                 .When(d => d.Description != null);
 
             RuleFor(d => d.Priority)
-                .Must(p => new[] { "low", "normal", "high", "critical" }.Contains(p))
+                .Must(p => new[] { "low", "normal", "medium", "high", "critical" }.Contains(p))
                 .WithMessage("Érvénytelen prioritás érték, elfogadott értékek: low, normal, high, critical")
                 .When(d => d.Priority != null);
 

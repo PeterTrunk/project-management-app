@@ -179,11 +179,7 @@
     async function handleUpdate() {
         
     }
-
-    async function handleColAdd() {
-        
-    }
-
+    
     async function handleNewBoard() {
         
     }
@@ -278,8 +274,10 @@
         bind:isTaskDetailOpen={isTaskDetailOpen}
         projectId={activeProjectId}
         task={$taskStore.activeTask!}
-        onClose={() => {
+        onClose={async () => {
             isTaskDetailOpen = false;
+            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
+            setTasks(_tasks);
             setActiveTask(null);
         }}
     />

@@ -3,6 +3,7 @@
     import { boardStore, setActiveBoard } from '../stores/boardStore';
     import { createTaskAsync } from '../api/taskApi';
     import type { ColumnResponse } from '../api/columnApi';
+    import { validateTaskTitle, validateTaskDescription, validateTaskDueDate } from '../validators';
 
     export let isTaskCreationOpen = false;
     export let projectId: string;
@@ -37,7 +38,21 @@
         error = '';
         success = '';
         let errorOccured = false;
-
+        const titleError = validateTaskTitle(title);
+        const descError = validateTaskDescription(description);
+        const dueDateError = validateTaskDueDate(new Date(dueDate));
+        if(titleError){
+            error = error + titleError;
+            errorOccured = true;
+        }
+        if(descError){
+            error = error + descError;
+            errorOccured = true;
+        }
+        if(dueDateError){
+            error = error + dueDateError;
+            errorOccured = true;
+        }
         if(errorOccured){
             return;
         }
@@ -96,7 +111,7 @@
                 <select bind:value={priority}>
                     <option value="">Nincs prioritás</option>
                     <option value="low">Alacsony</option>
-                    <option value="normal">Közepes</option>
+                    <option value="medium">Közepes</option>
                     <option value="high">Magas</option>
                     <option value="critical">Kritikus</option>
                 </select>
