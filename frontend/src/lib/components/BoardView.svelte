@@ -11,6 +11,7 @@
     import { reorderColumnsAsync } from '../api/columnApi';
     import { dndzone } from 'svelte-dnd-action';
 
+    import ColumnCard from './ColumnCard.svelte';
     import CreateColumnModal from './CreateColumnModal.svelte';
     import CreateTaskModal from './CreateTaskModal.svelte';
     import TaskDetailModal from './TaskDetailModal.svelte';
@@ -236,43 +237,19 @@
         on:finalize={handleColumnFinalize}
     >
         {#each columns as column (column.id)}
-            <div class="column">
-                <h3>{column.name}</h3>
-                <!-- Task kártyák -->
-                <div class="task-list"
-                    use:dndzone={{
-                        items: columnTasks[column.id] ?? [], 
-                        flipDurationMs: 200, 
-                        type: 'task',
-                        dropTargetStyle: { outline: '2px dashed #555' }
-                    }}
-                    on:consider={(e) => handleTaskConsider(e, column.id)}
-                    on:finalize={(e) => handleTaskFinalize(e, column.id)}
-                >
-                    {#each columnTasks[column.id] ?? [] as task (task.id)}
-                        <div class="task-card" on:click={() => handleTaskClick(task)}>
-                            <div class="task-header">
-                                <p class="task-key">{task.taskKey}</p>
-                                {#if task.priority}
-                                    <span class="priority priority-{task.priority}">{task.priority}</span>
-                                {/if}
-                            </div>
-                            <p class="task-title">{task.title}</p>
-                            {#if task.dueDate}
-                                <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
-                            {/if}
-                        </div>
-                        {:else}
-                        <div class="empty-column-placeholder">
-                            Húzz ide egy taskot
-                        </div>
-                    {/each}
-                </div>
-            </div>
+            <ColumnCard
+                {column}
+                tasks={columnTasks[column.id] ?? []}
+                onConsider={handleTaskConsider}
+                onFinalize={handleTaskFinalize}
+                onTaskClick={handleTaskClick}
+            />
         {/each}
     </div>
     
 </div>
+
+<!-- Modals -->
 {#if isColumnCreationOpen}
     <CreateColumnModal
         bind:isColumnCreationOpen={isColumnCreationOpen}
@@ -382,77 +359,4 @@
         align-items: flex-start;
         height: 100%;
     }
-
-    .column {
-        background: #1e1e1e;
-        border-radius: 8px;
-        padding: 1rem;
-        min-width: 250px;
-        border: 1px solid #333;
-        min-height: calc(100vh - 200px);  /* mindig leér a képernyő aljáig */
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .column h3 {
-        margin-bottom: 0.5rem;
-        font-size: 1rem;
-        color: #ccc;
-    }
-
-    .task-card {
-        background: #2a2a2a;
-        border-radius: 6px;
-        padding: 0.75rem;
-        margin-bottom: 0.5rem;
-        border: 1px solid #333;
-        cursor: pointer;
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
-    .task-list {
-        flex: 1;
-        min-height: 80px;  /* üres oszlopba is lehet húzni */
-    }
-
-    .task-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .empty-column-placeholder {
-        color: #555;
-        text-align: center;
-        padding: 1rem;
-        font-size: 0.85rem;
-        pointer-events: none;
-    }
-
-    .task-card:hover {
-        border-color: #555;
-    }
-
-    .task-key {
-        font-size: 0.75rem;
-        color: #888;
-    }
-
-    .task-title {
-        font-size: 0.9rem;
-    }
-
-    .priority {
-        font-size: 0.75rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        width: fit-content;
-    }
-
-    .priority-low { background: #1a3a1a; color: #4caf50; }
-    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
-    .priority-high { background: #3a1a1a; color: #ff5722; }
-    .priority-critical { background: #4a0000; color: #ff0000; }
 </style>
