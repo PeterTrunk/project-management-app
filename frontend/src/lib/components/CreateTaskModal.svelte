@@ -25,7 +25,7 @@
     let columnId = columns[0]?.id ?? '';
 
     let title: string;
-    let description: string;
+    let description: string = '';
     let sprintId: string = '';
     let priority: string = '';
     let estimateInMinutes: number;

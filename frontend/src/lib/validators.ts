@@ -69,8 +69,9 @@ export function validateTaskTitle(title: string): string | null {
 }
 
 export function validateTaskDescription(desc: string): string | null {
-    if(desc.length > 250) return 'Task leírás nem lehet hosszabb mint 250 karakter!\n';
-    return null;
+    let aggregateError = '';
+    if(desc.length > 250) aggregateError += 'Task leírás nem lehet hosszabb mint 250 karakter!\n';
+    return aggregateError === '' ? null : aggregateError;
 }
 
 export function validateTaskDueDate(date: Date): string | null {

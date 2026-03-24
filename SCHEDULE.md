@@ -162,7 +162,7 @@ A projekt korábbi részeiben egyes DTO-knál mindkét validációs megközelít
 - Data Annotations attribútumok eltávolítása az érintett DTO-kból
 - FluentValidation szabályok megtartása/kiegészítése ahol szükséges
 
-**Swagger + FluentValidation integráció (következő fázis végén)**
+**Swagger + FluentValidation integráció**
 A Swagger UI jelenleg nem jeleníti meg a FluentValidation szabályokat. (pl.: Name: maxvalue, min., illetve hogy kötelező mezőröl van e szó, stb)
 Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - Automatikusan beolvassa a validációs szabályokat
