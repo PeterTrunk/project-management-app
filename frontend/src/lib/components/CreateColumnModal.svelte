@@ -191,12 +191,7 @@
         width: fit-content;
         align-self: center;
     }
-
-    .toolbar-btn.active {
-        background: #444;
-        border-color: #666;
-    }
-
+    
     #success { color: greenyellow; }
     #failed { color: red; white-space: pre-line; }
 </style>

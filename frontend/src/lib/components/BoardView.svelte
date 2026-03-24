@@ -179,7 +179,7 @@
     async function handleUpdate() {
         
     }
-    
+
     async function handleNewBoard() {
         
     }
@@ -188,7 +188,6 @@
         setActiveTask(task);
         isTaskDetailOpen = true;
     }
-
 </script>
 
 <div class="board-toolbar">

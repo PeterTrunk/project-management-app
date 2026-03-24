@@ -1,21 +1,18 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { setActiveTask } from '../stores/taskStore';
-    import { updateTaskAsync, type TaskResponse  } from '../api/taskApi';
+    import { updateTaskAsync, deleteTaskAsync, type TaskResponse  } from '../api/taskApi';
     import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
     import { validateTaskDueDate, validateTaskTitle, validateTaskDescription } from '../validators';
+    import CommentSection from './CommentSection.svelte';
 
     export let task: TaskResponse;
     export let projectId: string;
     export let isTaskDetailOpen = false;
     export let onClose: () => void = () => {};
 
-    
-
-    let comments: CommentResponse[] = [];
-    let newComment = '';
     let currentUserId = '';
 
     let isEditing = false;
@@ -33,37 +30,8 @@
 
     onMount(async () => {
         modalRef?.focus();
-        await loadComments();
     });
-
-    async function loadComments() {
-        try {
-            comments = await getCommentsAsync(projectId, task.id);
-        } catch (e) {
-            console.error('Hiba a kommentek lekérésekor!');
-        }
-    }
-
-    async function handleAddComment() {
-        if (newComment.trim() === '') return;
-        try {
-            const comment = await createCommentAsync(projectId, task.id, { body: newComment });
-            comments = [...comments, comment];
-            newComment = '';
-        } catch (e) {
-            console.error('Hiba a komment hozzáadásakor!');
-        }
-    }
-
-    async function handleDeleteComment(commentId: string) {
-        try {
-            await deleteCommentAsync(projectId, task.id, commentId);
-            comments = comments.filter(c => c.id !== commentId);
-        } catch (e) {
-            console.error('Hiba a komment törlésekor!');
-        }
-    }
-
+    
     let isConfirmOpen = false;
     let confirmTitle = '';
     let confirmMessage = '';
@@ -114,6 +82,15 @@
             error = 'Hiba történt a módosítás során!'
         }
     }
+    
+    async function handleDelete() {
+        try {
+            await deleteTaskAsync(projectId, task.id);
+            closeModal();
+        } catch (e) {
+            error = 'Hiba történt a törlés során!';
+        }
+    }
 
     function closeModal() {
         isTaskDetailOpen = false;
@@ -131,9 +108,17 @@
     >
     <div class="modal-content">
         <div class="modal-header">
-            <button class="edit-btn" on:click={() => isEditing = !isEditing}>
-                {isEditing ? '✕ Mégse' : '✏ Szerkesztés'}
-            </button>
+            <div class="header-actions">
+                <button class="edit-btn" on:click={() => isEditing = !isEditing}>
+                    {isEditing ? '✕ Mégse' : '✏ Szerkesztés'}
+                </button>
+                <button class="delete-task-btn" 
+                    on:click={() => openConfirm(
+                        'Task törlése',
+                        'Biztosan törölni szeretnéd a taskot? Ez a művelet nem visszavonható!',
+                        handleDelete)}
+                >🗑 Task törlése</button>
+            </div>
             <button class="close-btn" on:click={closeModal}>✕</button>
             <h1>{task.title}</h1>
             <p>{task.taskKey} · {task.status}</p>
@@ -224,39 +209,19 @@
                     <button type="button" on:click={() => openConfirm(
                         'Módosítások mentése',
                         'Biztosan menteni szeretnéd a változtatásokat?',
-                        handleEdit
-                    )}>Módosítások mentése</button>
+                        handleEdit)}
+                    >Módosítások mentése</button>
                 </form>
             {/if}
         </div>
 
         <div class="right-column">
             <!-- Kommentek -->
-            <div class="section">
-                <h3>Kommentek</h3>
-                {#if comments.length > 0}
-                    {#each comments as comment}
-                        <div class="comment">
-                            <div class="comment-header">
-                                <span class="comment-author">{comment.userName}</span>
-                                <span class="comment-date">{new Date(comment.createdAt).toLocaleDateString('hu-HU')}</span>
-                                {#if comment.userId === currentUserId}
-                                    <button class="delete-btn" on:click={() => handleDeleteComment(comment.id)}>🗑</button>
-                                {/if}
-                            </div>
-                            <p>{comment.body}</p>
-                        </div>
-                    {/each}
-                {:else}
-                    <p class="empty">Nincs komment</p>
-                {/if}
-                
-                <!-- Új komment hozzáadása -->
-                <div class="comment-input">
-                    <textarea bind:value={newComment} placeholder="Írj egy kommentet..."></textarea>
-                    <button on:click={handleAddComment}>Küldés</button>
-                </div>
-            </div>
+            <CommentSection 
+                {projectId}
+                taskId={task.id}
+                {currentUserId}
+            />
         </div>
     </div>
 </div>
@@ -301,6 +266,27 @@
         gap: 2rem;
     }
 
+    .header-actions {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        display: flex;
+        gap: 0.5rem;
+        z-index: 10;
+    }
+
+    .edit-btn, .delete-task-btn {
+        background: transparent;
+        border: none;
+        color: #aaa;
+        font-size: 1.2rem;
+        cursor: pointer;
+    }
+
+    .edit-btn:hover { color: white; }
+    .delete-btn:hover { color: #ff5555; }
+    .delete-task-btn:hover { color: #ff5555; }
+
     #edit-form {
         display: flex;
         flex-direction: column;
@@ -343,22 +329,7 @@
         cursor: pointer;
         z-index: 10;
     }
-
-    .edit-btn {
-        position: absolute;
-        top: 0.75rem;
-        left: 0.75rem;
-        background: transparent;
-        border: none;
-        color: #aaa;
-        font-size: 1.2rem;
-        cursor: pointer;
-        z-index: 10;
-    }
-
-    .edit-btn:hover {
-       color: white; 
-    }
+    
 
     .close-btn:hover {
         color: white;
@@ -433,6 +404,8 @@
     span:not([class*="priority"]){
         font-weight: bold;
     }
+
+
 
     #success { color: greenyellow; }
     #failed { color: red; white-space: pre-line; }

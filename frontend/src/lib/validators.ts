@@ -62,7 +62,12 @@ export function validateTaskDescription(desc: string): string | null {
 }
 
 export function validateTaskDueDate(date: Date): string | null {
-    if (!date) return null;
+    if(!date) return null;
     if(new Date(date) < new Date()) return 'Határidő nem lehet múltbeli!';
     return null;
+}
+
+export function validateCommentBody(body: string): string | null {
+    if(body.length > 2000) return 'Maximum 2000 karakter hosszú komment megengedett!';
+    return null
 }
