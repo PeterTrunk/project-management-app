@@ -4,7 +4,7 @@
 - 2026-03-08: Authentication & Authorization (JWT + RBAC)
 - 2026-03-15: Project & Task CRUD API
 - 2026-03-22: Svelte Frontend Setup & Core Layout
-- 2026-03-29: Kanban Board & Drag-and-Drop
+- 2026-03-29: Kanban Board & Task Management
 - 2026-04-05: SignalR Real-Time Updates & Notifications _(tavaszi szunet - kiemelt fejlesztesi het)_
 - 2026-04-12: Sprint Management & Team Management
 - 2026-04-19: Git Webhook Integration & MinIO File Storage
@@ -80,6 +80,7 @@ Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router.
 **TypeScript migráció**
 - Svelte projekt átállítva TypeScript-re
 - tsconfig.json létrehozva strict módban, noEmit (Vite kezeli a buildet)
+- Összes fájl .ts kiterjesztésre átnevezve, lang="ts" hozzáadva
 
 **API Service Layer**
 - client.ts: axios instance JWT request interceptor + 401 response interceptor
@@ -88,48 +89,51 @@ Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router.
 
 **Stores**
 - authStore.ts: token, user, isAuthenticated + login/logout helper függvények
-- projectStore.ts: projects, activeProject + setProjects, setActiveProject, clearProjects
+- projectStore.ts: projects, activeProject, labels + setProjects, setActiveProject, setLabels, clearProjects
 
-**Validators**
-- Validátorok kiszervezve, validators.ts
-- validateEmail, validateDisplayName, validatePassword, validateProjName, validateDescription 
-- újrafelhasználhatóság
+**Validators (validators.ts)**
+- validateEmail, validateDisplayName, validatePassword, validateProjName, validateDescription
+- validateColumnName, validateColumnStatus, validateTaskTitle, validateTaskDescription, validateTaskDueDate
+- validateBoardName, validateBoardDescription, validateCommentBody
+- Újrafelhasználható, minden komponensből importálható
 
 **Oldalak**
-- Login.svelte: form, JWT auth, login után redirect Főoldalra-ra, regisztáció gomb redirect registerációs oldalra
-- Register.svelte: form, validáció (email, displayName, jelszó erősség), redirect Login-ra
-- AppLayout.svelte: fő layout, Discord-szerű single-page design
+- Login.svelte: form, JWT auth, redirect Főoldalra, regisztráció gomb
+- Register.svelte: form, validáció (email, displayName, jelszó erősség + megerősítés), redirect Login-ra
+- AppLayout.svelte: fő layout, Discord-szerű single-page design, aktív projekt alapján dinamikus tartalom
 
 **Komponensek**
 - CreateProjectModal.svelte: projekt létrehozás, validáció, overlay, Escape bezárás
-- ConfirmModal.svelte: újrafelhasználható megerősítő modal (archive, unarchive, delete, update)
+- ConfirmModal.svelte: újrafelhasználható megerősítő modal (title, message, confirmText prop-ok)
 - ProjectOverview.svelte: projekt alapadatok megjelenítése
-- ProjectSettings.svelte: projekt szerkesztés, archiválás, törlés
-- UserSettingsModal.svelte: profil megtekintés, profil szerkesztés, jelszó változtatás
+- ProjectSettings.svelte: projekt szerkesztés, archiválás, törlés + Label kezelés
+- UserSettingsModal.svelte: profil megtekintés/szerkesztés, jelszó változtatás
 
 **Backend kiegészítések**
 - CORS konfiguráció: AllowFrontend policy (localhost:5173)
 - UpdateProfileDto, UpdateUserValidator, UserProfileDto
-- PATCH /api/auth/profile endpoint
-- ChangeUserProfileAsync service metódus
+- PATCH /api/auth/profile endpoint + ChangeUserProfileAsync
 
-### UI architektúrával kapcsolatos döntések:
+## UI architektúrával kapcsolatos döntések:
+
 **Layout**
 - Discord-szerű single-page layout: bal oldali sidebar + jobb oldali dinamikus tartalom
 - Nincs oldalváltás — aktív nézet változóval vezérelt tartalom, vagy modal felugrik
 - Route-ok: "/" (Login), "/register" (Register), "/app" (AppLayout)
+
 **Navbar opciók:**
-  Overview | Board | Sprints | Team | Labels | Git | Statistics | Team Resources | Project Settings
+  Overview | Board | Sprints | Team | Git | Statistics | Team Resources | Project Settings
+
 **Nézetek tartalma**
 - Overview — projekt alapadatok (név, kulcs, leírás, tulajdonos, dátumok, státusz)
 - Board — Kanban tábla, oszlop létrehozás modal-ban ("+ Oszlop hozzáadása")
 - Sprints — sprint kezelés + backlog taskok + task létrehozás
 - Team — tagok listája/kezelése + Recent Activity feed
-- Labels — projekt szintű label CRUD
 - Git — összekapcsolt commitok/PR-ek + manuálisan hozzáköthető össze nem kötött commitok
 - Statistics — grafikonok, metrikák
 - Team Resources — erőforrás elosztás
 - Project Settings — projekt beállítások, archiválás, törlés
+
 **Modal pattern**
 - Projekt létrehozás -> CreateProjectModal
 - Oszlop létrehozás -> CreateColumnModal (Board fülön)
@@ -137,30 +141,46 @@ Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router.
 - Label hozzáadás taskhoz -> TaskDetailModal-on belül
 - stb
 
-## Kanban Board & Drag-and-Drop (Ez fejezet leírás frissítve lett)
-Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns with task cards displaying key information (title, priority, assignee, due date, labels). Task detail modal with full information, comment panel, and attachment list. Board CRUD (jelenleg csak projekt létrehozáskor jön létre automatikusan a default board). Column CRUD. A Sprint CRUD.
-Frontend: Board nézet oszlopokkal, task kártyákkal (+ Overdue task visual indicators with color-coded due dates), CreateColumnModal, TaskDetailModal (kommentek, labelek, commit/PR linkek), Sprints nézet sprint kezeléssel és backloggal, valamint CreateTaskModal, 
+## Kanban Board & Task Management (Ez fejezet leírás frissítve lett)
+Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). Board columns with task cards. Task detail modal with comments, labels, (késöbb: commit/PR links, assignees (git és team crud után)).
 
-### Technikai döntések és refaktorálási teendők
+### TO-DO:
+- Overdue task visual indicator
 
-**Data Annotations vs FluentValidation duplikáció**
-A projekt korábbi részeiben egyes DTO-knál mindkét validációs megközelítés egyszerre szerepel (Data Annotations + FluentValidation), ami redundáns. A döntés: csak FluentValidation marad.
+### Elvégzett backend munkák
 
-**Érintett DTO-k (refaktorálás szükséges):**
-- CreateProjectDto
-- UpdateProjectDto
-- CreateTaskDto
-- UpdateTaskDto
-- MoveTaskDto
-- CreateLabelDto
-- CreateCommentDto
-- RegisterDto
-- LoginDto
-- UpdateProfileDto
+**Board CRUD**
+- BoardResponseDto, CreateBoardDto, UpdateBoardDto + validátorok
+- IBoardService + BoardService: GetBoards, CreateBoard, UpdateBoard, DeleteBoard
+- CreateBoardAsync: auto-létrehozza a Backlog, To Do, Done oszlopokat
+- IsDefault kezelés: új default board beállításakor a régi automatikusan false-ra vált
+- BoardController: GET/POST/PATCH/DELETE /api/projects/{projectId}/boards
 
-**Teendő:**
-- Data Annotations attribútumok eltávolítása az érintett DTO-kból
-- FluentValidation szabályok megtartása/kiegészítése ahol szükséges
+**Column CRUD**
+- ColumnResponseDto, CreateColumnDto, UpdateColumnDto, ColumnOrderDto + validátorok
+- IColumnService + ColumnService: GetColumns, CreateColumn, UpdateColumn, DeleteColumn, OrderColumns
+- DeleteColumn: csak üres oszlop törölhető (WipLimit ellenőrzés: jövőbeli fejlesztés)
+- OrderColumnsAsync: két fázisú update (-1 dummy érték -> végleges pozíció, ütközések elkerülésére)
+- Position eltávolítva UpdateColumnDto-ból -> csak ReorderColumns-on keresztül változtatható
+- ColumnDefinitionController: GET/POST/PATCH/DELETE + POST reorder
+
+**Sprint CRUD**
+- SprintResponseDto, CreateSprintDto, UpdateSprintDto + validátorok
+- State management: "Planning" | "Active" | "Completed" (string, statikus lista validációval)
+- State eltávolítva UpdateSprintDto-ból -> csak dedikált endpointok változtathatják
+- ISprintService + SprintService:
+  - GetSprints, CreateSprint, UpdateSprint, DeleteSprint
+  - ActivateSprintAsync: Planning -> Active
+  - PlanSprintAsync: Active -> Planning (visszavonás)
+  - CompleteSprintAsync: Active -> Completed + befejezetlen taskok kezelése
+  - GetUnfinishedTasksAsync: sprint lezárás előtti lista megjelenítéshez
+- CompleteSprintAsync logika: befejezetlen taskok -> Backlogba (SprintId = null) VAGY következő sprintbe (targetSprintId)
+- SprintController: GET/POST/PUT/DELETE + activate/plan/complete/unfinished endpointok
+
+**Refaktorálás**
+- Data Annotations eltávolítva az összes DTO-ból -> csak FluentValidation
+- XML dokumentáció hozzáadva a DTO-khoz Swagger UI-hoz
+- MoveTaskDtoValidator: NotEmpty() eltávolítva Position-ről (0 érték valid)
 
 **Swagger + FluentValidation integráció**
 A Swagger UI jelenleg nem jeleníti meg a FluentValidation szabályokat. (pl.: Name: maxvalue, min., illetve hogy kötelező mezőröl van e szó, stb)
@@ -168,10 +188,42 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - Automatikusan beolvassa a validációs szabályokat
 - minLength, maxLength, pattern megjelenik a Swagger UI-ban
 
-**Column törlési logika**
-Döntés: csak üres oszlop törölhető — ha taskok vannak benne hibaüzenet jelenik meg.
-A felhasználó felelőssége hogy törlés előtt áthelyezze a taskokat.
-WipLimit ellenőrzés: jelenleg nem implementált, jövőbeli fejlesztés.
+### Elvégzett frontend munkák
+
+**API Service Layer**
+- boardApi.ts, columnApi.ts, taskApi.ts, commentApi.ts, labelApi.ts
+
+**Stores**
+- boardStore.ts: boards, activeBoard, columns + helper függvények
+- taskStore.ts: tasks, activeTask + helper függvények
+
+**Komponensek**
+- BoardView.svelte: board toolbar (dropdown board választó, oszlop/task hozzáadás, átrendezés lock)
+- ColumnCard.svelte: oszlop megjelenítés + task dndzone + drag handle átrendezés módban
+- TaskCard.svelte: task kártya (key, cím, prioritás, határidő, labelek)
+- CreateColumnModal.svelte: oszlop létrehozás, pozíció reorder-rel kezelve
+- ColumnDetailModal.svelte: oszlop szerkesztés és törlés
+- CreateBoardModal.svelte: board létrehozás isDefault kezeléssel
+- UpdateBoardModal.svelte: board módosítás
+- CreateTaskModal.svelte: task létrehozás (oszlop/prioritás select, datetime-local, label selector)
+- TaskDetailModal.svelte: két oszlopos layout, szerkesztés/törlés, label kezelés
+- CommentSection.svelte: komment lista, hozzáadás, törlés, óra:perc megjelenítés
+- LabelCard.svelte: szín jelző + név + törlés gomb (small prop task kártyákhoz)
+- CreateLabelModal.svelte: label létrehozás color pickerrel
+
+**Drag & Drop**
+- svelte-dnd-action: oszlop átrendezés (lock gombbal védve) + task mozgatás oszlopok között
+- Float-based position számítás: mozgatáskor szomszédok átlaga (ütközések elkerülése)
+- columnTasks Record<string, TaskResponse[]>: oszloponkénti task kezelés (N+1 és bug elkerülés)
+- isDragging flag: store felülírás megakadályozása drag közben
+- Position renormalizálás: jövőbeli fejlesztés (SCHEDULE-ban jelölve)
+
+### Technikai döntések
+- Column pozíció: float alapú (1, 1.5, 2...) az ütközések elkerülésére, renormalizálás jövőbeli fejlesztés
+- Label kezelés: Project Settings-ben (nem külön navbar fül)
+- Label hozzárendelés: TaskDetailModal edit módban + CreateTaskModal-ban
+- Column törlés: csak üres oszlop törölhető
+- Board auto-oszlopok: Backlog (pos:0), To Do (pos:1), Done (pos:99)
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
