@@ -181,6 +181,9 @@
     padding: 2rem;
     border-radius: 8px;
     width: 500px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 1rem;
