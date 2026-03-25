@@ -161,6 +161,12 @@
 </div>
 
 <style>
+    :global(body){
+        margin: 0;
+        padding: 0;
+        background: #121212;
+    }
+
     :global(html) {
         margin: 0;
         padding: 0;
