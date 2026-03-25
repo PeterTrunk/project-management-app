@@ -1,15 +1,18 @@
 import { writable } from 'svelte/store';
 
 import type { ProjectResponse } from '../api/projectApi';
+import type { LabelResponse } from '../api/labelApi';
 
 interface ProjectState {
     projects: ProjectResponse[];
     activeProject: ProjectResponse | null;
+    labels: LabelResponse[];
 }
 
 const initialState: ProjectState = {
     projects: [],
-    activeProject: null
+    activeProject: null,
+    labels: []
 };
 
 export const projectStore = writable<ProjectState>(initialState);
@@ -24,4 +27,8 @@ export function setActiveProject(project: ProjectResponse | null) {
 
 export function clearProjects() {
     projectStore.set(initialState);
+}
+
+export function setLabels(labels: LabelResponse[]) {
+    projectStore.update(state => ({ ...state, labels}));
 }

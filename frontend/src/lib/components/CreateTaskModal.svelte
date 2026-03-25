@@ -4,10 +4,15 @@
     import { createTaskAsync } from '../api/taskApi';
     import type { ColumnResponse } from '../api/columnApi';
     import { validateTaskTitle, validateTaskDescription, validateTaskDueDate } from '../validators';
+    import LabelCard from './LabelCard.svelte';
+    import { projectStore } from '../stores/projectStore';
+    import type { LabelResponse } from '../api/labelApi';
+    import { addLabelToTaskAsync } from '../api/labelApi';
 
     export let isTaskCreationOpen = false;
     export let projectId: string;
     export let boardId: string;
+    
 
     let modalRef: HTMLElement;
 
@@ -21,6 +26,13 @@
         activeBoardName = state.activeBoard?.name ?? '';
         columns = state.columns;
     });
+
+    let allLabels: LabelResponse[] = [];
+    let selectedLabelIds: string[] = [];
+    projectStore.subscribe(state => {
+        allLabels = state.labels;
+    });
+
     
     let columnId = columns[0]?.id ?? '';
 
@@ -57,7 +69,7 @@
             return;
         }
         try {
-            await createTaskAsync(projectId, {
+            const response = await createTaskAsync(projectId, {
                 columnId,
                 boardId,
                 sprintId: sprintId !== '' ? sprintId : null,
@@ -67,9 +79,13 @@
                 estimateInMinutes,
                 dueDate: dueDate ? new Date(dueDate) : null
             });
+            success = 'Task létrehozva!';
+            for (const labelId of selectedLabelIds) {
+                await addLabelToTaskAsync(projectId, response.id, labelId);
+            }
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
-            success = 'Task létrehozva!';
+            
         } catch (e) {
             error = 'Hiba történt az task létrehozásakor!';
         }
@@ -101,6 +117,20 @@
                     <option value={column.id}>{column.name}</option>
                 {/each}
             </select>
+            <div class="labels-grid">
+                {#each allLabels as label}
+                    <div class="label-select-row">
+                        <LabelCard {label} showDelete={false} small={true} />
+                        {#if selectedLabelIds.includes(label.id)}
+                            <button type="button" class="label-remove-btn" 
+                                on:click={() => selectedLabelIds = selectedLabelIds.filter(id => id !== label.id)}>✕</button>
+                        {:else}
+                            <button type="button" class="label-add-btn" 
+                                on:click={() => selectedLabelIds = [...selectedLabelIds, label.id]}>+</button>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
             <div id="optional-fields">
                 <h2>Opcionális mezők</h2>
                 <!-- TODO: Sprint választó - SprintStore elkészítése után -->
@@ -206,6 +236,34 @@ button {
     font-size: 1rem;
     color: #aaa;
     margin-bottom: 0.25rem;
+}
+
+.labels-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.label-select-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.label-remove-btn {
+    background: transparent;
+    border: none;
+    color: #ff5555;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.label-add-btn {
+    background: transparent;
+    border: none;
+    color: #4caf50;
+    cursor: pointer;
+    font-size: 0.8rem;
 }
 
 

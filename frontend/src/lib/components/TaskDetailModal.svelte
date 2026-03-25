@@ -7,10 +7,17 @@
     import ConfirmModal from './ConfirmModal.svelte';
     import { validateTaskDueDate, validateTaskTitle, validateTaskDescription } from '../validators';
     import CommentSection from './CommentSection.svelte';
+    import { getLabelsAsync, addLabelToTaskAsync as addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
+    import { projectStore, setLabels } from '../stores/projectStore';
+    import LabelCard from './LabelCard.svelte';
+    import CreateLabelModal from './CreateLabelModal.svelte';
 
     export let task: TaskResponse;
     export let projectId: string;
+    export let allLabels: LabelResponse[] = [];
     export let isTaskDetailOpen = false;
+    export let isCreateLabelOpen = false;
+
     export let onClose: () => void = () => {};
 
     let currentUserId = '';
@@ -27,6 +34,10 @@
     authStore.subscribe(state => {
         currentUserId = state.user?.userId ?? '';
     });
+
+    projectStore.subscribe(state => {
+        allLabels = state.labels;
+    })
 
     onMount(async () => {
         modalRef?.focus();
@@ -92,6 +103,25 @@
         }
     }
 
+    async function handleAddLabel(labelId: string) {
+        try {
+            await addLabelToTaskAsync(projectId, task.id, labelId);
+            task = { ...task, labelNames: [...task.labelNames, allLabels.find(l => l.id === labelId)!.name] };
+        } catch (e) {
+            console.error('Hiba a label hozzáadásakor!');
+        }
+    }
+
+    async function handleRemoveLabel(labelId: string) {
+        try {
+            await removeLabelFromTaskAsync(projectId, task.id, labelId);
+            const label = allLabels.find(l => l.id === labelId);
+            task = { ...task, labelNames: task.labelNames.filter(n => n !== label?.name) };
+        } catch (e) {
+            console.error('Hiba a label eltávolításakor!');
+        }
+    }
+
     function closeModal() {
         isTaskDetailOpen = false;
         onClose();
@@ -144,13 +174,20 @@
                 <!-- Labelek -->
                 <div class="section">
                     <h3>Labelek</h3>
-                    {#if task.labelNames.length > 0}
-                        {#each task.labelNames as label}
-                            <span class="tag">{label}</span>
-                        {/each}
-                    {:else}
-                        <p class="empty">Nincs label</p>
-                    {/if}
+                    <div class="labels-row">
+                        {#if task.labelNames.length > 0}
+                            {#each task.labelNames as labelName}
+                                {@const label = allLabels.find(l => l.name === labelName)}
+                                {#if label}
+                                    <LabelCard {label} showDelete={false} />
+                                {:else}
+                                    <span class="tag">{labelName}</span>
+                                {/if}
+                            {/each}
+                        {:else}
+                            <p class="empty">Nincs label</p>
+                        {/if}
+                    </div>
                 </div>
                 <div id="optional-fields">
                     <h2>Opcionális mezők</h2>
@@ -183,6 +220,22 @@
                 </div>
             {:else}
                 <h2>Módosítások</h2>
+                <div class="section">
+                    <h3>Labelek</h3>
+                    <div class="labels-grid">
+                        {#each allLabels as label}
+                            <div class="label-select-row">
+                                <LabelCard {label} showDelete={false} />
+                                {#if task.labelNames.includes(label.name)}
+                                    <button class="label-remove-btn" on:click={() => handleRemoveLabel(label.id)}>✕</button>
+                                {:else}
+                                    <button class="label-add-btn" on:click={() => handleAddLabel(label.id)}>+</button>
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                    <button on:click={() => isCreateLabelOpen = true}>+ Új label</button>
+                </div>
                 <form id="edit-form">
                     Task címe
                     <input bind:value={editTitle} placeholder="Maximum 200 karakter">
@@ -234,7 +287,16 @@
         onConfirm={confirmAction}
     />
 {/if}
-
+{#if isCreateLabelOpen}
+    <CreateLabelModal
+        bind:isOpen={isCreateLabelOpen}
+        projectId={projectId}
+        onClose={async () => {
+            const data = await getLabelsAsync(projectId);
+            setLabels(data);
+        }}
+    />
+{/if}
 
 <style>
     .modal-overlay {
@@ -406,6 +468,41 @@
         font-weight: bold;
     }
 
+    .labels-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .labels-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .label-select-row {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .label-remove-btn {
+        background: transparent;
+        border: none;
+        color: #ff5555;
+        cursor: pointer;
+        font-size: 0.8rem;
+        padding: 0 0.25rem;
+    }
+
+    .label-add-btn {
+        background: transparent;
+        border: none;
+        color: #4caf50;
+        cursor: pointer;
+        font-size: 0.8rem;
+        padding: 0 0.25rem;
+    }
 
 
     #success { color: greenyellow; }

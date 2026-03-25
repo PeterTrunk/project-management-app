@@ -53,7 +53,7 @@
         padding: 1rem;
         width: 250px;
         border: 1px solid #333;
-        height: calc(100% - 8px);  /* ← 8px alul térköz */
+        height: calc(100% - 8px);
         display: flex;
         flex-direction: column;
     }

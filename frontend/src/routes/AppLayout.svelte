@@ -113,7 +113,6 @@
             <button on:click={() => activeView = 'sprints'}>Sprints</button>
             <button on:click={() => activeView = 'team'}>Team</button>
             <button on:click={() => activeView = 'statistics'}>Statistics</button>
-            <button on:click={() => activeView = 'labels'}>Labels</button>
             <button on:click={() => activeView = 'teamResources'}>Team Resources</button>
             <button on:click={() => activeView = 'git'}>Git</button>
             <button on:click={() => activeView = 'projectSettings'}>Project Settings</button>
@@ -121,7 +120,7 @@
         
         <!-- Dinamikus tartalom -->
         <!--(Overview, Board, Team, Recent Activity, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
-        <div class="content">
+        <div class="content" class:scrollable={activeView !== 'board'}>
             {#if activeProject}
                 {#if activeView === 'overview'}
                     <ProjectOverview project={activeProject} />
@@ -137,8 +136,6 @@
                     <p>Statistics nézet</p>
                 {:else if activeView === 'teamResources'}
                     <p>Team Resources nézet</p>
-                {:else if activeView === 'labels'}
-                    <p>Cimkék nézet</p>
                 {:else if activeView === 'projectSettings'}
                     <ProjectSettings project={activeProject} />
                 {/if}
@@ -247,5 +244,9 @@
         display: flex;
         flex-direction: column;
         min-width: 0;
+    }
+    .content.scrollable {
+        overflow-y: auto;
+        padding: 1rem;
     }
 </style>

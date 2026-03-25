@@ -1,21 +1,53 @@
 <script lang="ts">
     import type { ProjectResponse } from '../api/projectApi';
     import { validateDescription, validateProjName } from '../validators';
-
-    import { setActiveProject, setProjects, projectStore } from '../../lib/stores/projectStore';
-
+    import { setActiveProject, setProjects, projectStore, setLabels } from '../../lib/stores/projectStore';
     import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject, getProjectByIdAsync } from '../../lib/api/projectApi'
+    import ConfirmModal from '../components/ConfirmModal.svelte';
+
+    import { getLabelsAsync, deleteLabelAsync, type LabelResponse } from '../api/labelApi';
+    import LabelCard from './LabelCard.svelte';
+    import CreateLabelModal from './CreateLabelModal.svelte';
+    import { onMount } from 'svelte';
 
     export let project: ProjectResponse;
+    let labels: LabelResponse[] = [];
+    let isCreateLabelOpen = false;
+
+    projectStore.subscribe(state => {
+        labels = state.labels;
+    });
+
+    onMount(async () => {
+       const data = await getLabelsAsync(project.id);
+       setLabels(data); 
+    });
 
     async function refreshProject() {
         const updated = await getProjectByIdAsync(project.id);
         setActiveProject(updated);
     }
+    
+    function requestDeleteLabel(labelId: string) {
+        labelToDelete = labelId;
+        openConfirm(
+            'Label törlése',
+            'Biztosan törölni szeretnéd? Minden taskról eltávolításra kerül!',
+            async () => await handleDeleteLabel(labelToDelete)
+        );
+    }
 
-    import ConfirmModal from '../components/ConfirmModal.svelte';
+    async function handleDeleteLabel(labelId: string) {
+        try {
+            await deleteLabelAsync(project.id, labelId);
+            setLabels(labels.filter(l => l.id !== labelId));
+        } catch (e) {
+            error = 'Hiba történt a label törlésekor!';
+        }
+    }
 
     let isConfirmOpen = false;
+    let labelToDelete = '';
     let confirmTitle = '';
     let confirmMessage = '';
     let confirmAction: () => Promise<void> = async () => {};
@@ -156,17 +188,40 @@
         , handleDelete
         )}>Projekt Törlése</button>
     </div>
-    <!--Modal-->
-    {#if isConfirmOpen}
-    <ConfirmModal
-        bind:isOpen={isConfirmOpen}
-        title={confirmTitle}
-        message={confirmMessage}
-        confirmText="Megerősítés"
-        onConfirm={confirmAction}
-        />
-    {/if}
+    <div class="divider">
+        <h2>Labelek</h2>
+        <div class="labels-list">
+            {#if labels.length > 0}
+                {#each labels as label}
+                    <LabelCard {label} onDelete={requestDeleteLabel} />
+                {/each}
+            {:else}
+                <p class="empty">Nincs még label</p>
+            {/if}
+        </div>
+        <button on:click={() => isCreateLabelOpen = true}>+ Új label</button>
+    </div>
 </div>
+<!--Modal-->
+{#if isConfirmOpen}
+<ConfirmModal
+    bind:isOpen={isConfirmOpen}
+    title={confirmTitle}
+    message={confirmMessage}
+    confirmText="Megerősítés"
+    onConfirm={confirmAction}
+    />
+{/if}
+{#if isCreateLabelOpen}
+    <CreateLabelModal
+        bind:isOpen={isCreateLabelOpen}
+        projectId={project.id}
+        onClose={async () => {
+            const data = await getLabelsAsync(project.id);
+            setLabels(data);
+        }}
+    />
+{/if}
 
 <style>
     div {

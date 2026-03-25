@@ -1,5 +1,13 @@
 <script lang="ts">
     import type { TaskResponse } from '../api/taskApi';
+    import LabelCard from './LabelCard.svelte';
+    import { projectStore } from '../stores/projectStore';
+    import type { LabelResponse } from '../api/labelApi';
+
+    let allLabels: LabelResponse[] = [];
+    projectStore.subscribe(state => {
+        allLabels = state.labels;
+    });
 
     export let task: TaskResponse;
     export let onClick: (task: TaskResponse) => void = () => {};
@@ -19,6 +27,16 @@
         {/if}
     </div>
     <p class="task-title">{task.title}</p>
+    {#if task.labelNames.length > 0}
+        <div class="labels-row">
+            {#each task.labelNames as labelName}
+                {@const label = allLabels.find(l => l.name === labelName)}
+                {#if label}
+                    <LabelCard {label} showDelete={false} small={true} />
+                {/if}
+            {/each}
+        </div>
+    {/if}
     {#if task.dueDate}
         <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
     {/if}
@@ -66,6 +84,13 @@
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
         width: fit-content;
+    }
+
+    .labels-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
     }
 
     .priority-low { background: #1a3a1a; color: #4caf50; }
