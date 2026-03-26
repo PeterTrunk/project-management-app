@@ -219,11 +219,78 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - Position renormalizálás: jövőbeli fejlesztés (SCHEDULE-ban jelölve)
 
 ### Technikai döntések
-- Column pozíció: float alapú (1, 1.5, 2...) az ütközések elkerülésére, renormalizálás jövőbeli fejlesztés
+
 - Label kezelés: Project Settings-ben (nem külön navbar fül)
 - Label hozzárendelés: TaskDetailModal edit módban + CreateTaskModal-ban
 - Column törlés: csak üres oszlop törölhető
 - Board auto-oszlopok: Backlog (pos:0), To Do (pos:1), Done (pos:99)
+
+### Task/Column Pozíció Kezelési Módszerek — Döntési Dokumentáció
+
+#### Vizsgált megoldások
+
+**1. Szekvenciális frissítés (1, 2, 3, 4...)**
+Minden mozgatásnál az összes utána lévő task pozícióját frissítjük sorozatosan.
+- pozitívum: Egyszerű implementáció
+- pozitívum: Könnyen érthető
+- negatívum: Skálázási szempontból: N darab task mozgatásakor N db UPDATE szükséges -> teljesítmény problémásabb
+- negatívum: Párhuzamos mozgatásnál könnyen ütközések keletkeznek
+
+**2. Linked List (nextTaskId mutató)**
+Minden tasknak van egy nextTaskId mutatója a következő taskra.
+- pozitívum: Közbeszúrás mindig csak 2 sor frissítése
+- pozitívum: Sosem fogy el a "hely"
+- negatívum: ORDER BY nem működik egyszerűen — rekurzív CTE szükséges -> lassú
+- negatívum: Indexeléssel sem oldható meg a sorrendezési probléma (O(n))
+- negatívum: Lánc integritás sérülhet (FK constraint + tranzakció részben megoldja)
+- negatívum: Párhuzamos mozgatásnál optimistic locking szükséges
+- (negatívum: Iparági szinten nem elfogadott megoldás erre a problémára)
+
+**3. Float alapú pozíció(az első megoldás volt a problémára.)** 
+Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 közé -> 1.5).
+- pozitívum: Egyszerű implementáció 
+- pozitívum: ORDER BY egyszerű és gyors
+- pozitívum: Közbeszúráshoz csak 1 sor frissítése kell és két sort csak olvasunk
+- negatívum: IEEE 754 float precizitási korlát — sok közbeszúrás után elfogy a hely
+- negatívum: Renormalizálás szükséges (manuális trigger, ellenörzés hogy a float kifáradás közeli e.)
+- negatívum: Párhuzamos ütközésnél (két user egyszerre mozgat) nem determinisztikus
+
+**4. Lexorank (Jira megoldása) — VÁLASZTOTT MEGOLDÁS**
+String alapú pozíció Base36 karakterkészlettel, bucket rendszerrel. (hasonló kissé a float alapúhoz, átlagot számít alap esetben)
+Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé -> "0|am"
+
+Bucket rendszer:
+- 3 bucket (0, 1, 2) körkörösen — a prefix jelzi melyik bucketben van az elem
+- Ütközés esetén (két azonos pozíció) az egész oszlop átkerül a következő bucketbe
+- Bucket 2 exhaustion után visszaáll bucket 0-ra (öngyógyító, végtelen ciklus)
+
+Base36 kapacitás:
+- 1 karakter: 36^1 = 36 pozíció
+- 2 karakter: 36^2 = 1,296 pozíció
+- 3 karakter: 36^3 = 46,656 pozíció
+- String csak hosszabbodik, sosem fogy el a hely
+
+- pozitívum: Végtelen közbeszúrás — sosem fogy el a hely
+- pozitívum: ORDER BY egyszerű és gyors (localeCompare / abc sorrend)
+- pozitívum: SignalR barát — csak a position stringet kell broadcastolni
+- pozitívum: Öngyógyító bucket rendszer — automatikus rebalancing ütközéskor
+- pozitívum: Iparági standard (Jira, Linear)
+- pozitívum: Adatbázis szinten hatékony index támogatás
+- negatívum: Komplexebb implementáció mint a float
+- negatívum: Párhuzamos dupla mozgatás esetén a task "kicsit más helyre" kerülhet
+  (nem adatvesztés, csak nem determinisztikus sorrend — elfogadható tradeoff)
+
+#### Döntés
+A **Lexorank** implementálása melletti döntés mert a komplexitás 
+növekedés elfogadható tradeoff a jelentős scaling és robusztussági előnyökért.
+A float megoldás ideiglenesen implementálva marad amíg a Lexorank 
+implementáció el nem készül.
+
+#### Implementációs terv
+- Position mező típusa: float -> string (migration szükséges)
+- Új LexorankService a pozíció számításhoz
+- MoveTaskAsync frissítése
+- Frontend: sort by position -> sort by localeCompare
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
