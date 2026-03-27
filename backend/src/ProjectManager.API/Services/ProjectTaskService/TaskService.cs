@@ -3,16 +3,20 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.LexorankService;
+
 
 namespace ProjectManager.API.Services.ProjectTaskService
 {
     public class TaskService : ITaskService
     {
         private readonly AppDbContext _context;
+        private readonly ILexorankService _lexorankService;
 
-        public TaskService(AppDbContext context)
+        public TaskService(AppDbContext context, ILexorankService lexorankService)
         {
             _context = context;
+            _lexorankService = lexorankService;
         }
 
         public async Task<TaskResponseDto> CreateTaskAsync(Guid createdById, Guid projectId, CreateTaskDto dto)
@@ -33,6 +37,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (counter == null)
                 throw new Exception("Számláló nem található");
 
+            var lastTask = await _context.ProjectTasks
+                .Where(t => t.ColumnId == dto.ColumnId)
+                .OrderBy(t => t.Position)
+                .LastOrDefaultAsync();
+            
             counter.LastNum += 1;
             var taskKey = $"{project.ProjKey}-{counter.LastNum}";
 
@@ -48,8 +57,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Description = dto.Description,
                 Status = column.MapsToStatus,
                 Priority = dto.Priority,
-                Position = 0f,
-                EstimateInMinutes = dto.EstimateInMinutes ?? 0,
+                Position = _lexorankService.GetInitialPosition(lastTask?.Position),
+                EstimateInMinutes = dto.EstimateInMinutes ?? null,
                 DueDate = dto.DueDate,
             };
             await _context.ProjectTasks.AddAsync(task);
@@ -257,25 +266,88 @@ namespace ProjectManager.API.Services.ProjectTaskService
             return response;
         }
 
-        public async Task<TaskResponseDto> MoveTaskAsync(Guid taskId, MoveTaskDto dto)
+        public async Task<TaskResponseDto> MoveTaskAsync(Guid projectId, Guid taskId, MoveTaskDto dto)
         {
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var task = await _context.ProjectTasks
+                .Include(t => t.CreatedByUser)
+                .FirstOrDefaultAsync(t => t.Id == taskId);
             if (task == null)
                 throw new Exception("Feladat nem található");
-            
 
             var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
             if (column == null)
                 throw new Exception("Oszlop nem található");
+            
+            ProjectTask? prevTask = null;
+            if (dto.AfterTaskId != null)
+            {
+                prevTask = await _context.ProjectTasks
+                    .FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId);
+                if (prevTask == null)
+                    throw new Exception("Előző feladat nem található");
+            }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
-            if (user == null)
-                throw new Exception("Felhasználó nem található!");
+            ProjectTask? nextTask;
+            if (prevTask == null)
+            {
+                // Első helyre kerül, legkisebb pozíciójú task
+                nextTask = await _context.ProjectTasks
+                    .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                    .OrderBy(t => t.Position)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                nextTask = await _context.ProjectTasks
+                    .Where(t => t.ColumnId == dto.ColumnId
+                             && string.Compare(t.Position, prevTask.Position) > 0
+                             && t.Id != taskId)
+                    .OrderBy(t => t.Position)
+                    .FirstOrDefaultAsync();
+            }
 
+            if (prevTask != null && nextTask != null &&
+                _lexorankService.HasCollision(prevTask.Position, nextTask.Position))
+            {
+                await RebalanceColumnAsync(dto.ColumnId, prevTask.Position);
+
+                // Újra lekérés rebalancing után
+                prevTask = dto.AfterTaskId != null
+                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId)
+                    : null;
+
+                nextTask = prevTask == null
+                    ? await _context.ProjectTasks
+                        .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                        .OrderBy(t => t.Position)
+                        .FirstOrDefaultAsync()
+                    : await _context.ProjectTasks
+                        .Where(t => t.ColumnId == dto.ColumnId
+                                 && string.Compare(t.Position, prevTask.Position) > 0
+                                 && t.Id != taskId)
+                        .OrderBy(t => t.Position)
+                        .FirstOrDefaultAsync();
+            }
+
+            // Backend számítja a pozíciót
+            var newPosition = _lexorankService.GetMiddle(
+                prevTask?.Position,
+                nextTask?.Position
+            );
+
+            task.Position = newPosition;
             task.ColumnId = dto.ColumnId;
-            task.Position = dto.Position;
             task.Status = column.MapsToStatus;
             await _context.SaveChangesAsync();
+
+            if (_lexorankService.NeedsRebalancing(newPosition))
+            {
+                await RebalanceColumnAsync(dto.ColumnId, newPosition);
+            }
 
             var assigneeNames = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
@@ -310,7 +382,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 LabelNames = labelNames,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
-                CreatedByName = user.DisplayName,
+                CreatedByName = task.CreatedByUser.DisplayName,
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
@@ -393,6 +465,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 UpdatedAt = task.UpdatedAt
             };
             return response;
+        }
+
+        private async Task RebalanceColumnAsync(Guid columnId, string position)
+        {
+            var bucket = _lexorankService.GetBucket(position);
+            var nextBucket = _lexorankService.GetNextBucket(bucket);
+
+            var allTasksInColumn = await _context.ProjectTasks
+                .Where(t => t.ColumnId == columnId)
+                .OrderBy(t => t.Position)
+                .ToListAsync();
+
+            var newPositions = _lexorankService.RebalancePositions(
+                allTasksInColumn.Count,
+                nextBucket
+            );
+
+            for (int i = 0; i < allTasksInColumn.Count; i++)
+            {
+                allTasksInColumn[i].Position = newPositions[i];
+            }
+
+            await _context.SaveChangesAsync();
         }
     }
 }

@@ -89,11 +89,11 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectMember")]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<TaskResponseDto>> MoveTaskAsync(Guid taskId, [FromBody] MoveTaskDto dto)
+        public async Task<ActionResult<TaskResponseDto>> MoveTaskAsync(Guid projectId, Guid taskId, [FromBody] MoveTaskDto dto)
         {
             try
             {
-                var response = await _taskService.MoveTaskAsync(taskId, dto);
+                var response = await _taskService.MoveTaskAsync(projectId, taskId, dto);
                 return Ok(response);
             }
             catch (Exception ex)

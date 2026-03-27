@@ -12,8 +12,8 @@ interface CreateTaskRequest {
 }
 
 interface MoveTaskRequest {
-    position: number;
-    columnId: string; 
+    columnId: string;
+    afterTaskId: string | null; 
 }
 
 interface UpdateTaskRequest {
@@ -36,7 +36,7 @@ export interface TaskResponse {
     description: string | null;
     status: string;
     priority: string;
-    position: number;
+    position: string;
     estimateInMinutes: number | null;
     dueDate: Date | null;
     assigneeNames: string[];

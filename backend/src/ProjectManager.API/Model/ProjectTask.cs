@@ -13,8 +13,8 @@
         public string? Description { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Priority { get; set; }
-        public float Position { get; set; }
-        public int EstimateInMinutes { get; set; } = 0;
+        public string Position { get; set; } = string.Empty;
+        public int? EstimateInMinutes { get; set; } = 0;
         public DateTime? DueDate { get; set; }
         public DateTime? ClosedAt { get; set; }
         public DateTime CreatedAt { get; set; }

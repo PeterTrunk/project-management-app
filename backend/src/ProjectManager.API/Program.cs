@@ -13,6 +13,7 @@ using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.LabelService;
+using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
@@ -102,6 +103,8 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddFluentValidationAutoValidation();
 
+builder.Services.AddSingleton<ILexorankService, LexorankService>();
+
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<ILabelService, LabelService>();
@@ -119,15 +122,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    //DbSeeding és Migráció, nem middleware de az inditáskor lefutnak egyszer!
+    //Migráció, nem middleware de az inditáskor lefutnak egyszer!
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
-    await DbSeeder.SeedAsync(db);
 }
 
 //Middleware hozzáadás
 app.UseCors("AllowFrontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 

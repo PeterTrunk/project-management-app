@@ -8,7 +8,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         Task<TaskResponseDto> GetTaskByIdAsync(Guid taskId, Guid projectId);
         Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null);
         Task<TaskResponseDto> UpdateTaskAsync(Guid taskId, UpdateTaskDto dto);
-        Task<TaskResponseDto> MoveTaskAsync(Guid taskId, MoveTaskDto dto);
+        Task<TaskResponseDto> MoveTaskAsync(Guid projectId, Guid taskId, MoveTaskDto dto);
         Task DeleteTaskAsync(Guid taskId);
     }
 }

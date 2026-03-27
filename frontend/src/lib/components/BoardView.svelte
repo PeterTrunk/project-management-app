@@ -54,9 +54,9 @@
         columns.forEach(col => {
             map[col.id] = allTasks
                 .filter(t => t.columnId === col.id)
-                .sort((a, b) => a.position - b.position);
+                .sort((a, b) => a.position.localeCompare(b.position));
         });
-        columnTasks = { ...map };  // spread hogy Svelte észrevegye
+        columnTasks = { ...map };
     }
     
     // store figyelése
@@ -116,57 +116,51 @@
     }
 
     async function handleTaskFinalize(e: CustomEvent, columnId: string) {
-        const trigger = e.detail.info.trigger;
-    
-        // Csak a céloszlopban kezeljük a finalize-t
-        if (trigger === 'droppedIntoAnother') return;
-        
         const movedTaskId = e.detail.info.id;
-        
+        if (e.detail.info.trigger === 'droppedIntoAnother') return;
+
         columnTasks[columnId] = e.detail.items;
         Object.keys(columnTasks).forEach(colId => {
             if (colId !== columnId) {
-                columnTasks[colId] = columnTasks[colId].filter((t: TaskResponse) => t.id !== movedTaskId);
+                columnTasks[colId] = columnTasks[colId]
+                    .filter((t: TaskResponse) => t.id !== movedTaskId);
             }
         });
         columnTasks = { ...columnTasks };
 
-        const items = columnTasks[columnId];
-        const movedIndex = items.findIndex((t: TaskResponse) => t.id === movedTaskId);
+        const movedIndex = columnTasks[columnId]
+            .findIndex((t: TaskResponse) => t.id === movedTaskId);
+        const afterTaskId = movedIndex > 0
+            ? columnTasks[columnId][movedIndex - 1].id
+            : null;
 
-        let position: number;
-
-        if (items.length === 1) {
-            position = 1;
-        } else if (movedIndex === 0) {
-            position = items[1].position / 2;
-        } else if (movedIndex === items.length - 1) {
-            position = items[movedIndex - 1].position + 1;
-        } else {
-            const before = items[movedIndex - 1].position;
-            const after = items[movedIndex + 1].position;
-            position = (before + after) / 2;
-        }
         try {
-            //console.log('Kiszámolt pozició:', position);
-            await moveTaskAsync(activeProjectId, movedTaskId, { columnId, position });
-            const updatedTasks = tasks.map(t => 
-                t.id === movedTaskId ? { ...t, columnId, position } : t
-            );
+            const response = await moveTaskAsync(activeProjectId, movedTaskId, {
+                columnId,
+                afterTaskId
+            });
+
+            // Store frissítés a backend válasszal
             isDragging = false;
+            const updatedTasks = tasks.map(t =>
+                t.id === movedTaskId 
+                    ? { ...t, columnId, position: response.position } 
+                    : t
+            );
             setTasks(updatedTasks);
+            
+            // Explicit distributeTasks a friss adatokkal
+            distributeTasks(updatedTasks);
+
         } catch (err: any) {
-            console.error('Backend hiba:');
-            //console.error('Backend hiba:', err.response?.data*);
-            //console.error('Küldött adat:', { columnId, position });
-            //console.error('Backend hiba részletek:', JSON.stringify(err.response?.data?.errors));
+            console.error('Backend hiba:', err.response?.data);
             isDragging = false;
             const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '');
             setTasks(_tasks);
+            distributeTasks(_tasks);
         }
     }
    
-
     async function loadBoards(projectId: string) {
         try {
             const data = await getBoardsAsync(projectId);

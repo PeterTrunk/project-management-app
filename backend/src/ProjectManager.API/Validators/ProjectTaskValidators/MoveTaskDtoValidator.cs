@@ -9,9 +9,8 @@ namespace ProjectManager.API.DTOs.ProjectTask
             RuleFor(d => d.ColumnId)
                 .NotEmpty();
 
-            RuleFor(d => d.Position)
-                .GreaterThanOrEqualTo(0)
-                .WithMessage("A pozíció nem lehet negatív");
+            //AdterTaskId- nem szükséges itt validálni.
+            //Ha null akkor első hely, különben ellenőrizve lesz hogy tényleg létező Taskrol van e szó.
         }
     }
 }

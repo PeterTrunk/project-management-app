@@ -20,7 +20,7 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public string? Description { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Priority { get; set; }
-        public float Position { get; set; }
+        public string Position { get; set; }
         public int? EstimateInMinutes { get; set; }
         public DateTime? DueDate { get; set; }
         public DateTime? ClosedAt { get; set; }
