@@ -60,8 +60,12 @@ namespace ProjectManager.API.Services.SprintService
                 throw new Exception("Sprint nem található");
 
             //Minden Boardban kell hogy szerepeljen egy done oszlop! (Projekt Creation esetén létrehozva alap esetben)
-            var tasks = await _context.ProjectTasks.Where(t => t.Status != "Done" && t.SprintId == sprintId).ToListAsync();
-            if(tasks.Count == 0)
+            var tasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId &&
+                           (t.ColumnDefinition == null || t.ColumnDefinition.MapsToStatus != "Done"))
+                .ToListAsync();
+
+            if (tasks.Count == 0)
             {
                 sprint.State = "Completed";
             }
@@ -197,7 +201,8 @@ namespace ProjectManager.API.Services.SprintService
                 throw new Exception("Sprint nem található");
 
             var tasks = await _context.ProjectTasks
-                .Where(t => t.SprintId == sprintId && t.Status != "Done")
+                .Where(t => t.SprintId == sprintId &&
+                           (t.ColumnDefinition == null || t.ColumnDefinition.MapsToStatus != "Done"))
                 .Include(t => t.CreatedByUser)
                 .ToListAsync();
             var taskIds = tasks.Select(t => t.Id).ToList();
@@ -262,7 +267,7 @@ namespace ProjectManager.API.Services.SprintService
                 TaskKey = t.TaskKey,
                 Title = t.Title,
                 Description = t.Description,
-                Status = t.Status,
+                Status = t.ColumnDefinition.MapsToStatus ?? "Backlog",
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
@@ -333,6 +338,28 @@ namespace ProjectManager.API.Services.SprintService
                 UpdatedAt = sprint.UpdatedAt
             };
             return response;
+        }
+
+        public async Task AssignTaskToSprintAsync(Guid projectId, Guid taskId, Guid? sprintId)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            if (task == null)
+                throw new Exception("Task nem található");
+            
+            if (sprintId.HasValue)
+            {
+                var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+                if (sprint == null)
+                    throw new Exception("Sprint nem található");
+            }
+
+            // null = vissza Backlogba
+            task.SprintId = sprintId; 
+            await _context.SaveChangesAsync();
         }
     }
 }

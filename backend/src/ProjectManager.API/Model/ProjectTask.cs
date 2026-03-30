@@ -4,14 +4,13 @@
     {
         public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
-        public Guid BoardId { get; set; }
-        public Guid ColumnId { get; set; }
+        public Guid? BoardId { get; set; }
+        public Guid? ColumnId { get; set; }
         public Guid? SprintId { get; set; }
         public Guid CreatedById { get; set; }
         public string TaskKey { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public string Status { get; set; } = string.Empty;
         public string? Priority { get; set; }
         public string Position { get; set; } = string.Empty;
         public int? EstimateInMinutes { get; set; } = 0;

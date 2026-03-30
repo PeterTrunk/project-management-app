@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
@@ -55,7 +56,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = taskKey,
                 Title = dto.Title,
                 Description = dto.Description,
-                Status = column.MapsToStatus,
                 Priority = dto.Priority,
                 Position = _lexorankService.GetInitialPosition(lastTask?.Position),
                 EstimateInMinutes = dto.EstimateInMinutes ?? null,
@@ -79,7 +79,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
-                Status = task.Status,
+                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = task.Priority,
                 Position = task.Position,
                 EstimateInMinutes = task.EstimateInMinutes,
@@ -115,6 +115,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Where(t => boardId == null || t.BoardId == boardId)
                 .Where(t => sprintId == null || t.SprintId == sprintId)
                 .Include(t => t.CreatedByUser)
+                .Include(t => t.ColumnDefinition)
                 .ToListAsync();
 
             //Magára a tasks listára query - Id- kinyerése
@@ -181,7 +182,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = t.TaskKey,
                 Title = t.Title,
                 Description = t.Description,
-                Status = t.Status,
+                Status = t.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
@@ -254,7 +255,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
-                Status = task.Status,
+                Status = task.ColumnDefinition.MapsToStatus,
                 Priority = task.Priority,
                 Position = task.Position,
                 EstimateInMinutes = task.EstimateInMinutes,
@@ -278,9 +279,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new Exception("Feladat nem található");
 
-            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
-            if (column == null)
-                throw new Exception("Oszlop nem található");
+            ColumnDefinition? column = null;
+            if (dto.ColumnId.HasValue)
+            {
+                column = await _context.ColumnDefinitions
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
+                if (column == null)
+                    throw new Exception("Oszlop nem található");
+            }
             
             ProjectTask? prevTask = null;
             if (dto.AfterTaskId != null)
@@ -310,10 +316,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .FirstOrDefaultAsync();
             }
 
-            if (prevTask != null && nextTask != null &&
-                _lexorankService.HasCollision(prevTask.Position, nextTask.Position))
+            if (dto.ColumnId.HasValue &&
+                prevTask != null && 
+                nextTask != null &&
+                _lexorankService.HasCollision(prevTask.Position, nextTask.Position) )
             {
-                await RebalanceColumnAsync(dto.ColumnId, prevTask.Position);
+                await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position);       
 
                 // Újra lekérés rebalancing után
                 prevTask = dto.AfterTaskId != null
@@ -341,12 +349,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
             task.Position = newPosition;
             task.ColumnId = dto.ColumnId;
-            task.Status = column.MapsToStatus;
+            task.BoardId = column?.BoardId;
             await _context.SaveChangesAsync();
 
-            if (_lexorankService.NeedsRebalancing(newPosition))
+            if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
             {
-                await RebalanceColumnAsync(dto.ColumnId, newPosition);
+                await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
             }
 
             var assigneeNames = await _context.TaskAssignments
@@ -386,7 +394,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
-                Status = task.Status,
+                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = task.Priority,
                 Position = task.Position,
                 EstimateInMinutes = task.EstimateInMinutes,
@@ -455,7 +463,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
-                Status = task.Status,
+                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = task.Priority,
                 Position = task.Position,
                 EstimateInMinutes = task.EstimateInMinutes,

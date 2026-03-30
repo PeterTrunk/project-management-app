@@ -12,8 +12,8 @@ namespace ProjectManager.API.DTOs.ProjectTask
         /// Opcionális Task leírás, max 250 karakter
         /// </summary>
         public string? Description { get; set; }
-        public Guid BoardId { get; set; }
-        public Guid ColumnId { get; set; }
+        public Guid? BoardId { get; set; }
+        public Guid? ColumnId { get; set; }
         public Guid? SprintId { get; set; }
         /// <summary>
         /// Task prioritás, prioritások: low, medium, high, critical

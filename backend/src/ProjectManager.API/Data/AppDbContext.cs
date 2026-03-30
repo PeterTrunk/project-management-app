@@ -343,11 +343,6 @@ public class AppDbContext : DbContext
                   .HasMaxLength(200)
                   .IsRequired();
 
-            entity.Property(t => t.Status)
-                  .HasMaxLength(32)
-                  .IsRequired()
-                  .HasDefaultValue("todo");
-
             entity.Property(t => t.Priority)
                   .HasMaxLength(16)
                   .HasDefaultValue("normal");
@@ -368,8 +363,7 @@ public class AppDbContext : DbContext
             //Indexes
             entity.HasIndex(t => new { t.ProjectId, t.TaskKey })
                   .IsUnique();
-
-            entity.HasIndex(t => new { t.ProjectId, t.Status });
+            
             entity.HasIndex(t => new { t.ProjectId, t.SprintId });
             entity.HasIndex(t => new { t.ColumnId, t.Position });
             entity.HasIndex(t => t.DueDate);
