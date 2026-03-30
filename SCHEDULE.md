@@ -292,6 +292,41 @@ implementáció el nem készül.
 - MoveTaskAsync frissítése
 - Frontend: sort by position -> sort by localeCompare
 
+### Sprint & Task Modell Architektúra Döntések
+**Task modell refaktorálás**
+- Task.Status eltávolítva — computed property lett (Redundancia csökkent): ColumnDefinition?.MapsToStatus ?? "Backlog"
+- Task.BoardId nullable: ha null -> projekt szintű Backlogban van
+- Task.ColumnId nullable: ha null -> projekt szintű Backlogban van
+- Backlog definíció: BoardId = null AND ColumnId = null AND SprintId = null
+
+**Sprint modell refaktorálás**
+- Sprint.BoardId eltávolítva — egy sprint több boardhoz is tartozhat
+- Indok: egy projekten belül több board is lehet (pl. Frontend Board + Backend Board)
+  és egy sprint mindkét board taskjait tartalmazhatja
+
+**Task életciklus**
+```
+Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
+           -> Board Backlog oszlopba kerül (BoardId+ColumnId beállítva)
+           -> Sprinthez rendelve (SprintId beállítva)
+           -> Oszlopok között mozog (MoveTaskAsync)
+           -> Sprint lezárva -> visszakerül Backlogba vagy következő sprintbe
+```
+
+**Új endpoint: Sprint-Task hozzárendelés**
+- POST /api/projects/{projectId}/sprints/{sprintId}/tasks/{taskId} -> sprinthez adás
+- DELETE /api/projects/{projectId}/sprints/{sprintId}/tasks/{taskId} -> Backlogba visszarakás
+- AssignTaskToSprintAsync(projectId, taskId, sprintId?) — sprintId null = Backlog
+
+**Tervezett Sprint UI**
+- Sprint lista időrendben, aktív sprint kiemelve
+- Sprint kártyán: név, dátum, cél, státusz, taskok listája
+- Backlog szekció: sprint nélküli taskok drag & drop-pal sprinthez adhatók
+- Gombos hozzáadás: melyik sprintbe dropdown választóval
+- Eltávolítás sprintből: task visszakerül Backlogba
+- CompleteSprintModal: befejezetlen taskok -> Backlog vagy következő sprint
+
+
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
 
