@@ -10,6 +10,7 @@
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
     import BoardView from '../lib/components/BoardView.svelte';
+    import SprintsView from '../lib/components/SprintsView.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -119,7 +120,7 @@
         </nav>
         
         <!-- Dinamikus tartalom -->
-        <!--(Overview, Board, Team, Recent Activity, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
+        <!--(Overview, Board, Team, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
         <div class="content" class:scrollable={activeView !== 'board'}>
             {#if activeProject}
                 {#if activeView === 'overview'}
@@ -127,7 +128,7 @@
                 {:else if activeView === 'board'}
                     <BoardView/>
                 {:else if activeView === 'sprints'}
-                    <p>Sprintek nézet</p>
+                    <SprintsView projectId={activeProject.id} />
                 {:else if activeView === 'team'}
                     <p>Team nézet</p>
                 {:else if activeView === 'git'}

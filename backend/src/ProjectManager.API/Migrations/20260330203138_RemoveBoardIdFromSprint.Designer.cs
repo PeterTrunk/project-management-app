@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ProjectManager.API.Data;
@@ -11,9 +12,11 @@ using ProjectManager.API.Data;
 namespace ProjectManager.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260330203138_RemoveBoardIdFromSprint")]
+    partial class RemoveBoardIdFromSprint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -655,6 +658,9 @@ namespace ProjectManager.API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BoardId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -686,6 +692,8 @@ namespace ProjectManager.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoardId");
 
                     b.HasIndex("ProjectId")
                         .IsUnique()
@@ -1018,6 +1026,10 @@ namespace ProjectManager.API.Migrations
 
             modelBuilder.Entity("ProjectManager.API.Model.Sprint", b =>
                 {
+                    b.HasOne("ProjectManager.API.Model.Board", null)
+                        .WithMany("Sprints")
+                        .HasForeignKey("BoardId");
+
                     b.HasOne("ProjectManager.API.Model.Project", "Project")
                         .WithMany("Sprints")
                         .HasForeignKey("ProjectId")
@@ -1070,6 +1082,8 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("ColumnDefinitions");
 
                     b.Navigation("ProjectTasks");
+
+                    b.Navigation("Sprints");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.ColumnDefinition", b =>

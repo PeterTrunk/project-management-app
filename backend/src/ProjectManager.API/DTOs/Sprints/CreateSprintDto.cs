@@ -3,7 +3,6 @@
     public class CreateSprintDto
     {
         public Guid ProjectId { get; set; }
-        public Guid? BoardId { get; set; }
         /// <summary>
         /// Sprint neve, maximum 80 karakter
         /// </summary>
@@ -15,7 +14,7 @@
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
         /// <summary>
-        /// Sprint státusza, State-ek: "Planned","Active","Planned"
+        /// Sprint státusza, State-ek: "Planned","Active","Completed"
         /// </summary>
         public string State { get; set; } = string.Empty;
     }

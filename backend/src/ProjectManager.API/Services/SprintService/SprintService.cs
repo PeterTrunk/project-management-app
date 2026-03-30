@@ -37,7 +37,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
-                BoardId = sprint.BoardId,
                 Name = sprint.Name,
                 Goal = sprint.Goal,
                 StartDate = sprint.StartDate,
@@ -101,7 +100,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
-                BoardId = sprint.BoardId,
                 Name = sprint.Name,
                 Goal = sprint.Goal,
                 StartDate = sprint.StartDate,
@@ -122,7 +120,6 @@ namespace ProjectManager.API.Services.SprintService
             var sprint = new Sprint
             {
                 ProjectId = dto.ProjectId,
-                BoardId = dto.BoardId,
                 Name = dto.Name,
                 Goal = dto.Goal,
                 StartDate = dto.StartDate,
@@ -136,7 +133,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
-                BoardId = sprint.BoardId,
                 Name = sprint.Name,
                 Goal = sprint.Goal,
                 StartDate = sprint.StartDate,
@@ -179,7 +175,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = s.Id,
                 ProjectId = s.ProjectId,
-                BoardId = s.BoardId,
                 Name = s.Name,
                 Goal = s.Goal,
                 StartDate = s.StartDate,
@@ -295,7 +290,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
-                BoardId = sprint.BoardId,
                 Name = sprint.Name,
                 Goal = sprint.Goal,
                 StartDate = sprint.StartDate,
@@ -316,8 +310,7 @@ namespace ProjectManager.API.Services.SprintService
             var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
-
-            if(dto.BoardId != null) sprint.BoardId = dto.BoardId;
+            
             if(dto.Name != null) sprint.Name = dto.Name;
             if(dto.Goal != null) sprint.Goal = dto.Goal;
             if(dto.StartDate != null) sprint.StartDate = dto.StartDate;
@@ -328,7 +321,6 @@ namespace ProjectManager.API.Services.SprintService
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
-                BoardId = sprint.BoardId,
                 Name = sprint.Name,
                 Goal = sprint.Goal,
                 StartDate = sprint.StartDate,

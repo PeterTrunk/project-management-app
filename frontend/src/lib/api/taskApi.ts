@@ -3,8 +3,8 @@ import apiClient from './client';
 interface CreateTaskRequest {
     title: string;
     description: string | null;
-    boardId: string
-    columnId: string;
+    boardId: string | null;
+    columnId: string | null;
     sprintId: string | null;
     priority: string | null;
     estimateInMinutes: number | null;

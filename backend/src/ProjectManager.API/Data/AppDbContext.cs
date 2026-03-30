@@ -311,9 +311,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(s => new { s.ProjectId, s.State });
 
             entity.HasIndex(s => new { s.ProjectId, s.StartDate, s.EndDate });
-
-            entity.HasIndex(s => s.BoardId);
-            
+        
             // Partial unique index: projektenként csak 1 active sprint lehet
             entity.HasIndex(s => s.ProjectId)
                   .IsUnique()
@@ -325,11 +323,6 @@ public class AppDbContext : DbContext
                   .WithMany(p => p.Sprints)
                   .HasForeignKey(s => s.ProjectId)
                   .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(s => s.Board)
-                  .WithMany(b => b.Sprints)
-                  .HasForeignKey(s => s.BoardId)
-                  .OnDelete(DeleteBehavior.SetNull);
         });
         
         modelBuilder.Entity<ProjectTask>(entity =>

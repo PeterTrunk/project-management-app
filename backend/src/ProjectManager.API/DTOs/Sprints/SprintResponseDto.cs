@@ -4,7 +4,6 @@
     {
         public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
-        public Guid? BoardId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Goal { get; set; }
         public DateTime? StartDate { get; set; }

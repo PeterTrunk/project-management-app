@@ -143,9 +143,7 @@
             // Store frissítés a backend válasszal
             isDragging = false;
             const updatedTasks = tasks.map(t =>
-                t.id === movedTaskId 
-                    ? { ...t, columnId, position: response.position } 
-                    : t
+                t.id === movedTaskId ? response : t
             );
             setTasks(updatedTasks);
             

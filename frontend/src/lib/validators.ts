@@ -84,3 +84,24 @@ export function validateCommentBody(body: string): string | null {
     if(body.length > 2000) return 'Maximum 2000 karakter hosszú komment megengedett!';
     return null
 }
+
+export function validateSprintName(name: string): string | null {
+    let aggregateError = '';
+    if(name ==='' || name === null ) aggregateError += 'Sprint neve nem lehet üres!\n';
+    if(name.length < 3) aggregateError += 'Sprint neve nem lehet rövidebb 3 karakternél!\n';
+    if(name.length > 500) aggregateError += 'Sprint neve nem lehet hosszabb 500 karakternél!\n';
+    return aggregateError;
+}
+
+export function validateSprintGoal(goal: string): string | null {
+    let aggregateError = '';
+    if(goal.length < 3) aggregateError += 'Sprint célja nem lehet rövidebb 3 karakternél!\n';
+    if(goal.length > 500) aggregateError += 'Sprint célja nem lehet hosszabb 500 karakternél!\n';
+    return aggregateError;
+}
+
+export function validateSprintDates(startDate: string, endDate: string): string | null {
+    if (startDate && endDate && new Date(startDate) >= new Date(endDate))
+        return 'A befejezési dátum nem lehet korábban mint a kezdés!\n';
+    return null;
+}

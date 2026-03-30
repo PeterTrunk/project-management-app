@@ -12,7 +12,6 @@
 
         public Project Project { get; set; } = null!;
         public ICollection<ColumnDefinition> ColumnDefinitions { get; set; } = new List<ColumnDefinition>();
-        public ICollection<Sprint> Sprints { get; set; } = new List<Sprint>();
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();
     }
 }
