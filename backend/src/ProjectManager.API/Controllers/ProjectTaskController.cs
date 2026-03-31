@@ -119,5 +119,21 @@ namespace ProjectManager.API.Controllers
             }
         }
 
+        [HttpPost("{taskId}/board")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<TaskResponseDto>> AssignTaskToBoardAsync(Guid projectId, Guid taskId, [FromBody] AssignTaskToBoardDto dto)
+        {
+            try
+            {
+                var response = await _taskService.AssignTaskToBoardAsync(projectId, taskId, dto);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

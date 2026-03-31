@@ -4,20 +4,23 @@ using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.DTOs.Sprints;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.LexorankService;
 
 namespace ProjectManager.API.Services.SprintService
 {
     public class SprintService : ISprintService
     {
         private readonly AppDbContext _context;
+        private readonly ILexorankService _lexorankService;
         //Status:
         //"Planning"
         //"Active"
         //"Completed"
 
-        public SprintService(AppDbContext context)
+        public SprintService(AppDbContext context, ILexorankService lexorankService)
         {
             _context = context;
+            _lexorankService = lexorankService;
         }
 
         public async Task<SprintResponseDto> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -31,6 +34,34 @@ namespace ProjectManager.API.Services.SprintService
                 throw new Exception("Sprint nem található");
 
             sprint.State = "Active";
+
+            var sprintTasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId)
+                .ToListAsync();
+
+            foreach (var task in sprintTasks)
+            {
+                if (task.BoardId.HasValue)
+                {
+                    var firstColumn = await _context.ColumnDefinitions
+                        .Where(c => c.BoardId == task.BoardId && c.Position > 0)
+                        .OrderBy(c => c.Position)
+                        .FirstOrDefaultAsync();
+
+                    if (firstColumn != null)
+                    {
+                        var lastTask = await _context.ProjectTasks
+                            .Where(t => t.ColumnId == firstColumn.Id)
+                            .OrderBy(t => t.Position)
+                            .LastOrDefaultAsync();
+
+                        task.ColumnId = firstColumn.Id;
+                        task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                    }
+                        
+                }
+            }
+
             await _context.SaveChangesAsync();
 
             var response = new SprintResponseDto
@@ -58,45 +89,56 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
-            //Minden Boardban kell hogy szerepeljen egy done oszlop! (Projekt Creation esetén létrehozva alap esetben)
-            var tasks = await _context.ProjectTasks
-                .Where(t => t.SprintId == sprintId &&
-                           (t.ColumnDefinition == null || t.ColumnDefinition.MapsToStatus != "Done"))
+            // Befejezetlen taskok ellenőrzése (CompletedAt alapján)
+            var unfinishedTasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId && t.CompletedAt == null)
                 .ToListAsync();
 
-            if (tasks.Count == 0)
+            if (unfinishedTasks.Count > 0 && targetSprintId == null)
             {
-                sprint.State = "Completed";
+                throw new Exception($"A sprintben {unfinishedTasks.Count} befejezetlen task van! Válassz célsprintet vagy helyezd Backlogba!");
             }
-            else if (targetSprintId == null)
+
+            // Befejezetlen taskok kezelése
+            if (unfinishedTasks.Count > 0)
             {
-                var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == tasks[0].BoardId);
-                if (board == null)
-                    throw new Exception("Board nem található");
-                var backlogColId = await _context.ColumnDefinitions
-                    .Where(c => c.BoardId == board.Id && c.MapsToStatus == "Backlog") 
-                    //Minden Boardban kell hogy szerepeljen egy backlog oszlop!
-                    .Select(c => c.Id)
-                    .FirstOrDefaultAsync();
-                foreach (var task in tasks)
+                if (targetSprintId == null)
                 {
-                    task.ColumnId = backlogColId;
-                    task.SprintId = null;
+                    // Backlogba
+                    foreach (var task in unfinishedTasks)
+                    {
+                        var backlogColId = await _context.ColumnDefinitions
+                            .Where(c => c.BoardId == task.BoardId && c.Position == 0)
+                            .Select(c => c.Id)
+                            .FirstOrDefaultAsync();
+                        task.ColumnId = backlogColId;
+                        task.SprintId = null;
+                    }
                 }
-                sprint.State = "Completed";
-            }
-            else
-            {
-                foreach (var task in tasks)
+                else
                 {
-                    task.SprintId = targetSprintId;
+                    // Következő sprintbe
+                    foreach (var task in unfinishedTasks)
+                    {
+                        task.SprintId = targetSprintId;
+                    }
                 }
-                sprint.State = "Completed";
             }
-            
+
+            // ClosedAt beállítása minden sprinthez tartozó tasknál
+            var allSprintTasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId)
+                .ToListAsync();
+
+            foreach (var task in allSprintTasks)
+            {
+                task.ClosedAt = DateTime.UtcNow;
+            }
+
+            sprint.State = "Completed";
             await _context.SaveChangesAsync();
 
-            var response = new SprintResponseDto
+            return new SprintResponseDto
             {
                 Id = sprint.Id,
                 ProjectId = sprint.ProjectId,
@@ -108,7 +150,6 @@ namespace ProjectManager.API.Services.SprintService
                 CreatedAt = sprint.CreatedAt,
                 UpdatedAt = sprint.UpdatedAt
             };
-            return response;
         }
 
         public async Task<SprintResponseDto> CreateSprintAsync(Guid projectId, CreateSprintDto dto)
@@ -268,6 +309,7 @@ namespace ProjectManager.API.Services.SprintService
                 EstimateInMinutes = t.EstimateInMinutes,
                 DueDate = t.DueDate,
                 ClosedAt = t.ClosedAt,
+                CompletedAt = t.CompletedAt,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             }).ToList();
@@ -284,6 +326,33 @@ namespace ProjectManager.API.Services.SprintService
                 throw new Exception("Sprint nem található");
 
             sprint.State = "Planning";
+
+            var sprintTasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId)
+                .ToListAsync();
+
+            foreach (var task in sprintTasks)
+            {
+                if (task.BoardId.HasValue)
+                {
+                    // Backlog oszlop (Position=0) keresése
+                    var backlogColumn = await _context.ColumnDefinitions
+                        .FirstOrDefaultAsync(c => c.BoardId == task.BoardId && c.Position == 0);
+
+                    if (backlogColumn != null)
+                    {
+                        var lastTask = await _context.ProjectTasks
+                            .Where(t => t.ColumnId == backlogColumn.Id)
+                            .OrderBy(t => t.Position)
+                            .LastOrDefaultAsync();
+
+                        task.ColumnId = backlogColumn.Id;
+                        task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                    }
+                }
+                // Ha nincs BoardId → már Projekt Backlogban van → nem kell mozgatni
+            }
+
             await _context.SaveChangesAsync();
 
             var response = new SprintResponseDto

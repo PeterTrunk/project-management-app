@@ -16,6 +16,7 @@
         public int? EstimateInMinutes { get; set; } = 0;
         public DateTime? DueDate { get; set; }
         public DateTime? ClosedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 

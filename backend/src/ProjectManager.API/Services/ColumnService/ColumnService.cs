@@ -60,6 +60,8 @@ namespace ProjectManager.API.Services.ColumnService
             var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(c => c.Id == columnId);
             if (column == null)
                 throw new Exception("Oszlop nem található");
+            if (column.Position == 0)
+                throw new Exception("A Backlog oszlop nem törölhető!");
 
             var hasTask = await _context.ProjectTasks.AnyAsync(t => t.ColumnId == columnId);
             if (hasTask)
@@ -104,6 +106,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (board == null)
                 throw new Exception("Board nem található");
 
+            var backlogColumn = await _context.ColumnDefinitions
+                .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == boardId);
             var columnIds = order.Select(o => o.Id).ToList();
             var columns = await _context.ColumnDefinitions
                 .Where(c => columnIds.Contains(c.Id))
@@ -111,7 +115,9 @@ namespace ProjectManager.API.Services.ColumnService
 
             if (columns.Count != order.Count)
                 throw new Exception("Egy vagy több oszlop nem található!");
-            
+            if (backlogColumn != null && order.Any(o => o.Id == backlogColumn.Id && o.Position != 0))
+                throw new Exception("A Backlog oszlop pozíciója nem változtatható!");
+
             // Először -1-re állítjuk
             foreach (var col in columns)
                 col.Position = -1;

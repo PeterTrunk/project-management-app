@@ -92,6 +92,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 EstimateInMinutes = task.EstimateInMinutes,
                 DueDate = task.DueDate,
                 ClosedAt = task.ClosedAt,
+                CompletedAt = task.CompletedAt,
                 CreatedAt = task.CreatedAt,
                 UpdatedAt = task.UpdatedAt
             };
@@ -195,6 +196,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 EstimateInMinutes = t.EstimateInMinutes,
                 DueDate = t.DueDate,
                 ClosedAt = t.ClosedAt,
+                CompletedAt = t.CompletedAt,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             }).ToList();
@@ -268,6 +270,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 EstimateInMinutes = task.EstimateInMinutes,
                 DueDate = task.DueDate,
                 ClosedAt = task.ClosedAt,
+                CompletedAt = task.CompletedAt,
                 CreatedAt = task.CreatedAt,
                 UpdatedAt = task.UpdatedAt
             };
@@ -353,10 +356,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 prevTask?.Position,
                 nextTask?.Position
             );
-
+            
             task.Position = newPosition;
             task.ColumnId = dto.ColumnId;
             task.BoardId = column?.BoardId;
+            // Ellenőrzés: utolsó oszlop-e? (CompletedAt beállítása)
+            if (task.BoardId.HasValue)
+            {
+                var lastColumn = await _context.ColumnDefinitions
+                    .Where(c => c.BoardId == task.BoardId)
+                    .OrderByDescending(c => c.Position)
+                    .FirstOrDefaultAsync();
+
+                if (lastColumn != null && task.ColumnId == lastColumn.Id)
+                    task.CompletedAt = DateTime.UtcNow;
+                else
+                    task.CompletedAt = null; // ha visszamozgatják akkor törlődik az időpont
+            }
+
             await _context.SaveChangesAsync();
 
             if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
@@ -407,6 +424,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 EstimateInMinutes = task.EstimateInMinutes,
                 DueDate = task.DueDate,
                 ClosedAt = task.ClosedAt,
+                CompletedAt = task.CompletedAt,
                 CreatedAt = task.CreatedAt,
                 UpdatedAt = task.UpdatedAt
             };
@@ -476,10 +494,84 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 EstimateInMinutes = task.EstimateInMinutes,
                 DueDate = task.DueDate,
                 ClosedAt = task.ClosedAt,
+                CompletedAt = task.CompletedAt,
                 CreatedAt = task.CreatedAt,
                 UpdatedAt = task.UpdatedAt
             };
             return response;
+        }
+
+        public async Task<TaskResponseDto> AssignTaskToBoardAsync(Guid projectId, Guid taskId, AssignTaskToBoardDto dto)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található");
+
+            var task = await _context.ProjectTasks
+                .Include(t => t.CreatedByUser)
+                .FirstOrDefaultAsync(t => t.Id == taskId);
+            if (task == null)
+                throw new Exception("Task nem található");
+
+            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == dto.BoardId);
+            if (board == null)
+                throw new Exception("Board nem található");
+
+            var backlogColumn = await _context.ColumnDefinitions
+                .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == dto.BoardId);
+            if (backlogColumn == null)
+                throw new Exception("Backlog oszlop nem található");
+             
+            // Lexorank pozíció az oszlop végére helyezés
+            var lastTask = await _context.ProjectTasks
+                .Where(t => t.ColumnId == backlogColumn.Id)
+                .OrderBy(t => t.Position)
+                .LastOrDefaultAsync();
+
+            task.BoardId = dto.BoardId;
+            task.ColumnId = backlogColumn.Id;
+            task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+            await _context.SaveChangesAsync();
+
+            // Response összerakása
+            var assigneeNames = await _context.TaskAssignments
+                .Where(ta => ta.TaskId == task.Id)
+                .Include(ta => ta.User)
+                .Select(ta => ta.User.DisplayName)
+                .ToListAsync();
+
+            var labelNames = await _context.LabelTasks
+                .Where(lt => lt.TaskId == task.Id)
+                .Include(lt => lt.Label)
+                .Select(lt => lt.Label.Name)
+                .ToListAsync();
+
+            return new TaskResponseDto
+            {
+                Id = task.Id,
+                ProjectId = task.ProjectId,
+                BoardId = task.BoardId,
+                ColumnId = task.ColumnId,
+                SprintId = task.SprintId,
+                AssigneeNames = assigneeNames,
+                LabelNames = labelNames,
+                CommitLinks = new List<string>(),
+                PrLinks = new List<string>(),
+                CreatedByName = task.CreatedByUser.DisplayName,
+                TaskKey = task.TaskKey,
+                Title = task.Title,
+                Description = task.Description,
+                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
+                Priority = task.Priority,
+                Position = task.Position,
+                EstimateInMinutes = task.EstimateInMinutes,
+                DueDate = task.DueDate,
+                ClosedAt = task.ClosedAt,
+                CompletedAt = task.CompletedAt,
+                CreatedAt = task.CreatedAt,
+                UpdatedAt = task.UpdatedAt
+            };
         }
 
         private async Task RebalanceColumnAsync(Guid columnId, string position)

@@ -24,8 +24,8 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public int? EstimateInMinutes { get; set; }
         public DateTime? DueDate { get; set; }
         public DateTime? ClosedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-
     }
 }

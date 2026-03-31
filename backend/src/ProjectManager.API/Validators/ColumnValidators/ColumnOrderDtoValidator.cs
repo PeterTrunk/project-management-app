@@ -10,8 +10,9 @@ namespace ProjectManager.API.Validators.ColumnValidators
             RuleFor(x => x.Id)
                 .NotEmpty();
 
-            RuleFor(x => x.Position)
-                .GreaterThanOrEqualTo(0);
+            RuleFor(c => c.Position)
+                .GreaterThan(0)
+                .WithMessage("A 0-ás pozíció a Backlog oszlopnak van fenntartva!");
         }
     }
 }

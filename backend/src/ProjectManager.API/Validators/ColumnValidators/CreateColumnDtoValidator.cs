@@ -16,6 +16,10 @@ namespace ProjectManager.API.Validators.ColumnValidators
                 .NotEmpty()
                 .MinimumLength(3)
                 .MaximumLength(32);
+
+            RuleFor(c => c.Position)
+                .GreaterThan(0)
+                .WithMessage("A 0-ás pozíció a Backlog oszlopnak van fenntartva!");
         }
     }
 }
