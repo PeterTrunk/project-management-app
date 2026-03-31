@@ -10,8 +10,10 @@
     import { addLabelToTaskAsync } from '../api/labelApi';
 
     export let isTaskCreationOpen = false;
+    export let isBacklogMode: boolean = false;
     export let projectId: string;
-    export let boardId: string;
+    export let boardId: string | null = null;
+
     
 
     let modalRef: HTMLElement;
@@ -69,9 +71,19 @@
             return;
         }
         try {
+            console.log('Küldött adat:', {
+                columnId: isBacklogMode ? null : columnId,
+                boardId: isBacklogMode ? null : boardId,
+                sprintId: sprintId !== '' ? sprintId : null,
+                title,
+                description,
+                priority: priority !== '' ? priority : null,
+                estimateInMinutes,
+                dueDate: dueDate ? new Date(dueDate) : null
+            });
             const response = await createTaskAsync(projectId, {
-                columnId,
-                boardId,
+                columnId: isBacklogMode ? null : columnId,
+                boardId: isBacklogMode ? null : boardId,
                 sprintId: sprintId !== '' ? sprintId : null,
                 title,
                 description,
@@ -86,7 +98,8 @@
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             
-        } catch (e) {
+        } catch (e: any) {
+            console.error('Backend hiba:', e.response?.data);
             error = 'Hiba történt az task létrehozásakor!';
         }
     }
@@ -111,12 +124,14 @@
             <h1>Task Létrehozás {activeBoardName}-hoz</h1>
             Új Task címe:
             <input type="text" placeholder="Task cím" bind:value={title}/>
-            Válasszon Oszlopot
-            <select bind:value={columnId}>
-                {#each columns as column}
-                    <option value={column.id}>{column.name}</option>
-                {/each}
-            </select>
+            {#if !isBacklogMode}
+                Válasszon Oszlopot
+                <select bind:value={columnId}>
+                    {#each columns as column}
+                        <option value={column.id}>{column.name}</option>
+                    {/each}
+                </select>
+            {/if}
             <div class="labels-grid">
                 {#each allLabels as label}
                     <div class="label-select-row">

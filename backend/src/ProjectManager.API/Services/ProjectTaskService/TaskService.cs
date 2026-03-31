@@ -30,19 +30,26 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
-            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
-            if (column == null)
-                throw new Exception("Oszlop nem található!");
+            ColumnDefinition? column = null;
+            if (dto.ColumnId.HasValue)
+            {
+                column = await _context.ColumnDefinitions
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
+                if (column == null)
+                    throw new Exception("Oszlop nem található!");
+            }
 
             var counter = await _context.ProjectCounters.FirstOrDefaultAsync(pc => pc.ProjectId == projectId);
             if (counter == null)
                 throw new Exception("Számláló nem található");
 
-            var lastTask = await _context.ProjectTasks
-                .Where(t => t.ColumnId == dto.ColumnId)
-                .OrderBy(t => t.Position)
-                .LastOrDefaultAsync();
-            
+            var lastTask = dto.ColumnId.HasValue
+                ? await _context.ProjectTasks
+                    .Where(t => t.ColumnId == dto.ColumnId)
+                    .OrderBy(t => t.Position)
+                    .LastOrDefaultAsync()
+                : null;
+
             counter.LastNum += 1;
             var taskKey = $"{project.ProjKey}-{counter.LastNum}";
 

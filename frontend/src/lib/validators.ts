@@ -101,7 +101,10 @@ export function validateSprintGoal(goal: string): string | null {
 }
 
 export function validateSprintDates(startDate: string, endDate: string): string | null {
-    if (startDate && endDate && new Date(startDate) >= new Date(endDate))
+    if (!startDate || !endDate) return null;
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    if (start >= end)
         return 'A befejezési dátum nem lehet korábban mint a kezdés!\n';
     return null;
 }
