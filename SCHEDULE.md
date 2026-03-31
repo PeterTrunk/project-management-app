@@ -146,36 +146,43 @@ Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). B
 
 ### TO-DO:
 - Overdue task visual indicator
+- Sprint UI frontend befejezése
 
 ### Elvégzett backend munkák
 
 **Board CRUD**
 - BoardResponseDto, CreateBoardDto, UpdateBoardDto + validátorok
 - IBoardService + BoardService: GetBoards, CreateBoard, UpdateBoard, DeleteBoard
-- CreateBoardAsync: auto-létrehozza a Backlog, To Do, Done oszlopokat
+- CreateBoardAsync: auto-létrehozza a Backlog (pos:0), To Do (pos:1), Done (pos:99) oszlopokat
 - IsDefault kezelés: új default board beállításakor a régi automatikusan false-ra vált
 - BoardController: GET/POST/PATCH/DELETE /api/projects/{projectId}/boards
 
 **Column CRUD**
 - ColumnResponseDto, CreateColumnDto, UpdateColumnDto, ColumnOrderDto + validátorok
 - IColumnService + ColumnService: GetColumns, CreateColumn, UpdateColumn, DeleteColumn, OrderColumns
-- DeleteColumn: csak üres oszlop törölhető (WipLimit ellenőrzés: jövőbeli fejlesztés)
-- OrderColumnsAsync: két fázisú update (-1 dummy érték -> végleges pozíció, ütközések elkerülésére)
-- Position eltávolítva UpdateColumnDto-ból -> csak ReorderColumns-on keresztül változtatható
+- DeleteColumn: csak üres oszlop törölhető, Backlog oszlop (Position=0) nem törölhető
+- OrderColumnsAsync: két fázisú update (-1 dummy érték -> végleges pozíció)
+- Backlog oszlop (Position=0) pozíciója nem változtatható reorder során sem
+- Position > 0 kötelező Column létrehozáskor és reordernél (Backlog védelem)
 - ColumnDefinitionController: GET/POST/PATCH/DELETE + POST reorder
 
 **Sprint CRUD**
 - SprintResponseDto, CreateSprintDto, UpdateSprintDto + validátorok
-- State management: "Planning" | "Active" | "Completed" (string, statikus lista validációval)
-- State eltávolítva UpdateSprintDto-ból -> csak dedikált endpointok változtathatják
+- State management: "Planning" | "Active" | "Completed"
+- State csak dedikált endpointokon változtatható
+- Sprint.BoardId eltávolítva — sprint több boardhoz is tartozhat
 - ISprintService + SprintService:
   - GetSprints, CreateSprint, UpdateSprint, DeleteSprint
-  - ActivateSprintAsync: Planning -> Active
-  - PlanSprintAsync: Active -> Planning (visszavonás)
-  - CompleteSprintAsync: Active -> Completed + befejezetlen taskok kezelése
-  - GetUnfinishedTasksAsync: sprint lezárás előtti lista megjelenítéshez
-- CompleteSprintAsync logika: befejezetlen taskok -> Backlogba (SprintId = null) VAGY következő sprintbe (targetSprintId)
-- SprintController: GET/POST/PUT/DELETE + activate/plan/complete/unfinished endpointok
+  - ActivateSprintAsync: Planning -> Active + taskok az első nem-Backlog oszlopba kerülnek boardonként
+  - PlanSprintAsync: Active -> Planning + taskok visszakerülnek a Board Backlog oszlopba
+  - CompleteSprintAsync: Active -> Completed
+    - Csak akkor engedélyezett ha minden task CompletedAt != null
+    - Befejezetlen taskok -> Backlogba (SprintId=null) VAGY következő sprintbe (targetSprintId)
+    - ClosedAt beállítása minden sprint taskján lezáráskor
+  - GetUnfinishedTasksAsync: sprint lezárás előtti befejezetlen task lista
+- AssignTaskToSprintAsync: task hozzárendelése sprinthez
+- RemoveTaskFromSprintAsync: task eltávolítása sprintből (Backlogba kerül)
+- SprintController: GET/POST/PUT/DELETE + activate/plan/complete/unfinished/tasks endpointok
 
 **Refaktorálás**
 - Data Annotations eltávolítva az összes DTO-ból -> csak FluentValidation
@@ -191,39 +198,81 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 ### Elvégzett frontend munkák
 
 **API Service Layer**
-- boardApi.ts, columnApi.ts, taskApi.ts, commentApi.ts, labelApi.ts
+- boardApi.ts, columnApi.ts, taskApi.ts, commentApi.ts, labelApi.ts, sprintApi.ts
 
 **Stores**
-- boardStore.ts: boards, activeBoard, columns + helper függvények
-- taskStore.ts: tasks, activeTask + helper függvények
+- boardStore.ts: boards, activeBoard, columns
+- taskStore.ts: tasks, activeTask
+- sprintStore.ts: sprints, activeSprint (auto-detektált)
 
 **Komponensek**
-- BoardView.svelte: board toolbar (dropdown board választó, oszlop/task hozzáadás, átrendezés lock)
-- ColumnCard.svelte: oszlop megjelenítés + task dndzone + drag handle átrendezés módban
+- BoardView.svelte: board toolbar, dropdown board választó, oszlop/task hozzáadás, átrendezés lock
+- ColumnCard.svelte: oszlop + task dndzone + drag handle
 - TaskCard.svelte: task kártya (key, cím, prioritás, határidő, labelek)
 - CreateColumnModal.svelte: oszlop létrehozás, pozíció reorder-rel kezelve
 - ColumnDetailModal.svelte: oszlop szerkesztés és törlés
-- CreateBoardModal.svelte: board létrehozás isDefault kezeléssel
-- UpdateBoardModal.svelte: board módosítás
-- CreateTaskModal.svelte: task létrehozás (oszlop/prioritás select, datetime-local, label selector)
+- CreateBoardModal.svelte + UpdateBoardModal.svelte: board kezelés
+- CreateTaskModal.svelte: isBacklogMode támogatás (boardId/columnId null)
 - TaskDetailModal.svelte: két oszlopos layout, szerkesztés/törlés, label kezelés
-- CommentSection.svelte: komment lista, hozzáadás, törlés, óra:perc megjelenítés
-- LabelCard.svelte: szín jelző + név + törlés gomb (small prop task kártyákhoz)
-- CreateLabelModal.svelte: label létrehozás color pickerrel
+- CommentSection.svelte: komment kezelés
+- LabelCard.svelte + CreateLabelModal.svelte: label kezelés
+- SprintsView.svelte: sprint lista (aktív kiemelve, planning/completed collapselhető)
+- SprintCard.svelte: sprint kártya board-csoportosított task megjelenítéssel
+- ProjectBacklog.svelte: projekt szintű backlog (collapselhető)
+- BacklogTaskCard.svelte: backlog task kártya (sprint/board hozzárendelés, hamburger menü)
+- CreateSprintModal.svelte: sprint létrehozás
 
 **Drag & Drop**
-- svelte-dnd-action: oszlop átrendezés (lock gombbal védve) + task mozgatás oszlopok között
-- Float-based position számítás: mozgatáskor szomszédok átlaga (ütközések elkerülése)
-- columnTasks Record<string, TaskResponse[]>: oszloponkénti task kezelés (N+1 és bug elkerülés)
-- isDragging flag: store felülírás megakadályozása drag közben
-- Position renormalizálás: jövőbeli fejlesztés (SCHEDULE-ban jelölve)
+- svelte-dnd-action: oszlop átrendezés (lock gombbal) + task mozgatás
+- Lexorank string pozíció: localeCompare alapú rendezés
+- columnTasks Record: oszloponkénti task kezelés
+- isDragging flag: store felülírás megakadályozása
+
+### Sprint & Task Modell Architektúra Döntések
+**Task modell refaktorálás**
+- Task.Status eltávolítva — computed property: ColumnDefinition?.MapsToStatus ?? "Backlog"
+- Task.BoardId nullable: ha null -> Projekt Backlogban van
+- Task.ColumnId nullable: ha null -> Projekt Backlogban van
+- Task.CompletedAt: amikor a task az utolsó oszlopba ér (MoveTaskAsync állítja be)
+- Task.ClosedAt: amikor a sprint le lett zárva (CompleteSprintAsync állítja be)
+- Backlog definíció: BoardId=null AND ColumnId=null AND SprintId=null
+
+**Sprint modell refaktorálás**
+- Sprint.BoardId eltávolítva — egy sprint több boardhoz is tartozhat
+- Indok: egy projekten belül több board is lehet (pl. Frontend Board + Backend Board)
+  és egy sprint mindkét board taskjait tartalmazhatja
+
+**Task életciklus**
+Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
+           -> AssignTaskToBoardAsync -> Board Backlog oszlop (Position=0)
+           -> AssignTaskToSprintAsync -> SprintId beállítva
+           -> ActivateSprintAsync -> Első valódi oszlop (Position>0)
+           -> MoveTaskAsync -> Oszlopok között mozog
+           -> Utolsó oszlopba ér -> CompletedAt beállítva
+           -> CompleteSprintAsync -> ClosedAt beállítva, sprint Completed
+
+**Új endpoint: Sprint-Task hozzárendelés**
+- POST /tasks/{taskId}/board -> AssignTaskToBoardAsync (Board Backlog oszlopba)
+- POST /sprints/{sprintId}/tasks/{taskId} -> sprinthez adás
+- DELETE /sprints/{sprintId}/tasks/{taskId} -> Backlogba visszarakás
+
+**Tervezett Sprint UI**
+- Sprint lista időrendben, aktív sprint kiemelve
+- Sprint kártyán: név, dátum, cél, státusz, taskok listája
+- Backlog szekció: sprint nélküli taskok drag & drop-pal sprinthez adhatók
+- Gombos hozzáadás: melyik sprintbe dropdown választóval
+- Eltávolítás sprintből: task visszakerül Backlogba
+- CompleteSprintModal: befejezetlen taskok -> Backlog vagy következő sprint
 
 ### Technikai döntések
+- Backlog oszlop: minden boardon fix Position=0, nem törölhető, nem rendezhető
+- BoardView: Backlog oszlop elrejtve (Position>0 oszlopok láthatók csak) — TODO
+- Label kezelés: Project Settings-ben
+- Column törlés: csak üres, nem-Backlog oszlop törölhető
+- Sprint aktiválás: taskok automatikusan az első valódi oszlopba kerülnek
+- Sprint visszatervezés: taskok visszakerülnek a Board Backlog oszlopba
+- Sprint lezárás: csak ha minden task CompletedAt != null
 
-- Label kezelés: Project Settings-ben (nem külön navbar fül)
-- Label hozzárendelés: TaskDetailModal edit módban + CreateTaskModal-ban
-- Column törlés: csak üres oszlop törölhető
-- Board auto-oszlopok: Backlog (pos:0), To Do (pos:1), Done (pos:99)
 
 ### Task/Column Pozíció Kezelési Módszerek — Döntési Dokumentáció
 
@@ -291,41 +340,6 @@ implementáció el nem készül.
 - Új LexorankService a pozíció számításhoz
 - MoveTaskAsync frissítése
 - Frontend: sort by position -> sort by localeCompare
-
-### Sprint & Task Modell Architektúra Döntések
-**Task modell refaktorálás**
-- Task.Status eltávolítva — computed property lett (Redundancia csökkent): ColumnDefinition?.MapsToStatus ?? "Backlog"
-- Task.BoardId nullable: ha null -> projekt szintű Backlogban van
-- Task.ColumnId nullable: ha null -> projekt szintű Backlogban van
-- Backlog definíció: BoardId = null AND ColumnId = null AND SprintId = null
-
-**Sprint modell refaktorálás**
-- Sprint.BoardId eltávolítva — egy sprint több boardhoz is tartozhat
-- Indok: egy projekten belül több board is lehet (pl. Frontend Board + Backend Board)
-  és egy sprint mindkét board taskjait tartalmazhatja
-
-**Task életciklus**
-```
-Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
-           -> Board Backlog oszlopba kerül (BoardId+ColumnId beállítva)
-           -> Sprinthez rendelve (SprintId beállítva)
-           -> Oszlopok között mozog (MoveTaskAsync)
-           -> Sprint lezárva -> visszakerül Backlogba vagy következő sprintbe
-```
-
-**Új endpoint: Sprint-Task hozzárendelés**
-- POST /api/projects/{projectId}/sprints/{sprintId}/tasks/{taskId} -> sprinthez adás
-- DELETE /api/projects/{projectId}/sprints/{sprintId}/tasks/{taskId} -> Backlogba visszarakás
-- AssignTaskToSprintAsync(projectId, taskId, sprintId?) — sprintId null = Backlog
-
-**Tervezett Sprint UI**
-- Sprint lista időrendben, aktív sprint kiemelve
-- Sprint kártyán: név, dátum, cél, státusz, taskok listája
-- Backlog szekció: sprint nélküli taskok drag & drop-pal sprinthez adhatók
-- Gombos hozzáadás: melyik sprintbe dropdown választóval
-- Eltávolítás sprintből: task visszakerül Backlogba
-- CompleteSprintModal: befejezetlen taskok -> Backlog vagy következő sprint
-
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
