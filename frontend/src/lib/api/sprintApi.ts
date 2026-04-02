@@ -64,7 +64,7 @@ export async function activateSprintAsync(projectId: string, sprintId: string): 
 }
 
 export async function completeSprintAsync(projectId: string, sprintId: string, targetSprintId?: string): Promise<SprintResponse> {
-    const response = await apiClient.post("/projects/"+ projectId +"/sprints/" + sprintId + "/complete", targetSprintId); 
+    const response = await apiClient.post("/projects/"+ projectId +"/sprints/" + sprintId + "/complete", targetSprintId ?? null); 
     return response.data;
 }
 

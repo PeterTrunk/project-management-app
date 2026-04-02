@@ -2,42 +2,51 @@
     import type { SprintResponse } from '../api/sprintApi';
     import type { TaskResponse } from '../api/taskApi';
     import type { BoardResponse } from '../api/boardApi';
+    import BacklogTaskCard from './BacklogTaskCard.svelte';
+    import TaskDetailModal from './TaskDetailModal.svelte';
+    import { setActiveTask, taskStore } from '../stores/taskStore';
 
     export let sprint: SprintResponse;
     export let tasks: TaskResponse[] = [];
     export let boards: BoardResponse[] = [];
+    export let sprints: SprintResponse[] = [];
+    export let projectId: string = '';
     export let onActivate: (sprintId: string) => void = () => {};
     export let onPlan: (sprintId: string) => void = () => {};
     export let onEdit: (sprint: SprintResponse) => void = () => {};
     export let onComplete: (sprint: SprintResponse) => void = () => {};
     export let onDelete: (sprintId: string) => void = () => {};
     export let onRemoveTask: (taskId: string, sprintId: string) => void = () => {};
+    export let onBoardAssigned: () => Promise<void> = async () => {};
+    export let onAssignToSprint: (taskId: string, sprintId: string) => void = () => {};
+    export let onDeleteTask: (taskId: string) => void = () => {};
 
-    // Taskok board szerint csoportosítva
-    function getTasksByBoard(): [string, TaskResponse[]][] {
-        let boardMap: Record<string, TaskResponse[]> = {};
-        
-        tasks.forEach(task => {
+    let isTaskDetailOpen = false;
+
+    $: groupedTasks = buildGroupedTasks(tasks, boards);
+
+    function buildGroupedTasks(taskList: TaskResponse[], boardList: BoardResponse[]): Record<string, TaskResponse[]> {
+        let map: Record<string, TaskResponse[]> = {};
+        taskList.forEach(task => {
             const boardName = task.boardId
-                ? (boards.find(b => b.id === task.boardId)?.name ?? 'Ismeretlen board')
-                : 'Backlog';
-            
-            if (!boardMap[boardName]) boardMap[boardName] = [];
-            boardMap[boardName].push(task);
+                ? (boardList.find(b => b.id === task.boardId)?.name ?? 'Ismeretlen board')
+                : 'Nincs board';
+            if (!map[boardName]) map[boardName] = [];
+            map[boardName].push(task);
         });
-        
-        return Object.entries(boardMap);
+        return map;
     }
 </script>
 
 <div class="sprint-card" class:active={sprint.state === 'Active'} 
                          class:planning={sprint.state === 'Planning'}
-                         class:completed={sprint.state === 'Completed'}>
+                         class:completed={sprint.state === 'Completed'}
+>
     
     <div class="sprint-header">
         <div class="sprint-title">
             {#if sprint.state === 'Active'}
-                <span class="active-badge">★ AKTÍV</span>
+                <span class="active-badge">AKTÍV</span>
             {/if}
             <h2>{sprint.name}</h2>
         </div>
@@ -54,9 +63,9 @@
                 <button on:click={() => onPlan(sprint.id)}>↩ Visszatervezés</button>
                 <button class="complete-btn" on:click={() => onComplete(sprint)}>✓ Lezárás</button>
             {:else if sprint.state === 'Planning'}
-                <button on:click={() => onEdit(sprint)}>✏ Szerkesztés</button>
+                <button on:click|stopPropagation={() => onEdit(sprint)}>✏ Szerkesztés</button>
                 <button class="activate-btn" on:click={() => onActivate(sprint.id)}>▶ Aktiválás</button>
-                <button class="danger-btn" on:click={() => onDelete(sprint.id)}>🗑 Törlés</button>
+                <button class="danger-btn" on:click|stopPropagation={() => onDelete(sprint.id)}>🗑 Törlés</button>
             {/if}
         </div>
     </div>
@@ -65,27 +74,52 @@
         <p class="sprint-goal">Cél: {sprint.goal}</p>
     {/if}
 
-    <div class="sprint-tasks">
-        {#each getTasksByBoard() as [boardName, boardTasks]}
-            <div class="board-group">
-                <h4>{boardName}</h4>
-                {#each boardTasks as task}
-                    <div class="sprint-task-row">
-                        <span class="task-key">{task.taskKey}</span>
-                        <span class="task-title">{task.title}</span>
-                        {#if sprint.state !== 'Completed'}
-                            <button class="remove-btn" 
-                                on:click={() => onRemoveTask(task.id, sprint.id)}>✕</button>
-                        {/if}
-                    </div>
+    {#each Object.entries(groupedTasks) as [boardName, boardTasks]}
+        <div class="board-group">
+            <h4>{boardName}</h4>
+            <div>
+                {#each boardTasks as task (task.id)}
+                    <BacklogTaskCard
+                        {task}
+                        {boards}
+                        sprints={sprints}
+                        projectId={projectId}
+                        onAssignToSprint={onAssignToSprint}
+                        onDelete={() => onDeleteTask(task.id)}
+                        onBoardAssigned={async () => {
+                            await onBoardAssigned();
+                        }}
+                        onOpenDetail={(task) => {
+                            setActiveTask(task);
+                            isTaskDetailOpen = true;
+                        }}
+                    />
                 {/each}
+                {#if boardTasks.length === 0}
+                    <p class="empty">↓ Húzz ide taskot</p>
+                {/if}
             </div>
-        {/each}
-        {#if tasks.length === 0}
-            <p class="empty">Nincs task ebben a sprintben</p>
-        {/if}
-    </div>
+        </div>
+    {/each}
+    {#if tasks.length === 0}
+        <div>
+            <p class="empty">↓ Húzz ide taskot a Backlogból</p>
+        </div>
+    {/if}
 </div>
+
+{#if isTaskDetailOpen && $taskStore.activeTask}
+    <TaskDetailModal
+        bind:isTaskDetailOpen={isTaskDetailOpen}
+        projectId={projectId}
+        task={$taskStore.activeTask!}
+        onClose={async () => {
+            isTaskDetailOpen = false;
+            setActiveTask(null);
+            onBoardAssigned();
+        }}
+    />
+{/if}
 
 <style>
     .sprint-card {
@@ -170,41 +204,10 @@
         letter-spacing: 0.05em;
     }
 
-    .sprint-task-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.4rem 0.5rem;
-        background: #2a2a2a;
-        border-radius: 6px;
-        margin-bottom: 0.25rem;
-    }
-
-    .task-key {
-        font-size: 0.75rem;
-        color: #888;
-        min-width: 60px;
-    }
-
-    .task-title {
-        flex: 1;
-        font-size: 0.9rem;
-    }
-
-    .remove-btn {
-        background: transparent;
-        border: none;
-        color: #aaa;
-        cursor: pointer;
-        font-size: 0.8rem;
-        padding: 0;
-    }
-
-    .remove-btn:hover { color: #ff5555; }
-
+    
     .empty {
-        font-size: 0.85rem;
         color: #555;
-        padding: 0.5rem;
+        font-size: 0.8rem;
+        margin: 0;
     }
 </style>

@@ -5,29 +5,49 @@
     import LabelCard from './LabelCard.svelte';
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
+    import { assignTaskToBoardAsync } from '../api/taskApi';
     
     export let task: TaskResponse;
-    export let sprints: SprintResponse[] = [];
     export let boards: BoardResponse[] = [];
+    export let sprints: SprintResponse[] = [];
+    export let projectId: string = '';
     export let onAssignToSprint: (taskId: string, sprintId: string) => void = () => {};
+    export let onBoardAssigned: () => Promise<void> = async () => {};
     export let onDelete: (taskId: string) => void = () => {};
     export let onOpenDetail: (task: TaskResponse) => void = () => {};
 
     let allLabels: LabelResponse[] = [];
     let isMenuOpen = false;
-    let selectedSprintId = '';
+
+    $: selectedBoardId = task.boardId ?? '';
+    $: selectedSprintId = task.sprintId ?? '';
+
 
     projectStore.subscribe(state => {
         allLabels = state.labels;
     });
 
     function handleSprintAssign() {
-        if (selectedSprintId) {
-            onAssignToSprint(task.id, selectedSprintId);
-            selectedSprintId = '';
-            isMenuOpen = false;
+        if (selectedSprintId === '') {
+            onAssignToSprint(task.id, '');
+            return;
+        }
+        onAssignToSprint(task.id, selectedSprintId);
+    }
+    
+    async function handleAssignToBoard() {
+        console.log('handleAssignToBoard called, selectedBoardId:', selectedBoardId);
+        try {
+            const response = await assignTaskToBoardAsync(projectId, task.id, {
+                boardId: selectedBoardId === '' ? null : selectedBoardId
+            });
+            console.log('response:', response);
+            await onBoardAssigned();
+        } catch (e: any) {
+            console.error('Hiba:', e.response?.data);
         }
     }
+
 </script>
 
 <div class="backlog-task-card">
@@ -47,9 +67,7 @@
                 <span class="due-date">{new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
             {/if}
         </div>
-
         
-
         {#if task.labelNames.length > 0}
             <div class="labels-row">
                 {#each task.labelNames as labelName}
@@ -65,20 +83,23 @@
     <!-- Hamburger menü -->
     <div class="card-actions">
         <button class="menu-btn" on:click|stopPropagation={() => isMenuOpen = !isMenuOpen}>☰</button>
-        
         {#if isMenuOpen}
             <div class="dropdown-menu">
                 <div class="menu-section">
-                    <p class="menu-label">Sprinthez adás:</p>
-                    <select bind:value={selectedSprintId}>
-                        <option value="">Válassz sprintet</option>
-                        {#each sprints.filter(s => s.state !== 'Completed') as sprint}
+                    <p class="menu-label">Board hozzárendelés:</p>
+                    <select bind:value={selectedBoardId} on:change={handleAssignToBoard}>
+                        <option value="">Nincs Board</option>
+                        {#each boards as board}
+                            <option value={board.id}>{board.name}</option>
+                        {/each}
+                    </select>
+                    <p class="menu-label">Sprint hozzárendelés:</p>
+                    <select bind:value={selectedSprintId} on:change={handleSprintAssign}>
+                        <option value="">Projekt Backlog</option>
+                        {#each sprints as sprint}
                             <option value={sprint.id}>{sprint.name}</option>
                         {/each}
                     </select>
-                    <button class="menu-action-btn" on:click={handleSprintAssign}>
-                        → Hozzáadás
-                    </button>
                 </div>
                 <div class="menu-divider"></div>
                 <button class="menu-delete-btn" on:click|stopPropagation={() => {

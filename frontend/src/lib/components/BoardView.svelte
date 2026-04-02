@@ -10,6 +10,9 @@
     import { onMount } from 'svelte';
     import { reorderColumnsAsync } from '../api/columnApi';
     import { dndzone } from 'svelte-dnd-action';
+    import { sprintStore, setSprints } from '../stores/sprintStore';
+    import { getSprintsAsync } from '../api/sprintApi';
+    import type { SprintResponse } from '../api/sprintApi';
 
     import ColumnCard from './ColumnCard.svelte';
 
@@ -34,15 +37,23 @@
         isColumnDetailOpen = true;
     }
 
-    onMount(() => {
+    onMount(async () => {
         if (activeProjectId) {
-            loadBoards(activeProjectId);
+            // Először sprintek betöltése
+            const sprintData =  await getSprintsAsync(activeProjectId);
+            setSprints(sprintData);
+            // Utána boardok
+            await loadBoards(activeProjectId);
         }
     });
 
+    let sprints: SprintResponse[] = [];
     let boards: BoardResponse[] = [];
     let activeBoard: BoardResponse | null = null;
+    let activeSprint: SprintResponse | null = null;
     let columns: ColumnResponse[] = [];
+    // Csak position > 0 oszlopok láthatók
+    $: visibleColumns = columns.filter(c => c.position > 0);
     let tasks: TaskResponse[] = [];
 
     // Oszloponként külön Map-ben tároljuk a taskokat
@@ -51,7 +62,8 @@
     // Amikor betöltjük a taskokat, szétválogatjuk oszloponként
     function distributeTasks(allTasks: TaskResponse[]) {
         const map: Record<string, TaskResponse[]> = {};
-        columns.forEach(col => {
+        const cols = columns.filter(c => c.position > 0);  // ← direkt szűrés
+        cols.forEach(col => {
             map[col.id] = allTasks
                 .filter(t => t.columnId === col.id)
                 .sort((a, b) => a.position.localeCompare(b.position));
@@ -65,6 +77,11 @@
         activeBoard = state.activeBoard;
         columns = state.columns;
         distributeTasks(tasks);
+    });
+
+    sprintStore.subscribe(state => {
+        sprints = state.sprints;
+        activeSprint = state.activeSprint;
     });
 
     let activeProjectId = '';
@@ -101,7 +118,7 @@
     async function handleColumnFinalize(e: CustomEvent) {
         columns = e.detail.items;
         // Reorder API hívás
-        const order = columns.map((col, index) => ({
+        const order = visibleColumns.map((col, index) => ({
             id: col.id,
             position: index
         }));
@@ -182,7 +199,13 @@
             const cols = await getColumnsAsync(activeProjectId, board.id);
             const sortedCols = cols.sort((a, b) => a.position - b.position);
             setColumns(sortedCols);
-            const _tasks = await getTasksAsync(activeProjectId, board.id);
+            
+            // Csak aktív sprint taskjai ha van aktív sprint
+            const _tasks = await getTasksAsync(
+                activeProjectId, 
+                board.id,
+                activeSprint?.id ?? undefined, //  sprintId szűrés
+            );
             setTasks(_tasks);
         } catch (e) {
             console.error('Hiba az oszlopok/taskok lekérésekor!');
@@ -220,7 +243,7 @@
         class="toolbar-btn" 
         class:active={isReordering}
         on:click={() => isReordering = !isReordering}
-    > {isReordering ? '🔓 Átrendezés aktív' : '🔒 Átrendezés'} </button>
+    > {isReordering ? 'Átrendezés aktív' : 'Átrendezés'} </button>
     
 </div>
 <div class="board-container">
@@ -228,7 +251,7 @@
     <!-- Oszlopok -->
     <div class="columns-container" 
             use:dndzone={{
-            items: columns, 
+            items: visibleColumns,
             flipDurationMs: 200, 
             dragDisabled: !isReordering,
             dropTargetStyle: { outline: '2px dashed #555' }
@@ -236,7 +259,7 @@
         on:consider={handleColumnConsider}
         on:finalize={handleColumnFinalize}
     >
-        {#each columns as column (column.id)}
+        {#each visibleColumns as column (column.id)}
             <ColumnCard
                 {column}
                 tasks={columnTasks[column.id] ?? []}

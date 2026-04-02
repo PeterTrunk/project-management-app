@@ -8,13 +8,12 @@
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
     import { addLabelToTaskAsync } from '../api/labelApi';
+    import { sprintStore } from '../stores/sprintStore';
 
     export let isTaskCreationOpen = false;
     export let isBacklogMode: boolean = false;
     export let projectId: string;
     export let boardId: string | null = null;
-
-    
 
     let modalRef: HTMLElement;
 
@@ -33,6 +32,11 @@
     let selectedLabelIds: string[] = [];
     projectStore.subscribe(state => {
         allLabels = state.labels;
+    });
+
+    let activeSprintId: string = '';
+    sprintStore.subscribe(state => {
+        activeSprintId = state.activeSprint?.id ?? '';
     });
 
     
@@ -71,20 +75,20 @@
             return;
         }
         try {
-            console.log('Küldött adat:', {
+            /* console.log('Küldött adat:', {
                 columnId: isBacklogMode ? null : columnId,
                 boardId: isBacklogMode ? null : boardId,
-                sprintId: sprintId !== '' ? sprintId : null,
+                sprintId: isBacklogMode ? null : (activeSprintId || null),
                 title,
                 description,
                 priority: priority !== '' ? priority : null,
                 estimateInMinutes,
                 dueDate: dueDate ? new Date(dueDate) : null
-            });
+            }); */
             const response = await createTaskAsync(projectId, {
                 columnId: isBacklogMode ? null : columnId,
                 boardId: isBacklogMode ? null : boardId,
-                sprintId: sprintId !== '' ? sprintId : null,
+                sprintId: isBacklogMode ? null : (activeSprintId || null),
                 title,
                 description,
                 priority: priority !== '' ? priority : null,
@@ -148,8 +152,6 @@
             </div>
             <div id="optional-fields">
                 <h2>Opcionális mezők</h2>
-                <!-- TODO: Sprint választó - SprintStore elkészítése után -->
-                <!-- <input type="text" bind:value={sprintId}> -->
                 Task leírása
                 <textarea placeholder="Leírás" bind:value={description}></textarea>
                 Válasszon prioritást 

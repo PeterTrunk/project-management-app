@@ -19,7 +19,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             _context = context;
             _lexorankService = lexorankService;
         }
-
+        
         public async Task<TaskResponseDto> CreateTaskAsync(Guid createdById, Guid projectId, CreateTaskDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
@@ -513,26 +513,36 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new Exception("Task nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == dto.BoardId);
-            if (board == null)
-                throw new Exception("Board nem található");
+            if (!dto.BoardId.HasValue)
+            {
+                task.BoardId = null;
+                task.ColumnId = null;
+                task.Position = string.Empty;
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == dto.BoardId);
+                if (board == null)
+                    throw new Exception("Board nem található");
 
-            var backlogColumn = await _context.ColumnDefinitions
-                .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == dto.BoardId);
-            if (backlogColumn == null)
-                throw new Exception("Backlog oszlop nem található");
-             
-            // Lexorank pozíció az oszlop végére helyezés
-            var lastTask = await _context.ProjectTasks
-                .Where(t => t.ColumnId == backlogColumn.Id)
-                .OrderBy(t => t.Position)
-                .LastOrDefaultAsync();
+                var backlogColumn = await _context.ColumnDefinitions
+                    .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == dto.BoardId);
+                if (backlogColumn == null)
+                    throw new Exception("Backlog oszlop nem található");
 
-            task.BoardId = dto.BoardId;
-            task.ColumnId = backlogColumn.Id;
-            task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                // Lexorank pozíció az oszlop végére helyezés
+                var lastTask = await _context.ProjectTasks
+                    .Where(t => t.ColumnId == backlogColumn.Id)
+                    .OrderBy(t => t.Position)
+                    .LastOrDefaultAsync();
 
-            await _context.SaveChangesAsync();
+                task.BoardId = dto.BoardId;
+                task.ColumnId = backlogColumn.Id;
+                task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                await _context.SaveChangesAsync();
+            }
 
             // Response összerakása
             var assigneeNames = await _context.TaskAssignments

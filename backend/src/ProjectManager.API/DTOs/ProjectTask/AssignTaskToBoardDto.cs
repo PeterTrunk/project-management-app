@@ -2,6 +2,6 @@
 {
     public class AssignTaskToBoardDto
     {
-        public Guid BoardId { get; set; }
+        public Guid? BoardId { get; set; }
     }
 }

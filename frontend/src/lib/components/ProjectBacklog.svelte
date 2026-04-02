@@ -13,15 +13,15 @@
     export let tasks: TaskResponse[] = [];
     export let sprints: SprintResponse[] = [];
     export let boards: BoardResponse[] = [];
+    export let onRefresh: () => Promise<void> = async () => {};
     export let onDelete: (taskId: string) => void = () => {};
     export let onAssignToSprint: (taskId: string, sprintId: string) => void = () => {};
     
-
     let isCreateTaskOpen = false;
     let isTaskDetailOpen = false;
     let isCollapsed = false;
 
-    $: backlogTasks = tasks.filter(t => !t.boardId && !t.columnId && !t.sprintId);
+    $: backlogTasks = tasks.filter(t => !t.sprintId && !t.closedAt);
     $: availableSprints = sprints.filter(s => s.state !== 'Completed');
 </script>
 
@@ -39,11 +39,13 @@
                 {#each backlogTasks as task}
                     <BacklogTaskCard
                         {task}
-                        {sprints}
                         {boards}
+                        sprints={availableSprints}
+                        projectId={projectId}
                         onAssignToSprint={onAssignToSprint}
                         onDelete={(taskId) => onDelete(taskId)}
-                        onOpenDetail={(task) => {
+                        onBoardAssigned={async () => await onRefresh()}
+                        onOpenDetail={async (task) => {
                             setActiveTask(task);
                             isTaskDetailOpen = true;
                         }}
@@ -77,8 +79,7 @@
         onClose={async () => {
             isTaskDetailOpen = false;
             setActiveTask(null);
-            const _tasks = await getTasksAsync(projectId);
-            setTasks(_tasks);
+            await onRefresh();
         }}
     />
 {/if}

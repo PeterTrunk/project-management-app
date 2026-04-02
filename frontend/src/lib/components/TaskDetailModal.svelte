@@ -2,7 +2,6 @@
     import { onMount } from 'svelte';
     import { setActiveTask } from '../stores/taskStore';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse  } from '../api/taskApi';
-    import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
     import { validateTaskDueDate, validateTaskTitle, validateTaskDescription } from '../validators';
@@ -11,8 +10,17 @@
     import { projectStore, setLabels } from '../stores/projectStore';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
+    import { boardStore } from '../stores/boardStore';
+    import type { BoardResponse } from '../api/boardApi';
 
     export let task: TaskResponse;
+    $: isBacklogTask = !task.boardId && !task.columnId;
+   
+    let boards: BoardResponse[] = [];
+    $: boardName = task.boardId 
+        ? (boards.find(b => b.id === task.boardId)?.name ?? 'Ismeretlen board')
+        : null;
+
     export let projectId: string;
     export let allLabels: LabelResponse[] = [];
     export let isTaskDetailOpen = false;
@@ -37,7 +45,11 @@
 
     projectStore.subscribe(state => {
         allLabels = state.labels;
-    })
+    });
+
+    boardStore.subscribe(state => {
+        boards = state.boards;
+    });
 
     onMount(async () => {
         modalRef?.focus();
@@ -151,7 +163,14 @@
             </div>
             <button class="close-btn" on:click={closeModal}>✕</button>
             <h1>{task.title}</h1>
-            <p>{task.taskKey} · {task.status}</p>
+            <p>{task.sprintId ?? "Nincs sprintje"}</p>
+            <p>{task.taskKey} · 
+            {#if !isBacklogTask}
+                {boardName} · {task.status}
+            {:else}
+                Projekt Backlog
+            {/if}
+            </p>
         </div>
 
         <div class="left-column">

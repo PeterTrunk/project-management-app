@@ -24,6 +24,10 @@ interface UpdateTaskRequest {
     dueDate: Date | null;
 }
 
+interface AssignTaskToBoardRequest {
+    boardId: string | null;
+}
+
 
 export interface TaskResponse {
     id: string;
@@ -44,6 +48,7 @@ export interface TaskResponse {
     commitLinks: string[];
     prLinks: string[];
     createdByName: string;
+    closedAt: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -79,3 +84,7 @@ export async function moveTaskAsync(projectId: string, taskId: string, data: Mov
     return response.data;
 }
 
+export async function assignTaskToBoardAsync(projectId: string, taskId: string, data: AssignTaskToBoardRequest): Promise<TaskResponse> {
+    const response = await apiClient.post('/projects/' + projectId + '/tasks/' + taskId + '/board', data);
+    return response.data;
+}

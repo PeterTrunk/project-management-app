@@ -93,12 +93,7 @@ namespace ProjectManager.API.Services.SprintService
             var unfinishedTasks = await _context.ProjectTasks
                 .Where(t => t.SprintId == sprintId && t.CompletedAt == null)
                 .ToListAsync();
-
-            if (unfinishedTasks.Count > 0 && targetSprintId == null)
-            {
-                throw new Exception($"A sprintben {unfinishedTasks.Count} befejezetlen task van! Válassz célsprintet vagy helyezd Backlogba!");
-            }
-
+            
             // Befejezetlen taskok kezelése
             if (unfinishedTasks.Count > 0)
             {
@@ -107,11 +102,8 @@ namespace ProjectManager.API.Services.SprintService
                     // Backlogba
                     foreach (var task in unfinishedTasks)
                     {
-                        var backlogColId = await _context.ColumnDefinitions
-                            .Where(c => c.BoardId == task.BoardId && c.Position == 0)
-                            .Select(c => c.Id)
-                            .FirstOrDefaultAsync();
-                        task.ColumnId = backlogColId;
+                        task.BoardId = null;
+                        task.ColumnId = null;
                         task.SprintId = null;
                     }
                 }
@@ -240,6 +232,7 @@ namespace ProjectManager.API.Services.SprintService
                 .Where(t => t.SprintId == sprintId &&
                            (t.ColumnDefinition == null || t.ColumnDefinition.MapsToStatus != "Done"))
                 .Include(t => t.CreatedByUser)
+                .Include(t => t.ColumnDefinition)
                 .ToListAsync();
             var taskIds = tasks.Select(t => t.Id).ToList();
 
@@ -299,7 +292,7 @@ namespace ProjectManager.API.Services.SprintService
                         FileSizeBytes = a.SizeBytes
                     })
                     .ToList(),
-                CreatedByName = t.CreatedByUser.DisplayName,
+                CreatedByName = t.CreatedByUser.DisplayName ?? "Ismeretlen",
                 TaskKey = t.TaskKey,
                 Title = t.Title,
                 Description = t.Description,
