@@ -14,6 +14,7 @@
 
     let name = sprint.name;
     let goal = sprint.goal ?? '';
+    
     let startDate = sprint.startDate 
         ? new Date(sprint.startDate).toISOString().slice(0, 16) 
         : '';

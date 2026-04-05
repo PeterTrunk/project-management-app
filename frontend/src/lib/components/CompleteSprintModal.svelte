@@ -69,11 +69,14 @@
                 {#each unfinishedTasks as task}
                     <div class="unfinished-task">
                         <span class="task-key">{task.taskKey}</span>
+                        {#if task.priority}
+                            <span class="priority priority-{task.priority}">{task.priority}</span>
+                        {/if}
                         <span class="task-title">{task.title}</span>
                     </div>
                 {/each}
             </div>
-
+            
             <div class="options">
                 <label>
                     <input type="radio" bind:group={moveToBacklog} value={true}>
@@ -215,6 +218,18 @@
         border: 1px solid #4caf50;
         color: #4caf50;
     }
+
+    .priority {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+    }
+
+    .priority-low { background: #1a3a1a; color: #4caf50; }
+    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
+    .priority-high { background: #3a1a1a; color: #ff5722; }
+    .priority-critical { background: #4a0000; color: #ff0000; }
+    .priority-normal { background: #2a2a2a; color: #aaa; }
 
     .complete-btn:hover { background: #2a4a2a; }
 

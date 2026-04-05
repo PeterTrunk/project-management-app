@@ -65,8 +65,7 @@
         boardId={null}
         isBacklogMode={true}
         onClose={async () => {
-            const _tasks = await getTasksAsync(projectId);
-            setTasks(_tasks);
+            await onRefresh();
         }}
     />
 {/if}

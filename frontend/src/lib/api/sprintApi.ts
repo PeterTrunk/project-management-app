@@ -40,7 +40,7 @@ export async function createSprintAsync(projectId: string, data: CreateSprintReq
 }
 
 export async function updateSprintAsync(projectId: string, sprintId: string, data: UpdateSprintRequest): Promise<SprintResponse> {
-    const response = await apiClient.put("/projects/"+ projectId +"/sprints" + sprintId);
+    const response = await apiClient.put("/projects/"+ projectId +"/sprints/" + sprintId, data);
     return response.data
 }
 

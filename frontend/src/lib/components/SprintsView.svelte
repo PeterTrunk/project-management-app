@@ -3,7 +3,6 @@
     import { sprintStore, setSprints } from '../stores/sprintStore';
     import { getSprintsAsync, type SprintResponse } from '../api/sprintApi';
     import { getTasksAsync, type TaskResponse, deleteTaskAsync } from '../api/taskApi';
-    import { projectStore } from '../stores/projectStore';
     import { boardStore, setBoards } from '../stores/boardStore';
     import { getBoardsAsync } from '../api/boardApi';
     import { planSprintAsync, activateSprintAsync, 
@@ -26,6 +25,7 @@
 
     let confirmTitle = '';
     let confirmMessage = '';
+    let confirmText = '';
     let confirmAction: () => Promise<void> = async () => {};
 
     let sprints: SprintResponse[] = [];
@@ -37,7 +37,6 @@
     let planningCollapsed = true;
     let completedCollapsed = true;
 
-    // Csak store olvasás — NEM async!
     sprintStore.subscribe(state => {
         sprints = state.sprints;
         activeSprint = state.activeSprint;
@@ -69,19 +68,42 @@
     }
 
     async function handleActivateSprint(sprintId: string) {
-        await activateSprintAsync(projectId, sprintId);
-        await loadAll();
+        const sprintTasks = allTasks.filter(t => t.sprintId === sprintId);
+        const tasksWithoutBoard = sprintTasks.filter(t => !t.boardId);
+
+        if (tasksWithoutBoard.length > 0) {
+            openConfirm(
+                'Sprint aktiválása',
+                `Biztosan aktiválod a sprintet úgy hogy ${tasksWithoutBoard.length} task nincs boardhoz rendelve?
+                \nEzek a taskok nem fognak megjelenni egyik boardon se ameddig nincsenek valamely boardhoz hozzárendelve.`,
+                'Aktiválás',
+                async () => {
+                    await activateSprintAsync(projectId, sprintId);
+                    await loadAll();
+                }
+            );
+        } else {
+            await activateSprintAsync(projectId, sprintId);
+            await loadAll();
+        }
     }
 
     async function handlePlanSprint(sprintId: string) {
-        await planSprintAsync(projectId, sprintId);
-        await loadAll();
+        openConfirm(
+        'Sprint visszatervezése',
+        'Biztosan visszatervezed a sprintet? Az összes task visszakerül a Board Backlog oszlopba!',
+        'Megerősítés',
+        async () => {
+            await planSprintAsync(projectId, sprintId);
+            await loadAll();
+        });
     }
 
     async function handleDeleteSprint(sprintId: string) {
         openConfirm(
             'Sprint törlése',
             'Biztosan törölni szeretnéd a sprintet?',
+            'Törlés',
             async () => {
                 await deleteSprintAsync(projectId, sprintId);
                 await loadAll();
@@ -99,11 +121,6 @@
         } else {
             await assignTaskToSprintAsync(projectId, sprintId, taskId);
         }
-        await refreshTasks();
-    }
-
-    async function handleTaskDropped(taskId: string, sprintId: string) {
-        await assignTaskToSprintAsync(projectId, sprintId, taskId);
         await refreshTasks();
     }
 
@@ -131,6 +148,7 @@
         openConfirm(
             'Task törlése',
             'Biztosan törölni szeretnéd a taskot? Ez a művelet nem visszavonható!',
+            'Törlés',
             async () => {
                 await deleteTaskAsync(projectId, taskId);
                 await refreshTasks();
@@ -138,9 +156,10 @@
         );
     }
 
-    function openConfirm(title: string, message: string, action: () => Promise<void>) {
+    function openConfirm(title: string, message: string, text: string, action: () => Promise<void>) {
         confirmTitle = title;
         confirmMessage = message;
+        confirmText = text;
         confirmAction = action;
         isConfirmOpen = true;
     }
@@ -264,7 +283,10 @@
         sprint={selectedCompleteSprint}
         unfinishedTasks={unfinishedTasks}
         sprints={sprints}
-        onClose={() => isCompleteSprintOpen = false}
+        onClose={async () => {
+            isCompleteSprintOpen = false;
+            await loadAll();
+        }}
     />
 {/if}
 
@@ -273,7 +295,7 @@
         bind:isOpen={isConfirmOpen}
         title={confirmTitle}
         message={confirmMessage}
-        confirmText="Törlés"
+        confirmText={confirmText}
         onConfirm={confirmAction}
     />
 {/if}

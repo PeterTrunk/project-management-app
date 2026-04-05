@@ -58,7 +58,6 @@ namespace ProjectManager.API.Services.SprintService
                         task.ColumnId = firstColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
                     }
-                        
                 }
             }
 
@@ -117,12 +116,12 @@ namespace ProjectManager.API.Services.SprintService
                 }
             }
 
-            // ClosedAt beállítása minden sprinthez tartozó tasknál
-            var allSprintTasks = await _context.ProjectTasks
-                .Where(t => t.SprintId == sprintId)
+            // ClosedAt beállítása CSAK a befejezett taskokra
+            var completedTasks = await _context.ProjectTasks
+                .Where(t => t.SprintId == sprintId && t.CompletedAt != null)
                 .ToListAsync();
 
-            foreach (var task in allSprintTasks)
+            foreach (var task in completedTasks)
             {
                 task.ClosedAt = DateTime.UtcNow;
             }
@@ -229,8 +228,7 @@ namespace ProjectManager.API.Services.SprintService
                 throw new Exception("Sprint nem található");
 
             var tasks = await _context.ProjectTasks
-                .Where(t => t.SprintId == sprintId &&
-                           (t.ColumnDefinition == null || t.ColumnDefinition.MapsToStatus != "Done"))
+                .Where(t => t.SprintId == sprintId && t.CompletedAt == null)
                 .Include(t => t.CreatedByUser)
                 .Include(t => t.ColumnDefinition)
                 .ToListAsync();
@@ -292,11 +290,11 @@ namespace ProjectManager.API.Services.SprintService
                         FileSizeBytes = a.SizeBytes
                     })
                     .ToList(),
-                CreatedByName = t.CreatedByUser.DisplayName ?? "Ismeretlen",
+                CreatedByName = t.CreatedByUser?.DisplayName ?? "Ismeretlen",
                 TaskKey = t.TaskKey,
                 Title = t.Title,
                 Description = t.Description,
-                Status = t.ColumnDefinition.MapsToStatus ?? "Backlog",
+                Status = t.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
@@ -409,10 +407,52 @@ namespace ProjectManager.API.Services.SprintService
                 var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
                 if (sprint == null)
                     throw new Exception("Sprint nem található");
-            }
 
+                if (task.BoardId.HasValue)
+                {
+                    if (sprint?.State == "Active")
+                    {
+                        var firstColumn = await _context.ColumnDefinitions
+                            .Where(c => c.BoardId == task.BoardId && c.Position > 0)
+                            .OrderBy(c => c.Position)
+                            .FirstOrDefaultAsync();
+
+                        if (firstColumn != null)
+                        {
+                            var lastTask = await _context.ProjectTasks
+                                .Where(t => t.ColumnId == firstColumn.Id)
+                                .OrderBy(t => t.Position)
+                                .LastOrDefaultAsync();
+
+                            task.ColumnId = firstColumn.Id;
+                            task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Backlogba visszarakás
+                if (task.BoardId.HasValue)
+                {
+                    var backlogColumn = await _context.ColumnDefinitions
+                        .FirstOrDefaultAsync(c => c.BoardId == task.BoardId && c.Position == 0);
+
+                    if (backlogColumn != null)
+                    {
+                        var lastTask = await _context.ProjectTasks
+                            .Where(t => t.ColumnId == backlogColumn.Id)
+                            .OrderBy(t => t.Position)
+                            .LastOrDefaultAsync();
+
+                        task.ColumnId = backlogColumn.Id;
+                        task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                    }
+                }
+                task.CompletedAt = null;
+            }
             // null = vissza Backlogba
-            task.SprintId = sprintId; 
+            task.SprintId = sprintId;
             await _context.SaveChangesAsync();
         }
     }

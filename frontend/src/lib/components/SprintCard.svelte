@@ -36,13 +36,30 @@
         });
         return map;
     }
+
+    // Rendezett entries: default board először, utána ABC, végén "Nincs board"
+    $: sortedGroupedTasks = getSortedEntries(groupedTasks, boards);
+
+    function getSortedEntries(grouped: Record<string, TaskResponse[]>, boardList: BoardResponse[]): [string, TaskResponse[]][] {
+        const defaultBoard = boardList.find(b => b.isDefault);
+        
+        return Object.entries(grouped).sort(([nameA], [nameB]) => {
+            if (nameA === 'Nincs board') return 1;   // Nincs board mindig utoljára
+            if (nameB === 'Nincs board') return -1;
+            if (defaultBoard) {
+                if (nameA === defaultBoard.name) return -1;  // Default board először
+                if (nameB === defaultBoard.name) return 1;
+            }
+            return nameA.localeCompare(nameB);  // Többi ABC sorrendben
+        });
+    }
+
 </script>
 
 <div class="sprint-card" class:active={sprint.state === 'Active'} 
                          class:planning={sprint.state === 'Planning'}
                          class:completed={sprint.state === 'Completed'}
 >
-    
     <div class="sprint-header">
         <div class="sprint-title">
             {#if sprint.state === 'Active'}
@@ -56,7 +73,6 @@
             —
             {sprint.endDate ? new Date(sprint.endDate).toLocaleDateString('hu-HU') : '?'}
         </div>
-
         <div class="sprint-actions">
             {#if sprint.state === 'Active'}
                 <button on:click={() => onEdit(sprint)}>✏ Szerkesztés</button>
@@ -69,14 +85,17 @@
             {/if}
         </div>
     </div>
-
     {#if sprint.goal}
         <p class="sprint-goal">Cél: {sprint.goal}</p>
     {/if}
-
-    {#each Object.entries(groupedTasks) as [boardName, boardTasks]}
+    {#each sortedGroupedTasks as [boardName, boardTasks]}
         <div class="board-group">
-            <h4>{boardName}</h4>
+            <h4>
+                {boardName}
+                {#if boards.find(b => b.name === boardName)?.isDefault}
+                    <span class="default-badge">★</span>
+                {/if}
+            </h4>
             <div>
                 {#each boardTasks as task (task.id)}
                     <BacklogTaskCard
@@ -103,7 +122,7 @@
     {/each}
     {#if tasks.length === 0}
         <div>
-            <p class="empty">↓ Húzz ide taskot a Backlogból</p>
+            <p class="empty">Még nincs hozzárendelt Task.</p>
         </div>
     {/if}
 </div>
@@ -202,6 +221,12 @@
         margin: 0.5rem 0 0.25rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
+    }
+
+    .default-badge {
+        color: #f0a500;
+        font-size: 0.75rem;
+        margin-left: 0.25rem;
     }
 
     

@@ -4,7 +4,7 @@
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
-    import { validateTaskDueDate, validateTaskTitle, validateTaskDescription } from '../validators';
+    import { validateTaskTitle, validateTaskDescription } from '../validators';
     import CommentSection from './CommentSection.svelte';
     import { getLabelsAsync, addLabelToTaskAsync as addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
     import { projectStore, setLabels } from '../stores/projectStore';
@@ -12,14 +12,22 @@
     import CreateLabelModal from './CreateLabelModal.svelte';
     import { boardStore } from '../stores/boardStore';
     import type { BoardResponse } from '../api/boardApi';
+    import { sprintStore } from '../stores/sprintStore';
+    import type { SprintResponse } from '../api/sprintApi';
 
     export let task: TaskResponse;
-    $: isBacklogTask = !task.boardId && !task.columnId;
+    $: isBacklogTask = !task.boardId && !task.columnId && !task.sprintId;
    
     let boards: BoardResponse[] = [];
     $: boardName = task.boardId 
         ? (boards.find(b => b.id === task.boardId)?.name ?? 'Ismeretlen board')
         : null;
+    
+    let sprints: SprintResponse[] = [];
+    $: sprintName = task.sprintId
+        ? (sprints.find(s => s.id === task.sprintId)?.name ?? 'Ismeretlen sprint')
+        : null;
+    
 
     export let projectId: string;
     export let allLabels: LabelResponse[] = [];
@@ -49,6 +57,10 @@
 
     boardStore.subscribe(state => {
         boards = state.boards;
+    });
+
+    sprintStore.subscribe(state => {
+        sprints = state.sprints;
     });
 
     onMount(async () => {
@@ -163,10 +175,16 @@
             </div>
             <button class="close-btn" on:click={closeModal}>✕</button>
             <h1>{task.title}</h1>
-            <p>{task.sprintId ?? "Nincs sprintje"}</p>
             <p>{task.taskKey} · 
             {#if !isBacklogTask}
-                {boardName} · {task.status}
+                {#if sprintName}
+                    {sprintName} · 
+                {/if}
+                {#if boardName}
+                    {boardName} · {task.status}
+                {:else}
+                    Nincs Boardhoz rendelve
+                {/if}
             {:else}
                 Projekt Backlog
             {/if}
