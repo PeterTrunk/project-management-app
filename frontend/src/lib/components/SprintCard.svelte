@@ -96,7 +96,7 @@
                     <span class="default-badge">★</span>
                 {/if}
             </h4>
-            <div>
+            <div class="task-list">
                 {#each boardTasks as task (task.id)}
                     <BacklogTaskCard
                         {task}
@@ -228,11 +228,17 @@
         font-size: 0.75rem;
         margin-left: 0.25rem;
     }
-
     
     .empty {
         color: #555;
         font-size: 0.8rem;
         margin: 0;
+    }
+
+    .task-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
     }
 </style>

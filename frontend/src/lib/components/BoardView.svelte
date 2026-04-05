@@ -362,7 +362,7 @@
         gap: 1rem;
         align-items: flex-start;
         height: calc(100vh - 165px);  /* kicsit több hely alul */
-        min-width: min-content;  /* ← width: max-content helyett */
+        min-width: min-content;  /* width: max-content helyett */
     }
 
     .board-toolbar {

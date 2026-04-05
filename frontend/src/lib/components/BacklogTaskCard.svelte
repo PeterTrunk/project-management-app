@@ -201,13 +201,14 @@
     .dropdown-menu {
         position: absolute;
         right: 0;
-        top: 100%;
+        bottom: 100%;
+        top: auto;
         background: #2a2a2a;
         border: 1px solid #444;
         border-radius: 6px;
         padding: 0.75rem;
         min-width: 200px;
-        z-index: 100;
+        z-index: 1000;
         display: flex;
         flex-direction: column;
         gap: 0.5rem;

@@ -121,7 +121,11 @@
         
         <!-- Dinamikus tartalom -->
         <!--(Overview, Board, Team, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
-        <div class="content" class:scrollable={activeView !== 'board'}>
+        <div 
+            class="content"
+            class:scrollable={activeView !== 'board'}
+            class:no-padding={activeView === 'sprints'}
+        >
             {#if activeProject}
                 {#if activeView === 'overview'}
                     <ProjectOverview project={activeProject} />
@@ -255,5 +259,10 @@
     .content.scrollable {
         overflow-y: auto;
         padding: 1rem;
+    }
+
+    .content.no-padding {
+        padding: 0;
+        gap: 0;
     }
 </style>

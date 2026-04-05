@@ -88,7 +88,7 @@
         background: #1e1e1e;
         border-radius: 8px;
         border: 1px solid #333;
-        overflow: hidden;
+        overflow: visible;
     }
 
     .backlog-header {
@@ -129,6 +129,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        overflow: visible;
     }
 
     .empty {
