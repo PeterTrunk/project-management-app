@@ -146,7 +146,6 @@ Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). B
 
 ### TO-DO:
 - Overdue task visual indicator
-- Sprint UI frontend befejezése
 
 ### Elvégzett backend munkák
 
@@ -209,18 +208,20 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - BoardView.svelte: board toolbar, dropdown board választó, oszlop/task hozzáadás, átrendezés lock
 - ColumnCard.svelte: oszlop + task dndzone + drag handle
 - TaskCard.svelte: task kártya (key, cím, prioritás, határidő, labelek)
-- CreateColumnModal.svelte: oszlop létrehozás, pozíció reorder-rel kezelve
+- CreateColumnModal.svelte: oszlop létrehozás, pozíció reorder-rel kezelve, Backlog kizárva a pozíció selectorból
 - ColumnDetailModal.svelte: oszlop szerkesztés és törlés
 - CreateBoardModal.svelte + UpdateBoardModal.svelte: board kezelés
-- CreateTaskModal.svelte: isBacklogMode támogatás (boardId/columnId null)
-- TaskDetailModal.svelte: két oszlopos layout, szerkesztés/törlés, label kezelés
+- CreateTaskModal.svelte: isBacklogMode támogatás (boardId/columnId null), Backlog oszlop kizárva az oszlop selectorból
+- TaskDetailModal.svelte: két oszlopos layout, szerkesztés/törlés, label kezelés, board név + sprint név megjelenítés, null boardId/columnId kezelés
 - CommentSection.svelte: komment kezelés
 - LabelCard.svelte + CreateLabelModal.svelte: label kezelés
-- SprintsView.svelte: sprint lista (aktív kiemelve, planning/completed collapselhető)
-- SprintCard.svelte: sprint kártya board-csoportosított task megjelenítéssel
-- ProjectBacklog.svelte: projekt szintű backlog (collapselhető)
-- BacklogTaskCard.svelte: backlog task kártya (sprint/board hozzárendelés, hamburger menü)
-- CreateSprintModal.svelte: sprint létrehozás
+- SprintsView.svelte: sprint lista (aktív kiemelve, planning/completed collapselhető), fix toolbar + scrollolható tartalom
+- SprintCard.svelte: sprint kártya board-csoportosított task megjelenítéssel, default board először, BacklogTaskCard komponens használata
+- ProjectBacklog.svelte: projekt szintű backlog (collapselhető), task létrehozás + részletes nézet támogatás
+- BacklogTaskCard.svelte: backlog task kártya (sprint/board hozzárendelés hamburger menüből, törlés, detail megnyitás)
+- CreateSprintModal.svelte: sprint létrehozás névvel, céllal, dátumokkal
+- UpdateSprintModal.svelte: sprint szerkesztés
+- CompleteSprintModal.svelte: sprint lezárás, befejezetlen taskok kezelése (Backlog vagy következő sprint)
 
 **Drag & Drop**
 - svelte-dnd-action: oszlop átrendezés (lock gombbal) + task mozgatás
@@ -233,9 +234,35 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - Task.Status eltávolítva — computed property: ColumnDefinition?.MapsToStatus ?? "Backlog"
 - Task.BoardId nullable: ha null -> Projekt Backlogban van
 - Task.ColumnId nullable: ha null -> Projekt Backlogban van
-- Task.CompletedAt: amikor a task az utolsó oszlopba ér (MoveTaskAsync állítja be)
-- Task.ClosedAt: amikor a sprint le lett zárva (CompleteSprintAsync állítja be)
+- Task.CompletedAt: amikor a task az utolsó oszlopba ér (MoveTaskAsync állítja be), visszamozgatáskor nullázódik
+- Task.ClosedAt: amikor a sprint le lett zárva (CompleteSprintAsync állítja be, csak befejezett taskokon)
 - Backlog definíció: BoardId=null AND ColumnId=null AND SprintId=null
+
+**AssignTaskToBoardAsync logika**
+- BoardId=null -> Projekt Backlogba (BoardId, ColumnId, CompletedAt nullázva)
+- BoardId megadva + nincs sprint -> Board Backlog oszlopba (Position=0)
+- BoardId megadva + aktív sprint -> Első valódi oszlopba (Position>0)
+- BoardId megadva + nem aktív sprint -> Board Backlog oszlopba
+- Board váltáskor CompletedAt mindig nullázódik
+
+**AssignTaskToSprintAsync logika**
+- SprintId=null -> Backlogba visszarakás (SprintId null, ColumnId Board Backlogba, CompletedAt null)
+- Aktív sprinthez adás + van board -> Első valódi oszlopba kerül
+- Nem aktív sprinthez adás -> Pozíció nem változik
+
+**CompleteSprintAsync logika**
+- Csak akkor engedélyezett ha minden task CompletedAt != null
+- Befejezetlen taskok -> Backlogba (BoardId, ColumnId, SprintId nullázva) VAGY következő sprintbe
+- ClosedAt CSAK a befejezett (CompletedAt != null) taskokon kerül beállításra
+- Sprint State -> Completed
+
+**Backlog oszlop védelem**
+- Position=0 oszlop: nem törölhető, pozíciója nem változtatható
+- CreateColumnDto: Position > 0 kötelező
+- ColumnOrderDto: Position > 0 kötelező
+- BoardView: Backlog oszlop elrejtve (csak Position>0 oszlopok láthatók)
+- CreateColumnModal: Backlog kizárva a pozíció selectorból
+- CreateTaskModal: Backlog kizárva az oszlop selectorból
 
 **Sprint modell refaktorálás**
 - Sprint.BoardId eltávolítva — egy sprint több boardhoz is tartozhat
@@ -345,7 +372,8 @@ implementáció el nem készül.
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
 
 ## Sprint Management & Team Management
-Sprint lifecycle API: creation, activation, closing. Sprint-to-task assignment. Constraint enforcement (one active sprint per project). Sprint manager interface with sprint status transitions (Open - Active - Closed). Team management interface: member list, role display, member invitation (invite link). Permission-based UI rendering based on user roles.
+Sprint lifecycle API: creation, activation, closing. Sprint-to-task assignment. Constraint enforcement (one active sprint per project). Sprint manager interface with sprint status transitions (Open - Active - Closed). 
+Team management interface: member list, role display, member invitation (invite link). Permission-based UI rendering based on user roles.
 
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
