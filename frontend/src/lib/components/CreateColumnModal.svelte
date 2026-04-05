@@ -53,7 +53,7 @@
                 name,
                 mapsToStatus,
                 wipLimit: hasWip ? wipLimit : null,
-                position: 0
+                position: columns.length + 1
             });
 
             const button = document.getElementById('create') as HTMLButtonElement;
@@ -68,9 +68,11 @@
             
             ordered.splice(insertAfterIndex + 1, 0, newColumn);
             
-            const order = ordered.map((col, index) => ({
+            const order = ordered
+            .filter(c => c.position > 0)
+            .map((col, index) => ({
                 id: col.id,
-                position: index
+                position: index + 1
             }));
             try {
                 await reorderColumnsAsync(projectId, boardId, order);
@@ -79,8 +81,9 @@
                 error = error + 'Rendezés sikeretelen!';
             }
             
-        } catch (e) {
+        } catch (e: any) {
             error = 'Hiba történt az oszlop létrehozásakor!';
+            console.error('Backend hiba:', e.response?.data);
         }
     }
 
@@ -117,7 +120,7 @@
             Legyen ez az oszlop után:
             <select bind:value={afterColumnId}>
                 <option value="">Legelső oszlop legyen</option>
-                {#each columns as column}
+                {#each columns.filter(c => c.position > 0) as column}
                     <option value={column.id}>{column.name}</option>
                 {/each}
             </select>

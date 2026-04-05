@@ -131,7 +131,7 @@
             {#if !isBacklogMode}
                 Válasszon Oszlopot
                 <select bind:value={columnId}>
-                    {#each columns as column}
+                    {#each columns.filter(c => c.position > 0) as column}
                         <option value={column.id}>{column.name}</option>
                     {/each}
                 </select>

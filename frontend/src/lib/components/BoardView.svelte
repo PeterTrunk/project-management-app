@@ -120,7 +120,9 @@
         // Reorder API hívás
         const order = visibleColumns.map((col, index) => ({
             id: col.id,
-            position: index
+            position: index + 1 
+            //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
+            //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
         await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
         setColumns(columns);
