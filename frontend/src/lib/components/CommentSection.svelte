@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { signalRService } from '../services/signalRService';
     import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
     import { validateCommentBody } from '../validators';
 
@@ -12,6 +13,27 @@
 
     onMount(async () => {
         await loadComments();
+        registerSignalREvents();
+    });
+
+    function registerSignalREvents() {
+        signalRService.off('CommentAdded');
+        signalRService.off('CommentDeleted');
+
+        signalRService.on('CommentAdded', async (data) => {
+            if (data.taskId !== taskId) return;  // csak az aktuális task kommentjei
+            await loadComments();
+        });
+
+        signalRService.on('CommentDeleted', async (data) => {
+            if (data.taskId !== taskId) return;
+            await loadComments();
+        });
+    }
+
+    onDestroy(() => {
+        signalRService.off('CommentAdded');
+        signalRService.off('CommentDeleted');
     });
 
     async function loadComments() {

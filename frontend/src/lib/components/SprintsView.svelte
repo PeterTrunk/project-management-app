@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { signalRService } from '../services/signalRService';
     import { sprintStore, setSprints } from '../stores/sprintStore';
     import { getSprintsAsync, type SprintResponse } from '../api/sprintApi';
     import { getTasksAsync, type TaskResponse, deleteTaskAsync } from '../api/taskApi';
@@ -60,6 +61,37 @@
 
     onMount(async () => {
         await loadAll();
+        registerSignalREvents();
+    });
+
+    function registerSignalREvents() {
+        signalRService.off('SprintUpdated');
+        signalRService.off('TaskUpdated');
+        signalRService.off('TaskCreated');
+        signalRService.off('TaskDeleted');
+
+        signalRService.on('SprintUpdated', async () => {
+            await loadAll();
+        });
+
+        signalRService.on('TaskUpdated', async () => {
+            await refreshTasks();
+        });
+
+        signalRService.on('TaskCreated', async () => {
+            await refreshTasks();
+        });
+
+        signalRService.on('TaskDeleted', async () => {
+            await refreshTasks();
+        });
+    }
+
+    onDestroy(() => {
+        signalRService.off('SprintUpdated');
+        signalRService.off('TaskUpdated');
+        signalRService.off('TaskCreated');
+        signalRService.off('TaskDeleted');
     });
 
     async function refreshTasks() {

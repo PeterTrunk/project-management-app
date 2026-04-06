@@ -1,5 +1,8 @@
 
 <script lang="ts">
+    import { onMount, onDestroy } from 'svelte';
+    import { signalRService } from '../lib/services/signalRService';
+    import { push } from 'svelte-spa-router';
     import { meAsync } from '../lib/api/authApi';
     import { login } from '../lib/stores/authStore';
     import { authStore, logout } from '../lib/stores/authStore';
@@ -18,9 +21,17 @@
     let isProjectCreationOpen = false;
     let isUserSettingsOpen = false;
     
+    let token = '';
 
-    
-    import { push } from 'svelte-spa-router';
+    onMount(async () => {
+        if (token) {
+            await signalRService.connect(token);
+        }
+    });
+
+    onDestroy(async () => {
+        await signalRService.disconnect();
+    });
 
     async function loadCurrentUser() {
         try {
@@ -46,6 +57,7 @@
     let displayName = '';
     authStore.subscribe(state => {
         displayName = state.user?.displayName ?? '';
+        token = state.token ?? '';
     });
 
     function handleLogout() {
@@ -57,9 +69,13 @@
     let activeProject: ProjectResponse | null = null;
 
     // projectStore figyelése
-    projectStore.subscribe(state => {
+    projectStore.subscribe(async state => {
         projects = state.projects;
         activeProject = state.activeProject;
+
+        if (state.activeProject?.id) {
+            await signalRService.joinProject(state.activeProject.id);
+        }
     });
 
     // Oldal betöltésekor lekéri a projekteket

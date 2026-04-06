@@ -1,8 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.DTOs.Sprints;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.LexorankService;
 
@@ -12,15 +14,17 @@ namespace ProjectManager.API.Services.SprintService
     {
         private readonly AppDbContext _context;
         private readonly ILexorankService _lexorankService;
+        private readonly IHubContext<ProjectHub> _hubContext;
         //Status:
         //"Planning"
         //"Active"
         //"Completed"
 
-        public SprintService(AppDbContext context, ILexorankService lexorankService)
+        public SprintService(AppDbContext context, ILexorankService lexorankService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _lexorankService = lexorankService;
+            _hubContext = hubContext;
         }
 
         public async Task<SprintResponseDto> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -62,6 +66,13 @@ namespace ProjectManager.API.Services.SprintService
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintUpdated", new
+                {
+                    sprintId = sprint.Id,
+                    state = sprint.State
+                });
 
             var response = new SprintResponseDto
             {
@@ -128,6 +139,13 @@ namespace ProjectManager.API.Services.SprintService
 
             sprint.State = "Completed";
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintUpdated", new
+                {
+                    sprintId = sprint.Id,
+                    state = sprint.State
+                });
 
             return new SprintResponseDto
             {
@@ -341,10 +359,17 @@ namespace ProjectManager.API.Services.SprintService
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
                     }
                 }
-                // Ha nincs BoardId → már Projekt Backlogban van → nem kell mozgatni
+                // Ha nincs BoardId, már Projekt Backlogban van, nem kell mozgatni
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintUpdated", new
+                {
+                    sprintId = sprint.Id,
+                    state = sprint.State
+                });
 
             var response = new SprintResponseDto
             {
@@ -454,6 +479,15 @@ namespace ProjectManager.API.Services.SprintService
             // null = vissza Backlogba
             task.SprintId = sprintId;
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{task.ProjectId}")
+                .SendAsync("TaskUpdated", new
+                {
+                    taskId = task.Id,
+                    sprintId = task.SprintId,
+                    columnId = task.ColumnId,
+                    position = task.Position
+                });
         }
     }
 }

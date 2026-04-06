@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { onDestroy } from 'svelte';
+    import { signalRService } from '../services/signalRService';
+    import { authStore } from '../stores/authStore';
     import { boardStore, setBoards, setActiveBoard, setColumns } from '../stores/boardStore';
     import { getBoardsAsync, } from '../api/boardApi';
     import { getColumnsAsync } from '../api/columnApi';
@@ -82,6 +85,11 @@
     sprintStore.subscribe(state => {
         sprints = state.sprints;
         activeSprint = state.activeSprint;
+    });
+
+    let currentUserId = '';
+    authStore.subscribe(state => {
+        currentUserId = state.user?.userId ?? '';
     });
 
     let activeProjectId = '';
@@ -196,7 +204,15 @@
     }
 
     async function loadBoard(board: BoardResponse) {
+        //Előző elhagyása, ha volt
+        if (activeBoard) {
+            await signalRService.leaveBoard(activeBoard.id);
+        }
+
         setActiveBoard(board);
+
+        //Csatlakozás egy másikhoz
+        await signalRService.joinBoard(board.id);
         try {
             const cols = await getColumnsAsync(activeProjectId, board.id);
             const sortedCols = cols.sort((a, b) => a.position - b.position);
@@ -212,7 +228,64 @@
         } catch (e) {
             console.error('Hiba az oszlopok/taskok lekérésekor!');
         }
+        // SignalR események regisztrálása
+        registerSignalREvents();
     }
+
+    function registerSignalREvents() {
+        // Előző események törlése
+        signalRService.off('TaskMoved');
+        signalRService.off('TaskCreated');
+        signalRService.off('TaskUpdated');
+        signalRService.off('TaskDeleted');
+
+        signalRService.on('TaskMoved', (data) => {
+            // Store közvetlen olvasása
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => {
+                currentTasks = state.tasks;
+            })();
+            
+            const updatedTasks = currentTasks.map((t: TaskResponse) =>
+                t.id === data.taskId 
+                    ? { ...t, columnId: data.columnId, position: data.position }
+                    : t
+            );
+            setTasks(updatedTasks);
+            distributeTasks(updatedTasks);
+        });
+
+        signalRService.on('TaskCreated', (data) => {
+            if (data.boardId !== activeBoard?.id) return;
+            // Teljes újratöltés mert a teljes DTO kell
+            getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined)
+                .then(t => { setTasks(t); distributeTasks(t); });
+        });
+
+        signalRService.on('TaskUpdated', (data) => {
+            const updatedTasks = tasks.map((t: TaskResponse) =>
+                t.id === data.taskId ? { ...t, ...data } : t
+            );
+            setTasks(updatedTasks);
+            distributeTasks(updatedTasks);
+        });
+
+        signalRService.on('TaskDeleted', (data) => {
+            const updatedTasks = tasks.filter((t: TaskResponse) => t.id !== data.taskId);
+            setTasks(updatedTasks);
+            distributeTasks(updatedTasks);
+        });
+    }
+
+    onDestroy(async () => {
+        if (activeBoard) {
+            await signalRService.leaveBoard(activeBoard.id);
+        }
+        signalRService.off('TaskMoved');
+        signalRService.off('TaskCreated');
+        signalRService.off('TaskUpdated');
+        signalRService.off('TaskDeleted');
+    });
 
     function handleTaskClick(task: TaskResponse) {
         setActiveTask(task);

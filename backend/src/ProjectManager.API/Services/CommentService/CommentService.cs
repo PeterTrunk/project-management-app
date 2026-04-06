@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Comments;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Services.CommentService
@@ -8,10 +10,12 @@ namespace ProjectManager.API.Services.CommentService
     public class CommentService : ICommentService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public CommentService(AppDbContext context)
+        public CommentService(AppDbContext context, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task<CommentResponseDto> CommentOnTaskAsync(Guid projectId, Guid taskId, Guid commenterId, CreateCommentDto dto)
@@ -36,7 +40,18 @@ namespace ProjectManager.API.Services.CommentService
                 Body = dto.Body
             };
             _context.Comments.Add(comment);
+
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("CommentAdded", new
+                {
+                    taskId,
+                    commentId = comment.Id,
+                    body = comment.Body,
+                    createdByName = user.DisplayName,
+                    createdAt = comment.CreatedAt
+                });
 
             var response = new CommentResponseDto
             {
@@ -69,7 +84,15 @@ namespace ProjectManager.API.Services.CommentService
                 throw new Exception("Csak a saját kommentedet törölheted!");
 
             _context.Comments.Remove(comment);
+
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("CommentDeleted", new
+                {
+                    taskId,
+                    commentId
+                });
         }
 
         public async Task<List<CommentResponseDto>> GetCommentsAsync(Guid projectId, Guid taskId)

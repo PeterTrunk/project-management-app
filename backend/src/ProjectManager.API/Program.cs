@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
@@ -42,7 +43,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
+
+        // SignalR JWT kezelés:
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
+
+builder.Services.AddSignalR();
+
 builder.Services.AddSwaggerGen(options =>
 {
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -82,7 +103,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -129,12 +151,16 @@ if (app.Environment.IsDevelopment())
 }
 
 //Middleware hozzáadás
+app.UseRouting();
+
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHub<ProjectHub>("/hubs/project");
 
 //Start
 app.Run();

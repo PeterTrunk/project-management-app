@@ -1,8 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.LexorankService;
 
@@ -13,11 +15,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
     {
         private readonly AppDbContext _context;
         private readonly ILexorankService _lexorankService;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public TaskService(AppDbContext context, ILexorankService lexorankService)
+        public TaskService(AppDbContext context, ILexorankService lexorankService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _lexorankService = lexorankService;
+            _hubContext = hubContext;
         }
         
         public async Task<TaskResponseDto> CreateTaskAsync(Guid createdById, Guid projectId, CreateTaskDto dto)
@@ -70,7 +74,18 @@ namespace ProjectManager.API.Services.ProjectTaskService
             };
             await _context.ProjectTasks.AddAsync(task);
             await _context.SaveChangesAsync();
-            
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("TaskCreated", new
+                {
+                    task.Id,
+                    task.BoardId,
+                    task.ColumnId,
+                    task.SprintId,
+                    task.Title,
+                    task.TaskKey
+                });
+
             var response = new TaskResponseDto
             {
                 Id = task.Id,
@@ -111,6 +126,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
             _context.ProjectTasks.Remove(task);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{task.ProjectId}")
+                .SendAsync("TaskDeleted", new
+                {
+                    taskId
+                });
         }
 
         public async Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null)
@@ -288,7 +309,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .FirstOrDefaultAsync(t => t.Id == taskId);
             if (task == null)
                 throw new Exception("Feladat nem található");
-
+            
             ColumnDefinition? column = null;
             if (dto.ColumnId.HasValue)
             {
@@ -375,6 +396,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{task.BoardId}")
+                .SendAsync("TaskMoved", new
+                {
+                    taskId = task.Id,
+                    columnId = task.ColumnId,
+                    position = task.Position,
+                    triggeredBy = task.CreatedById
+                });
 
             if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
             {
@@ -450,6 +480,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (dto.DueDate != null) task.DueDate = dto.DueDate;
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{task.ProjectId}")
+                .SendAsync("TaskUpdated", new
+                {
+                    taskId = task.Id,
+                    title = task.Title,
+                    priority = task.Priority,
+                    dueDate = task.DueDate
+                });
 
             var assigneeNames = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
@@ -579,6 +618,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
                 }
                 await _context.SaveChangesAsync();
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskUpdated", new
+                    {
+                        taskId = task.Id,
+                        boardId = task.BoardId,
+                        columnId = task.ColumnId,
+                        position = task.Position
+                    });
             }
 
             // Response összerakása

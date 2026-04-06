@@ -17,6 +17,7 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
     "axios": "^1.13.6",
     "svelte-dnd-action": "^0.9.69",
     "svelte-spa-router": "^4.0.2"
