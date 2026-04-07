@@ -211,6 +211,9 @@ namespace ProjectManager.API.Services.SprintService
             }
             _context.Sprints.Remove(sprint);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintDeleted", new { sprintId });
         }
 
         public async Task<List<SprintResponseDto>> GetSprintsAsync(Guid projectId)

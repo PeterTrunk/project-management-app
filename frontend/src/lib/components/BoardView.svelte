@@ -238,6 +238,14 @@
         signalRService.off('TaskCreated');
         signalRService.off('TaskUpdated');
         signalRService.off('TaskDeleted');
+        signalRService.off('TasksRebalanced');
+        signalRService.off('ColumnCreated');
+        signalRService.off('ColumnUpdated');
+        signalRService.off('ColumnDeleted');
+        signalRService.off('ColumnsReordered');
+        signalRService.off('BoardCreated');
+        signalRService.off('BoardUpdated');
+        signalRService.off('BoardDeleted');
 
         signalRService.on('TaskMoved', (data) => {
             // Store közvetlen olvasása
@@ -275,6 +283,64 @@
             setTasks(updatedTasks);
             distributeTasks(updatedTasks);
         });
+
+        signalRService.on('ColumnCreated', async () => {
+            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
+            setColumns(cols.sort((a, b) => a.position - b.position));
+        });
+
+        signalRService.on('ColumnUpdated', async () => {
+            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
+            setColumns(cols.sort((a, b) => a.position - b.position));
+        });
+
+        signalRService.on('ColumnDeleted', async () => {
+            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
+            setColumns(cols.sort((a, b) => a.position - b.position));
+        });
+
+        signalRService.on('ColumnsReordered', (data) => {
+            let currentCols: ColumnResponse[] = [];
+            boardStore.subscribe(state => { currentCols = state.columns; })();
+            
+            const updated = currentCols.map(c => {
+                const found = data.columns.find((d: any) => d.id === c.id);
+                return found ? { ...c, position: found.position } : c;
+            }).sort((a, b) => a.position - b.position);
+            
+            setColumns(updated);
+        });
+
+        signalRService.on('TasksRebalanced', (data) => {
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => { currentTasks = state.tasks; })();
+            
+            const updated = currentTasks.map(t => {
+                const found = data.tasks.find((d: any) => d.id === t.id);
+                return found ? { ...t, position: found.position } : t;
+            });
+            setTasks(updated);
+            distributeTasks(updated);
+        });
+
+        signalRService.on('BoardCreated', async () => {
+            const data = await getBoardsAsync(activeProjectId);
+            setBoards(data);
+        });
+
+        signalRService.on('BoardUpdated', async () => {
+            const data = await getBoardsAsync(activeProjectId);
+            setBoards(data);
+        });
+
+        signalRService.on('BoardDeleted', async () => {
+            const data = await getBoardsAsync(activeProjectId);
+            setBoards(data);
+            // Ha az aktív board lett törölve akkor az első boardot töltjük be
+            if (!boards.find(b => b.id === activeBoard?.id)) {
+                await loadBoards(activeProjectId);
+            }
+        });
     }
 
     onDestroy(async () => {
@@ -285,6 +351,14 @@
         signalRService.off('TaskCreated');
         signalRService.off('TaskUpdated');
         signalRService.off('TaskDeleted');
+        signalRService.off('TasksRebalanced');
+        signalRService.off('ColumnCreated');
+        signalRService.off('ColumnUpdated');
+        signalRService.off('ColumnDeleted');
+        signalRService.off('ColumnsReordered');
+        signalRService.off('BoardCreated');
+        signalRService.off('BoardUpdated');
+        signalRService.off('BoardDeleted');
     });
 
     function handleTaskClick(task: TaskResponse) {

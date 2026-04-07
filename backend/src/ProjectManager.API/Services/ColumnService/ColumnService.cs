@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Columns;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Services.ColumnService
@@ -8,10 +10,12 @@ namespace ProjectManager.API.Services.ColumnService
     public class ColumnService : IColumnService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public ColumnService(AppDbContext context)
+        public ColumnService(AppDbContext context, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task<ColumnResponseDto> CreateColumnAsync(Guid projectId, Guid boardId, CreateColumnDto dto)
@@ -34,6 +38,16 @@ namespace ProjectManager.API.Services.ColumnService
             };
             _context.ColumnDefinitions.Add(column);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{boardId}")
+                .SendAsync("ColumnCreated", new
+                {
+                    column.Id,
+                    column.BoardId,
+                    column.Name,
+                    column.Position,
+                    column.MapsToStatus
+                });
 
             var response = new ColumnResponseDto
             {
@@ -69,6 +83,9 @@ namespace ProjectManager.API.Services.ColumnService
 
             _context.ColumnDefinitions.Remove(column);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{boardId}")
+                .SendAsync("ColumnDeleted", new { columnId });
         }
 
         public async Task<List<ColumnResponseDto>> GetColumnsAsync(Guid projectId, Guid boardId)
@@ -129,7 +146,15 @@ namespace ProjectManager.API.Services.ColumnService
                 var col = columns.First(c => c.Id == item.Id);
                 col.Position = item.Position;
             }
+
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{boardId}")
+                .SendAsync("ColumnsReordered", new
+                {
+                    columns = columns.Select(c => new { c.Id, c.Position })
+                });
+
             return columns.Select(c => new ColumnResponseDto
             {
                 Id = c.Id,
@@ -158,7 +183,17 @@ namespace ProjectManager.API.Services.ColumnService
             if(dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;
             if(dto.WipLimit != null) column.WipLimit = dto.WipLimit;
+
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{boardId}")
+                .SendAsync("ColumnUpdated", new
+                {
+                    columnId = column.Id,
+                    column.Name,
+                    column.MapsToStatus,
+                    column.WipLimit
+                });
 
             var response = new ColumnResponseDto
             {

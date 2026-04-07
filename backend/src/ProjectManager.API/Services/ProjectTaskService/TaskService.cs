@@ -671,6 +671,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
         private async Task RebalanceColumnAsync(Guid columnId, string position)
         {
+            var column = await _context.ColumnDefinitions
+                .FirstOrDefaultAsync(c => c.Id == columnId);
+            
             var bucket = _lexorankService.GetBucket(position);
             var nextBucket = _lexorankService.GetNextBucket(bucket);
 
@@ -690,6 +693,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"board-{column!.BoardId}")
+                .SendAsync("TasksRebalanced", new
+                {
+                    columnId,
+                    tasks = allTasksInColumn.Select(t => new { t.Id, t.Position })
+                });
         }
     }
 }

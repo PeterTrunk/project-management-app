@@ -1,6 +1,8 @@
-﻿using ProjectManager.API.Data;
-using ProjectManager.API.DTOs.Boards;
+﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Data;
+using ProjectManager.API.DTOs.Boards;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Services.BoardService
@@ -8,10 +10,12 @@ namespace ProjectManager.API.Services.BoardService
     public class BoardService : IBoardService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public BoardService(AppDbContext context)
+        public BoardService(AppDbContext context, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
         public async Task<BoardResponseDto> CreateBoardAsync(Guid projectId, CreateBoardDto dto)
         {
@@ -66,6 +70,14 @@ namespace ProjectManager.API.Services.BoardService
             _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("BoardCreated", new
+                {
+                    board.Id,
+                    board.Name,
+                    board.IsDefault
+                });
 
             var response = new BoardResponseDto
             {
@@ -92,6 +104,9 @@ namespace ProjectManager.API.Services.BoardService
             
             _context.Boards.Remove(board);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("BoardDeleted", new { boardId });
         }
 
         public async Task<List<BoardResponseDto>> GetBoardsAsync(Guid projectId)
@@ -146,6 +161,14 @@ namespace ProjectManager.API.Services.BoardService
             }
             
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("BoardUpdated", new
+                {
+                    boardId = board.Id,
+                    board.Name,
+                    board.IsDefault
+                });
 
             var response = new BoardResponseDto
             {
