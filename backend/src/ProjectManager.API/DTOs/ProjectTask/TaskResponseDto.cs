@@ -10,7 +10,7 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public Guid? ColumnId { get; set; }
         public Guid? SprintId { get; set; }
         public List<string> AssigneeNames { get; set; } = new List<string>();
-        public List<string> LabelNames { get; set; } = new List<string>();
+        public List<string> LabelIds { get; set; } = new List<string>();
         public List<string> CommitLinks { get; set; } = new List<string>();
         public List<string> PrLinks { get; set; } = new List<string>();
         public List<AttachmentDto> Attachments { get; set; } = new List<AttachmentDto>();

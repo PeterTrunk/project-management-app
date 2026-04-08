@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Labels;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Services.LabelService
@@ -8,10 +10,12 @@ namespace ProjectManager.API.Services.LabelService
     public class LabelService : ILabelService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public LabelService(AppDbContext context)
+        public LabelService(AppDbContext context, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task AddLabelToTaskAsync(Guid projectId, Guid taskId, Guid labelId)
@@ -35,6 +39,9 @@ namespace ProjectManager.API.Services.LabelService
             };
             _context.LabelTasks.Add(labelTask);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("TaskLabelAdded", new { taskId });
         }
 
         public async Task<LabelResponseDto> CreateLabelAsync(Guid projectId, CreateLabelDto dto)
@@ -51,6 +58,9 @@ namespace ProjectManager.API.Services.LabelService
             };
             _context.Labels.Add(label);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("LabelCreated", new { label.Id, label.Name, label.Color });
 
             var response = new LabelResponseDto
             {
@@ -74,6 +84,9 @@ namespace ProjectManager.API.Services.LabelService
 
             _context.Labels.Remove(label);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("LabelDeleted", new { labelId });
         }
 
         public async Task<List<LabelResponseDto>> GetLabelsAsync(Guid projectId)
@@ -110,7 +123,9 @@ namespace ProjectManager.API.Services.LabelService
                 throw new Exception("Ez a cimke nincs ehhez a feladathoz rendelve!");
 
             _context.LabelTasks.Remove(labelTask);
-            await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("TaskLabelRemoved", new { taskId });
         }
     }
 }

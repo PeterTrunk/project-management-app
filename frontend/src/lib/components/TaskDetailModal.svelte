@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { setActiveTask } from '../stores/taskStore';
+    import { setActiveTask, taskStore } from '../stores/taskStore';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
@@ -27,7 +27,10 @@
     $: sprintName = task.sprintId
         ? (sprints.find(s => s.id === task.sprintId)?.name ?? 'Ismeretlen sprint')
         : null;
-    
+
+    $: currentTask = $taskStore.activeTask ?? task;
+
+    $: currentLabelIds = currentTask.labelIds;
 
     export let projectId: string;
     export let allLabels: LabelResponse[] = [];
@@ -65,6 +68,9 @@
 
     onMount(async () => {
         modalRef?.focus();
+        
+        const data = await getLabelsAsync(projectId);
+        setLabels(data);
     });
     
     let isConfirmOpen = false;
@@ -127,22 +133,33 @@
         }
     }
 
+    let isUpdatingLabels = false;
+
     async function handleAddLabel(labelId: string) {
         try {
+            isUpdatingLabels = true;
             await addLabelToTaskAsync(projectId, task.id, labelId);
-            task = { ...task, labelNames: [...task.labelNames, allLabels.find(l => l.id === labelId)!.name] };
+            const updated = { ...task, labelIds: [...task.labelIds, labelId] };
+            setActiveTask(updated);
+            task = updated;
         } catch (e) {
-            console.error('Hiba a label hozzáadásakor!');
+            console.error('Hiba:', e);
+        } finally {
+            isUpdatingLabels = false;
         }
     }
 
     async function handleRemoveLabel(labelId: string) {
         try {
+            isUpdatingLabels = true;
             await removeLabelFromTaskAsync(projectId, task.id, labelId);
-            const label = allLabels.find(l => l.id === labelId);
-            task = { ...task, labelNames: task.labelNames.filter(n => n !== label?.name) };
+            const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
+            setActiveTask(updated);
+            task = updated;
         } catch (e) {
-            console.error('Hiba a label eltávolításakor!');
+            console.error('Hiba:', e);
+        } finally {
+            isUpdatingLabels = false;
         }
     }
 
@@ -212,13 +229,11 @@
                 <div class="section">
                     <h3>Labelek</h3>
                     <div class="labels-row">
-                        {#if task.labelNames.length > 0}
-                            {#each task.labelNames as labelName}
-                                {@const label = allLabels.find(l => l.name === labelName)}
+                        {#if task.labelIds.length > 0}
+                            {#each task.labelIds as labelId}
+                                {@const label = allLabels.find(l => l.id === labelId)}
                                 {#if label}
                                     <LabelCard {label} showDelete={false} />
-                                {:else}
-                                    <span class="tag">{labelName}</span>
                                 {/if}
                             {/each}
                         {:else}
@@ -263,7 +278,7 @@
                         {#each allLabels as label}
                             <div class="label-select-row">
                                 <LabelCard {label} showDelete={false} />
-                                {#if task.labelNames.includes(label.name)}
+                                {#if currentTask.labelIds.includes(label.id)}
                                     <button class="label-remove-btn" on:click={() => handleRemoveLabel(label.id)}>✕</button>
                                 {:else}
                                     <button class="label-add-btn" on:click={() => handleAddLabel(label.id)}>+</button>

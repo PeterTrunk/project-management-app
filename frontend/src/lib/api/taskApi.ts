@@ -44,7 +44,7 @@ export interface TaskResponse {
     estimateInMinutes: number | null;
     dueDate: Date | null;
     assigneeNames: string[];
-    labelNames: string[];
+    labelIds: string[];
     commitLinks: string[];
     prLinks: string[];
     createdByName: string;
@@ -53,7 +53,10 @@ export interface TaskResponse {
     updatedAt: Date;
 }
 
-
+export async function getTaskByIdAsync(projectId: string, taskId: string): Promise<TaskResponse> {
+    const response = await apiClient.get('/projects/' + projectId + '/tasks/' + taskId);
+    return response.data;
+}
 
 export async function getTasksAsync(projectId: string, boardId?: string, sprintId?: string): Promise<TaskResponse[]> {
     const response = await apiClient.get('/projects/' + projectId + '/tasks', {

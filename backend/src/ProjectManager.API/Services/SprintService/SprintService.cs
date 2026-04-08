@@ -269,7 +269,7 @@ namespace ProjectManager.API.Services.SprintService
                 .Include(ta => ta.User)
                 .ToListAsync();
 
-            var labelTasks = await _context.LabelTasks
+            var labels = await _context.LabelTasks
                 .Where(lt => taskIds.Contains(lt.TaskId))
                 .Include(lt => lt.Label)
                 .ToListAsync();
@@ -298,7 +298,7 @@ namespace ProjectManager.API.Services.SprintService
                     .Where(ta => ta.TaskId == t.Id)
                     .Select(ta => ta.User.DisplayName)
                     .ToList(),
-                LabelNames = labelTasks
+                LabelIds = labels
                     .Where(lt => lt.TaskId == t.Id)
                     .Select(lt => lt.Label.Name)
                     .ToList(),

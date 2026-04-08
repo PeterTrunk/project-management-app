@@ -75,16 +75,6 @@
             return;
         }
         try {
-            /* console.log('Küldött adat:', {
-                columnId: isBacklogMode ? null : columnId,
-                boardId: isBacklogMode ? null : boardId,
-                sprintId: isBacklogMode ? null : (activeSprintId || null),
-                title,
-                description,
-                priority: priority !== '' ? priority : null,
-                estimateInMinutes,
-                dueDate: dueDate ? new Date(dueDate) : null
-            }); */
             const response = await createTaskAsync(projectId, {
                 columnId: isBacklogMode ? null : columnId,
                 boardId: isBacklogMode ? null : boardId,

@@ -94,7 +94,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeNames = new List<string>(),
-                LabelNames = new List<string>(),
+                LabelIds = new List<string>(),
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
                 CreatedByName = user.DisplayName,
@@ -156,7 +156,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Include(ta => ta.User)
                 .ToListAsync();
 
-            var labelTasks = await _context.LabelTasks
+            var labels = await _context.LabelTasks
                 .Where(lt => taskIds.Contains(lt.TaskId))
                 .Include(lt => lt.Label)
                 .ToListAsync();
@@ -186,9 +186,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Where(ta => ta.TaskId == t.Id)
                     .Select(ta => ta.User.DisplayName)
                     .ToList(),
-                LabelNames = labelTasks
+                LabelIds = labels
                     .Where(lt => lt.TaskId == t.Id)
-                    .Select(lt => lt.Label.Name)
+                    .Select(lt => lt.LabelId.ToString())
                     .ToList(),
                 CommitLinks = commitLinks
                     .Where(cl => cl.TaskId == t.Id)
@@ -223,13 +223,16 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }).ToList();
         }
 
-        public async Task<TaskResponseDto> GetTaskByIdAsync(Guid taskId, Guid projectId)
+        public async Task<TaskResponseDto> GetTaskByIdAsync(Guid projectId, Guid taskId)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
+            var task = await _context.ProjectTasks
+                .Include(t => t.CreatedByUser)
+                .Include(t => t.ColumnDefinition)
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
                 throw new Exception("Feladat nem található");
 
@@ -243,10 +246,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(ta => ta.User.DisplayName)
                 .ToListAsync();
 
-            var labelNames = await _context.LabelTasks
+            var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Include(lt => lt.Label)
-                .Select(lt => lt.Label.Name)
+                .Select(lt => lt.LabelId.ToString())
                 .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
@@ -277,15 +279,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeNames = assigneeNames,
-                LabelNames = labelNames,
+                LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
                 Attachments = attachments,
-                CreatedByName = user.DisplayName,
+                CreatedByName = task.CreatedByUser?.DisplayName ?? "Ismeretlen",
                 TaskKey = task.TaskKey,
                 Title = task.Title,
                 Description = task.Description,
-                Status = task.ColumnDefinition.MapsToStatus,
+                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
                 Priority = task.Priority,
                 Position = task.Position,
                 EstimateInMinutes = task.EstimateInMinutes,
@@ -417,11 +419,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(ta => ta.User.DisplayName)
                 .ToListAsync();
 
-            var labelNames = await _context.LabelTasks
-                .Where(lt => lt.TaskId == task.Id)
-                .Include(lt => lt.Label)
-                .Select(lt => lt.Label.Name)
-                .ToListAsync();
+            var labels = await _context.LabelTasks
+                 .Where(lt => lt.TaskId == task.Id)
+                 .Select(lt => lt.LabelId.ToString())
+                 .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
                 .Where(cl => cl.TaskId == task.Id)
@@ -441,7 +442,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeNames = assigneeNames,
-                LabelNames = labelNames,
+                LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
                 CreatedByName = task.CreatedByUser.DisplayName,
@@ -496,10 +497,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(ta => ta.User.DisplayName)
                 .ToListAsync();
 
-            var labelNames = await _context.LabelTasks
+            var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Include(lt => lt.Label)
-                .Select(lt => lt.Label.Name)
+                .Select(lt => lt.LabelId.ToString())
                 .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
@@ -520,7 +520,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeNames = assigneeNames,
-                LabelNames = labelNames,
+                LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
                 CreatedByName = user.DisplayName,
@@ -636,10 +636,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(ta => ta.User.DisplayName)
                 .ToListAsync();
 
-            var labelNames = await _context.LabelTasks
+            var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Include(lt => lt.Label)
-                .Select(lt => lt.Label.Name)
+                .Select(lt => lt.LabelId.ToString())
                 .ToListAsync();
 
             return new TaskResponseDto
@@ -650,7 +649,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeNames = assigneeNames,
-                LabelNames = labelNames,
+                LabelIds = labels,
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
                 CreatedByName = task.CreatedByUser.DisplayName,

@@ -6,7 +6,6 @@
     export let onDelete: (labelId: string) => void = () => {};
     export let showDelete: boolean = true;
     export let small: boolean = false;
-    let isConfirmOpen = false;
 
 </script>
 

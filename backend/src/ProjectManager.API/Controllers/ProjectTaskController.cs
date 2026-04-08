@@ -55,11 +55,11 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectViewer")]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<TaskResponseDto>> GetTaskByIdAsync(Guid taskId, Guid projectId)
+        public async Task<ActionResult<TaskResponseDto>> GetTaskByIdAsync(Guid projectId, Guid taskId)
         {
             try
             {
-                var response = await _taskService.GetTaskByIdAsync(taskId, projectId);
+                var response = await _taskService.GetTaskByIdAsync(projectId, taskId);
                 return Ok(response);
             }
             catch (Exception ex)

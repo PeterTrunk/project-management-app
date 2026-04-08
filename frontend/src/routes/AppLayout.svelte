@@ -1,4 +1,3 @@
-
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { signalRService } from '../lib/services/signalRService';
@@ -9,6 +8,8 @@
     import { getProjectsAsync } from '../lib/api/projectApi';
     import { projectStore, setProjects, setActiveProject } from '../lib/stores/projectStore';
     import type { ProjectResponse } from '../lib/api/projectApi';
+    import { getLabelsAsync } from '../lib/api/labelApi';
+    import { setLabels } from '../lib/stores/projectStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -26,10 +27,45 @@
     onMount(async () => {
         if (token) {
             await signalRService.connect(token);
+
+            if (activeProject?.id) {
+                const labels = await getLabelsAsync(activeProject.id);
+                setLabels(labels);
+            }
+
+            signalRService.on('LabelCreated', async () => {
+                if (currentProjectId) {
+                    await loadLabels(currentProjectId);
+                }
+            });
+
+            signalRService.on('LabelDeleted', async () => {
+                if (currentProjectId) {
+                    await loadLabels(currentProjectId);
+                }
+            });
+
+            signalRService.on('ProjectUpdated', async () => {
+                const data = await getProjectsAsync();
+                setProjects(data);
+                // activeProject frissítése
+                if (activeProject?.id) {
+                    const updated = data.find(p => p.id === activeProject!.id);
+                    if (updated) setActiveProject(updated);
+                }
+            });
         }
     });
 
+    async function loadLabels(projectId: string) {
+        const labels = await getLabelsAsync(projectId);
+        setLabels(labels);
+    }
+
     onDestroy(async () => {
+        signalRService.off('LabelCreated');
+        signalRService.off('LabelDeleted');
+        signalRService.off('ProjectUpdated');
         await signalRService.disconnect();
     });
 
@@ -67,14 +103,19 @@
 
     let projects: ProjectResponse[] = [];
     let activeProject: ProjectResponse | null = null;
+    let currentProjectId = '';
 
     // projectStore figyelése
     projectStore.subscribe(state => {
         projects = state.projects;
         activeProject = state.activeProject;
 
-        if (state.activeProject?.id) {
-            signalRService.joinProject(state.activeProject.id);
+        if (state.activeProject?.id && state.activeProject.id !== currentProjectId) {
+            currentProjectId = state.activeProject.id;
+
+            signalRService.joinProject(state.activeProject.id).catch(console.error);
+
+            loadLabels(state.activeProject.id).catch(console.error);
         }
     });
 
@@ -166,20 +207,19 @@
             {/if}
         </div>
     </div>
-
-    <!--Modals-->
-    {#if isProjectCreationOpen}
-    <CreateProjectModal 
-        bind:isProjectCreationOpen={isProjectCreationOpen}
-        onClose={loadProjects}
-    />
-    {/if}
-    {#if isUserSettingsOpen}
-    <UserSettingsModal 
-        bind:isUserSettingsOpen={isUserSettingsOpen}
-    />
-    {/if}
 </div>
+<!--Modals-->
+{#if isProjectCreationOpen}
+<CreateProjectModal 
+    bind:isProjectCreationOpen={isProjectCreationOpen}
+    onClose={loadProjects}
+/>
+{/if}
+{#if isUserSettingsOpen}
+<UserSettingsModal 
+    bind:isUserSettingsOpen={isUserSettingsOpen}
+/>
+{/if}
 
 <style>
     :global(body){

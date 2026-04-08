@@ -27,10 +27,10 @@
         {/if}
     </div>
     <p class="task-title">{task.title}</p>
-    {#if task.labelNames.length > 0}
+    {#if task.labelIds.length > 0}
         <div class="labels-row">
-            {#each task.labelNames as labelName}
-                {@const label = allLabels.find(l => l.name === labelName)}
+            {#each task.labelIds as labelId}
+                {@const label = allLabels.find(l => l.id === labelId)}
                 {#if label}
                     <LabelCard {label} showDelete={false} small={true} />
                 {/if}

@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Labels;
 using ProjectManager.API.Services.LabelService;
+using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {

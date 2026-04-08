@@ -16,6 +16,7 @@
     import { sprintStore, setSprints } from '../stores/sprintStore';
     import { getSprintsAsync } from '../api/sprintApi';
     import type { SprintResponse } from '../api/sprintApi';
+    import { getTaskByIdAsync } from '../api/taskApi';
 
     import ColumnCard from './ColumnCard.svelte';
 
@@ -260,6 +261,36 @@
         signalRService.off('BoardUpdated');
         signalRService.off('BoardDeleted');
         signalRService.off('SprintUpdated');
+        signalRService.off('TaskLabelAdded');
+        signalRService.off('TaskLabelRemoved');
+
+        signalRService.on('TaskLabelAdded', async (data) => {
+            let activeTask: TaskResponse | null = null;
+            taskStore.subscribe(state => { activeTask = state.activeTask; })();
+            
+            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
+            
+            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => { currentTasks = state.tasks; })();
+            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
+            setTasks([...updated]);
+            distributeTasks([...updated]);
+        });
+
+        signalRService.on('TaskLabelRemoved', async (data) => {
+            let activeTask: TaskResponse | null = null;
+            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
+            
+            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
+            
+            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => { currentTasks = state.tasks; })();
+            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
+            setTasks([...updated]);
+            distributeTasks([...updated]);
+        });
 
         signalRService.on('SprintUpdated', async (data) => {
             // Sprint store frissítése
@@ -392,6 +423,8 @@
         signalRService.off('BoardUpdated');
         signalRService.off('BoardDeleted');
         signalRService.off('SprintUpdated');
+        signalRService.off('TaskLabelAdded');
+        signalRService.off('TaskLabelRemoved');
     });
  
     function handleTaskClick(task: TaskResponse) {
@@ -476,7 +509,9 @@
         boardId={activeBoard?.id ?? ''}
         onClose={async () => {
             const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
-            setTasks(_tasks);
+            const filtered = _tasks.filter(t => !t.closedAt);
+            setTasks(filtered);
+            distributeTasks(filtered);
         }}
     />
 {/if}
@@ -488,7 +523,9 @@
         onClose={async () => {
             isTaskDetailOpen = false;
             const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
-            setTasks(_tasks);
+            const filtered = _tasks.filter(t => !t.closedAt);
+            setTasks(filtered);
+            distributeTasks(filtered);
             setActiveTask(null);
         }}
     />
