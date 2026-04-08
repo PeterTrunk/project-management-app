@@ -71,7 +71,7 @@
         
         {#if task.labelIds.length > 0}
             <div class="labels-row">
-                {#each task.labelIds as labelId}
+                {#each task.labelIds as labelId (labelId)}
                     {@const label = allLabels.find(l => l.id === labelId)}
                     {#if label}
                         <LabelCard {label} showDelete={false} small={true} />
