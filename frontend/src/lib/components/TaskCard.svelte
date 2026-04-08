@@ -29,7 +29,8 @@
     <p class="task-title">{task.title}</p>
     {#if task.labelIds.length > 0}
         <div class="labels-row">
-            {#each task.labelIds as labelId}
+            <!-- {console.log(JSON.stringify(task.labelIds))} -->    
+            {#each task.labelIds as labelId (labelId)}
                 {@const label = allLabels.find(l => l.id === labelId)}
                 {#if label}
                     <LabelCard {label} showDelete={false} small={true} />

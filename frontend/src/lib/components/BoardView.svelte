@@ -265,31 +265,19 @@
         signalRService.off('TaskLabelRemoved');
 
         signalRService.on('TaskLabelAdded', async (data) => {
-            let activeTask: TaskResponse | null = null;
-            taskStore.subscribe(state => { activeTask = state.activeTask; })();
-            
-            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
-            
-            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => { currentTasks = state.tasks; })();
-            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
-            setTasks([...updated]);
-            distributeTasks([...updated]);
+            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined);
+            const filtered = _tasks.filter(t => !t.closedAt);
+            setTasks([...filtered]);
+            distributeTasks([...filtered]);
+            console.log('TaskLabelAdded ' + data);
         });
 
         signalRService.on('TaskLabelRemoved', async (data) => {
-            let activeTask: TaskResponse | null = null;
-            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
-            
-            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
-            
-            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => { currentTasks = state.tasks; })();
-            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
-            setTasks([...updated]);
-            distributeTasks([...updated]);
+            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined);
+            const filtered = _tasks.filter(t => !t.closedAt);
+            setTasks([...filtered]);
+            distributeTasks([...filtered]);
+            console.log('TaskLabelRemoved ' + data);
         });
 
         signalRService.on('SprintUpdated', async (data) => {
