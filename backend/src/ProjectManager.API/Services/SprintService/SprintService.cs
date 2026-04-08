@@ -178,6 +178,14 @@ namespace ProjectManager.API.Services.SprintService
             };
             _context.Sprints.Add(sprint);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintCreated", new
+                {
+                    sprint.Id,
+                    sprint.Name,
+                    sprint.State
+                });
 
             var response = new SprintResponseDto
             {

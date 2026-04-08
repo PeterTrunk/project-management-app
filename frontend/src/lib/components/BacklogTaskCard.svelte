@@ -33,6 +33,7 @@
             return;
         }
         onAssignToSprint(task.id, selectedSprintId);
+        isMenuOpen = false;
     }
     
     async function handleAssignToBoard() {

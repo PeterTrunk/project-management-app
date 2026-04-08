@@ -69,12 +69,12 @@
     let activeProject: ProjectResponse | null = null;
 
     // projectStore figyelése
-    projectStore.subscribe(async state => {
+    projectStore.subscribe(state => {
         projects = state.projects;
         activeProject = state.activeProject;
 
         if (state.activeProject?.id) {
-            await signalRService.joinProject(state.activeProject.id);
+            signalRService.joinProject(state.activeProject.id);
         }
     });
 

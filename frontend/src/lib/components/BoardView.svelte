@@ -217,14 +217,27 @@
             const cols = await getColumnsAsync(activeProjectId, board.id);
             const sortedCols = cols.sort((a, b) => a.position - b.position);
             setColumns(sortedCols);
+
+            // Friss sprint adat lekérése
+            let currentActiveSprint: SprintResponse | null = null;
+            const unsubscribe = sprintStore.subscribe(state => {
+                currentActiveSprint = state.activeSprint;
+            });
+            unsubscribe();
+
+            const activeSprintId = (currentActiveSprint as SprintResponse | null)?.id ?? undefined;
             
             // Csak aktív sprint taskjai ha van aktív sprint
             const _tasks = await getTasksAsync(
                 activeProjectId, 
                 board.id,
-                activeSprint?.id ?? undefined, //  sprintId szűrés
+                activeSprintId ?? undefined, //  sprintId szűrés
             );
-            setTasks(_tasks);
+
+            //Lezárt taskok kiszűrése.
+            const filteredTasks = _tasks.filter(t => !t.closedAt);
+            setTasks(filteredTasks);
+
         } catch (e) {
             console.error('Hiba az oszlopok/taskok lekérésekor!');
         }
@@ -246,7 +259,19 @@
         signalRService.off('BoardCreated');
         signalRService.off('BoardUpdated');
         signalRService.off('BoardDeleted');
+        signalRService.off('SprintUpdated');
 
+        signalRService.on('SprintUpdated', async (data) => {
+            // Sprint store frissítése
+            const sprintData = await getSprintsAsync(activeProjectId);
+            setSprints(sprintData);
+            
+            // Taskok újratöltése az új aktív sprint alapján
+            if (activeBoard) {
+                await loadBoard(activeBoard);
+            }
+        });
+        
         signalRService.on('TaskMoved', (data) => {
             // Store közvetlen olvasása
             let currentTasks: TaskResponse[] = [];
@@ -331,6 +356,13 @@
         signalRService.on('BoardUpdated', async () => {
             const data = await getBoardsAsync(activeProjectId);
             setBoards(data);
+            
+            if ( data.find(b => b.id === activeBoard?.id) ) {
+                const updatedBoard = data.find(b=> b.id === activeBoard?.id);
+                if (updatedBoard) {
+                    setActiveBoard(updatedBoard);
+                }
+            }
         });
 
         signalRService.on('BoardDeleted', async () => {
@@ -359,8 +391,9 @@
         signalRService.off('BoardCreated');
         signalRService.off('BoardUpdated');
         signalRService.off('BoardDeleted');
+        signalRService.off('SprintUpdated');
     });
-
+ 
     function handleTaskClick(task: TaskResponse) {
         setActiveTask(task);
         isTaskDetailOpen = true;

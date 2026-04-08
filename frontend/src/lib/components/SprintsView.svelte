@@ -70,6 +70,11 @@
         signalRService.off('TaskCreated');
         signalRService.off('TaskDeleted');
         signalRService.off('SprintDeleted');
+        signalRService.off('SprintCreated');
+
+        signalRService.on('SprintCreated', async () => {
+            await loadAll();
+        });
 
         signalRService.on('SprintDeleted', async () => {
             await loadAll();
@@ -98,6 +103,7 @@
         signalRService.off('TaskCreated');
         signalRService.off('TaskDeleted');
         signalRService.off('SprintDeleted');
+        signalRService.off('SprintCreated');
     });
 
     async function refreshTasks() {
