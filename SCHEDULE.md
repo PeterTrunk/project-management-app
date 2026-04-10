@@ -371,9 +371,163 @@ implementáció el nem készül.
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
 
+### Elvégzett munkák
+
+**Backend**
+- ProjectHub implementáció: JoinProject, LeaveProject, JoinBoard, LeaveBoard metódusok
+- JWT WebSocket token kezelés Program.cs-ben (OnMessageReceived event)
+- IHubContext<ProjectHub> injection a következő service-ekbe:
+  - TaskService, SprintService, CommentService, LabelService, ProjectService
+  - ColumnService, BoardService
+
+**Broadcastolt események:**
+
+| Esemény | Trigger | Csoport |
+|---------|---------|---------|
+| TaskMoved | MoveTaskAsync | board-{boardId} |
+| TaskCreated | CreateTaskAsync | project-{projectId} |
+| TaskUpdated | UpdateTaskAsync, AssignTaskToBoardAsync, AssignTaskToSprintAsync | project-{projectId} |
+| TaskDeleted | DeleteTaskAsync | project-{projectId} |
+| TasksRebalanced | RebalanceColumnAsync | board-{boardId} |
+| TaskLabelAdded | AddLabelToTaskAsync | project-{projectId} |
+| TaskLabelRemoved | RemoveLabelFromTaskAsync | project-{projectId} |
+| ColumnCreated | CreateColumnAsync | board-{boardId} |
+| ColumnUpdated | UpdateColumnAsync | board-{boardId} |
+| ColumnDeleted | DeleteColumnAsync | board-{boardId} |
+| ColumnsReordered | OrderColumnsAsync | board-{boardId} |
+| BoardCreated | CreateBoardAsync | project-{projectId} |
+| BoardUpdated | UpdateBoardAsync | project-{projectId} |
+| BoardDeleted | DeleteBoardAsync | project-{projectId} |
+| SprintCreated | CreateSprintAsync | project-{projectId} |
+| SprintUpdated | ActivateSprintAsync, PlanSprintAsync, CompleteSprintAsync | project-{projectId} |
+| SprintDeleted | DeleteSprintAsync | project-{projectId} |
+| CommentAdded | CreateCommentAsync | project-{projectId} |
+| CommentDeleted | DeleteCommentAsync | project-{projectId} |
+| LabelCreated | CreateLabelAsync | project-{projectId} |
+| LabelDeleted | DeleteLabelAsync | project-{projectId} |
+| ProjectUpdated | UpdateProjectAsync | project-{projectId} |
+| ProjectArchived | ArchiveProjectAsync | project-{projectId} |
+| ProjectUnarchived | UnarchiveProjectAsync | project-{projectId} |
+
+**Frontend**
+- signalRService.ts: connect, disconnect, joinProject, leaveProject, joinBoard, leaveBoard, on, off, getConnectionId
+- @microsoft/signalr npm csomag
+- AppLayout.svelte: connect on mount, joinProject on active project change
+- Komponens szintű eseménykezelők:
+  - BoardView.svelte: Task, Column, Board, Sprint, Label események
+  - SprintsView.svelte: Sprint, Task, Label események
+  - CommentSection.svelte: Comment események
+  - AppLayout.svelte: Label, Project események
+
+**Technikai döntések**
+- JWT token WebSocket handshake-nél query string-en keresztül kerül átadásra
+- Room rendszer: project-{id} és board-{id} csoportok
+- Komponens szintű subscription: minden komponens saját maga iratkozik fel/le
+- TaskLabelAdded/Removed: ha a TaskDetailModal nyitva van az adott taskra -> kihagyjuk a store frissítést
+- LabelIds használata LabelNames helyett a TaskResponseDto-ban (pontosabb azonosítás)
+- closedAt szűrés: BoardView csak nem lezárt taskokat jelenít meg
+
+**Ismert limitációk**
+- Notification rendszer (in-app értesítési bell) nincs implementálva
+- Komponens szintű subscription miatt ha egy nézet nincs megnyitva akkor az esemény nem kerül feldolgozásra
+
+### Tervezett fejlesztések
+
+**Activity Log alapú Notification rendszer**
+
+A jelenlegi komponens szintű SignalR megközelítés megtartása mellett
+egy Activity Log rendszer kerül bevezetésre amely:
+
+1. Perzisztálja a projekt eseményeket az adatbázisban
+2. Notification bell UI komponenst biztosít az AppLayout-ban
+3. Egyetlen SignalR eseményre épül: ActivityCreated
+
+**Működési elv:**
+Service metódus fut (pl. CreateTaskAsync)
+-> Activity bejegyzés DB-be írva
+-> ActivityCreated broadcast -> project-{projectId} csoport
+-> AppLayout notification bell frissül
+-> Team fül Recent Activity feed frissül
+
+**Tervezett Activity típusok:**
+- TaskCreated, TaskUpdated, TaskDeleted
+- SprintCreated, SprintActivated, SprintCompleted
+- CommentAdded
+- LabelCreated
+- ProjectUpdated, ProjectArchived
+- BoardCreated
+
+**Előnyök a centralizált SignalR megközelítéssel szemben:**
+- Perzisztens értesítések (DB-ben tárolva)
+- Egyetlen SignalR esemény az AppLayout-ban
+- Nem igényel komponens szintű refaktort
+- Recent Activity feed és Notification bell ugyanazt az adatot használja
+- Olvasott/olvasatlan állapot kezelés lehetséges
+
+**Implementáció a Team fül fejlesztésekor kerül sorra**
+
 ## Sprint Management & Team Management
 Sprint lifecycle API: creation, activation, closing. Sprint-to-task assignment. Constraint enforcement (one active sprint per project). Sprint manager interface with sprint status transitions (Open - Active - Closed). 
 Team management interface: member list, role display, member invitation (invite link). Permission-based UI rendering based on user roles.
+
+**Megjegyzés:** A Sprint Management frontend és backend implementációja 
+a "Kanban Board & Task Management" fejezetben került megvalósításra, 
+mivel szorosan kapcsolódik a task életciklushoz és a board kezeléshez.
+
+Az ott elvégzett Sprint munkák összefoglalója:
+- Sprint CRUD + státusz kezelés (Planning/Active/Completed)
+- Sprint aktiválás/visszatervezés/lezárás logika
+- Task életciklus Sprint kontextusban (CompletedAt, ClosedAt)
+- Sprint UI: SprintsView, SprintCard, ProjectBacklog, BacklogTaskCard
+- CompleteSprintModal, CreateSprintModal, UpdateSprintModal
+
+### Tervezett technikai fejlesztések
+
+#### CurrentUserService — Egységes felhasználó azonosítás
+
+Jelenleg a controllerekben egyedi megoldások vannak a bejelentkezett felhasználó azonosítására.
+
+Tervezett egységes megoldás interface + service class-al.
+**Előnyök:**
+- Nem kell callerId paramétert átadni Controller -> Service hívásokban
+- Service-ekbe közvetlenül injektálható
+- Activity Log implementációhoz szükséges
+- Egységes megoldás az egész projektben
+- Tesztelhető
+
+**Implementáció az Activity Log rendszerrel együtt kerül sorra**
+
+#### ProjectNotArchivedFilter — Archivált projekt védelem
+
+Jelenleg az archivált projektek nem tiltják meg a műveletek elvégzését
+— csak a státusz jelzésére szolgál.
+
+Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
+- Automatikusan ellenőrzi hogy a projekt archivált-e
+- Ha archivált -> 403 Forbidden visszaadása
+- Alkalmazható controller osztály szinten vagy metódus szinten
+- Nem kell minden service metódusba külön ellenőrzés
+
+**Érintett controllerek:**
+- ProjectTaskController
+- ColumnDefinitionController
+- BoardController
+- SprintController
+- LabelController
+- CommentController
+
+**Kivételek (ahol archivált projekten is engedélyezett):**
+- GET metódusok — olvasás archivált projekten is megengedett
+- UnarchiveProjectAsync — dearchiválás nyilván engedélyezett
+- ProjectController GET végpontjai
+
+**Implementáció a Team Management fejlesztésekor kerül sorra**
+
+### Elvégzendő ebben a fejezetben:
+- Team Management UI: tagok listája, szerepkörök megjelenítése
+- Tag meghívás (meghívó link generálás)
+- Recent Activity feed (Activity Log rendszer alapjai)
+- Jogosultság alapú UI renderelés (szerepkör alapján)
 
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
