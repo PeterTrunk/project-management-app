@@ -14,6 +14,7 @@ using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
+using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
@@ -135,6 +136,8 @@ builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
+
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddScoped<ProjectNotArchivedFilter>();
 

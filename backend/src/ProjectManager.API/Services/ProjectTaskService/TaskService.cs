@@ -6,6 +6,7 @@ using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LexorankService;
 
 
@@ -15,21 +16,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
     {
         private readonly AppDbContext _context;
         private readonly ILexorankService _lexorankService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
 
-        public TaskService(AppDbContext context, ILexorankService lexorankService, IHubContext<ProjectHub> hubContext)
+        public TaskService(AppDbContext context, ILexorankService lexorankService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _lexorankService = lexorankService;
+            _currentUserService = currentUserService;
             _hubContext = hubContext;
         }
         
-        public async Task<TaskResponseDto> CreateTaskAsync(Guid createdById, Guid projectId, CreateTaskDto dto)
+        public async Task<TaskResponseDto> CreateTaskAsync(Guid projectId, CreateTaskDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
                 throw new Exception("Projekt nem található");
 
+            var createdById = _currentUserService.UserId;
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == createdById);
             if (user == null)
                 throw new Exception("Felhasználó nem található!");

@@ -4,17 +4,20 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.ProjectService
 {
     public class ProjectService : IProjectService
     {
         private readonly AppDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
 
-        public ProjectService(AppDbContext context, IHubContext<ProjectHub> hubContext)
+        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _currentUserService = currentUserService;
             _hubContext = hubContext;
         }
 
@@ -51,12 +54,13 @@ namespace ProjectManager.API.Services.ProjectService
                 .SendAsync("ProjectUnarchived", new { projectId });
         }
 
-        public async Task<ProjectResponseDto> CreateProjectAsync(Guid ownerId, CreateProjectDto dto)
+        public async Task<ProjectResponseDto> CreateProjectAsync(CreateProjectDto dto)
         {
             if (await _context.Projects.AnyAsync(p => p.ProjKey == dto.ProjKey))
                 throw new Exception("Projekt Key már létezik!");
 
-            User? owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == ownerId);
+            var ownerId = _currentUserService.UserId;
+            var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == ownerId);
             if (owner == null)
                 throw new Exception("Felhasználó nem található!");
             
@@ -157,8 +161,10 @@ namespace ProjectManager.API.Services.ProjectService
             return response;
         }
 
-        public async Task<List<ProjectResponseDto>> GetProjectsAsync(Guid userId)
+        public async Task<List<ProjectResponseDto>> GetProjectsAsync()
         {
+            var userId = _currentUserService.UserId;
+
             var projects = await _context.Projects
                 .Where(p => _context.ProjectMembers
                     .Any(pm => pm.ProjectId == p.Id && pm.UserId == userId))

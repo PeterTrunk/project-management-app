@@ -25,7 +25,7 @@ export interface ProjectResponse {
 
 export async function getProjectsAsync(): Promise<ProjectResponse[]> {
     const response = await apiClient.get('/project');
-    return response.data;  
+    return response.data;
 }
 
 export async function getProjectByIdAsync(id: string): Promise<ProjectResponse> {

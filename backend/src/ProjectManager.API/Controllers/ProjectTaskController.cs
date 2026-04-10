@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectTaskService;
-using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
@@ -26,8 +25,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _taskService.CreateTaskAsync(userId, projectId, dto);
+                var response = await _taskService.CreateTaskAsync(projectId, dto);
                 return Created(string.Empty, response);
             }
             catch (Exception ex)

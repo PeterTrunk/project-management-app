@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectService;
-using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
@@ -26,8 +25,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _projectservice.CreateProjectAsync(userId ,dto);
+                var response = await _projectservice.CreateProjectAsync(dto);
                 return Created(string.Empty ,response);
             }
             catch (Exception ex)
@@ -44,8 +42,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _projectservice.GetProjectsAsync(userId);
+                var response = await _projectservice.GetProjectsAsync();
                 return Ok(response);
             }
             catch (Exception ex)

@@ -4,21 +4,24 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Comments;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.CommentService
 {
     public class CommentService : ICommentService
     {
         private readonly AppDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
 
-        public CommentService(AppDbContext context, IHubContext<ProjectHub> hubContext)
+        public CommentService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _currentUserService = currentUserService;
             _hubContext = hubContext;
         }
 
-        public async Task<CommentResponseDto> CommentOnTaskAsync(Guid projectId, Guid taskId, Guid commenterId, CreateCommentDto dto)
+        public async Task<CommentResponseDto> CommentOnTaskAsync(Guid projectId, Guid taskId, CreateCommentDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
@@ -28,7 +31,8 @@ namespace ProjectManager.API.Services.CommentService
             if (task == null)
                 throw new Exception("Feladat nem található");
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == commenterId);
+            var userId = _currentUserService.UserId;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
@@ -66,7 +70,7 @@ namespace ProjectManager.API.Services.CommentService
             return response;
         }
 
-        public async Task DeleteCommentFromTaskAsync(Guid projectId, Guid taskId, Guid commentId, Guid callerId)
+        public async Task DeleteCommentFromTaskAsync(Guid projectId, Guid taskId, Guid commentId)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
@@ -80,6 +84,7 @@ namespace ProjectManager.API.Services.CommentService
             if (comment == null)
                 throw new Exception("Comment nem található");
 
+            var callerId = _currentUserService.UserId;
             if (comment.UserId != callerId)
                 throw new Exception("Csak a saját kommentedet törölheted!");
 

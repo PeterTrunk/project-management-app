@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Comments;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.CommentService;
-using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
@@ -29,7 +28,6 @@ namespace ProjectManager.API.Controllers
             {
                 var response = await _commentService.GetCommentsAsync(projectId, taskId);
                 return Ok(response);
-
             }
             catch (Exception ex)
             {
@@ -45,8 +43,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _commentService.CommentOnTaskAsync(projectId, taskId, userId, dto);
+                var response = await _commentService.CommentOnTaskAsync(projectId, taskId, dto);
                 return Ok(response);
             }
             catch (Exception ex)
@@ -63,8 +60,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                await _commentService.DeleteCommentFromTaskAsync(projectId, taskId, commentId, userId);
+                await _commentService.DeleteCommentFromTaskAsync(projectId, taskId, commentId);
                 return NoContent();
             }
             catch (Exception ex)

@@ -4,8 +4,8 @@ namespace ProjectManager.API.Services.ProjectService
 {
     public interface IProjectService
     {
-        Task<ProjectResponseDto> CreateProjectAsync(Guid ownerId, CreateProjectDto dto);
-        Task<List<ProjectResponseDto>> GetProjectsAsync(Guid userId);
+        Task<ProjectResponseDto> CreateProjectAsync(CreateProjectDto dto);
+        Task<List<ProjectResponseDto>> GetProjectsAsync();
         Task<ProjectResponseDto> GetProjectByIdAsync(Guid projectId);
         Task<ProjectResponseDto> UpdateProjectAsync(Guid projectId, UpdateProjectDto dto);
         Task ArchiveProjectAsync(Guid projectId);
