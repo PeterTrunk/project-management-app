@@ -1,12 +1,14 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Columns;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Model;
-using Microsoft.AspNetCore.Authorization;
 using ProjectManager.API.Services.ColumnService;
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("/api/projects/{projectId}/boards/{boardId}/columns")]
     public class ColumnDefinitionController : ControllerBase
     {

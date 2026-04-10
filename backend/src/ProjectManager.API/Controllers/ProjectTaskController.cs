@@ -1,12 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.ProjectTask;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectTaskService;
 using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("api/projects/{projectId}/tasks")]
     public class ProjectTaskController : ControllerBase
     {
@@ -38,7 +40,7 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectAdmin")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> DeleteTaskAsync(Guid taskId)
+        public async Task<ActionResult> DeleteTaskAsync(Guid projectId, Guid taskId)
         {
             try
             {
@@ -106,7 +108,7 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectMember")]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<TaskResponseDto>> UpdateTaskAsync(Guid taskId, [FromBody] UpdateTaskDto dto)
+        public async Task<ActionResult<TaskResponseDto>> UpdateTaskAsync(Guid projectId, Guid taskId, [FromBody] UpdateTaskDto dto)
         {
             try
             {

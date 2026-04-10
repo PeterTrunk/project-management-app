@@ -1,12 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Labels;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Services.LabelService;
 using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("api/projects/{projectId}/labels")]
     public class LabelController : ControllerBase
     {

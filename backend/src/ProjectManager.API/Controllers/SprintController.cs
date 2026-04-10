@@ -1,13 +1,15 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using ProjectManager.API.Services.SprintService;
-using Microsoft.AspNetCore.Authorization;
-using ProjectManager.API.DTOs.Sprints;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.ProjectTask;
+using ProjectManager.API.DTOs.Sprints;
+using ProjectManager.API.Filters;
+using ProjectManager.API.Services.SprintService;
 
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("api/projects/{projectId}/sprints")]
     public class SprintController : ControllerBase
     {

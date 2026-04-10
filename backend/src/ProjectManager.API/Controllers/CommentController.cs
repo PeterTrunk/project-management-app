@@ -1,12 +1,14 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Comments;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Services.CommentService;
+using System.Security.Claims;
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("api/projects/{projectId}/tasks/{taskId}/comments")]
     public class CommentController : ControllerBase
     {

@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
@@ -134,6 +135,8 @@ builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
+
+builder.Services.AddScoped<ProjectNotArchivedFilter>();
 
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 

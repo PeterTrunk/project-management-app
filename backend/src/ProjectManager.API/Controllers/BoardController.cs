@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Boards;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Services.BoardService;
 
 namespace ProjectManager.API.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(ProjectNotArchivedFilter))]
     [Route("/api/projects/{projectId}/boards")]
     public class BoardController : ControllerBase
     {

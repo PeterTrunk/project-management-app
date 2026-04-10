@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectManager.API.DTOs.Project;
+using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectService;
 using System.Security.Claims;
 
@@ -71,6 +72,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPut("{projectId}")]
+        [ServiceFilter(typeof(ProjectNotArchivedFilter))]
         [Authorize(Policy = "ProjectAdmin")]
         [ProducesResponseType(typeof(ProjectResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
