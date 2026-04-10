@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Services.ProjectService
@@ -8,10 +10,12 @@ namespace ProjectManager.API.Services.ProjectService
     public class ProjectService : IProjectService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public ProjectService(AppDbContext context)
+        public ProjectService(AppDbContext context, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task DeleteProjectAsync(Guid projectId)
@@ -30,6 +34,9 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található");
             project.IsArchived = true;
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("ProjectArchived", new { projectId });
         }
 
         public async Task UnarchiveProjectAsync(Guid projectId)
@@ -39,6 +46,9 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található!");
             project.IsArchived = false;
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("ProjectUnarchived", new { projectId });
         }
 
         public async Task<ProjectResponseDto> CreateProjectAsync(Guid ownerId, CreateProjectDto dto)
@@ -184,6 +194,14 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Tulajdonos nem található");
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("ProjectUpdated", new
+                {
+                    projectId,
+                    project.Name,
+                    project.Description
+                });
 
             var response = new ProjectResponseDto
             {

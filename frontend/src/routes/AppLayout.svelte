@@ -48,7 +48,24 @@
             signalRService.on('ProjectUpdated', async () => {
                 const data = await getProjectsAsync();
                 setProjects(data);
-                // activeProject frissítése
+                if (activeProject?.id) {
+                    const updated = data.find(p => p.id === activeProject!.id);
+                    if (updated) setActiveProject(updated);
+                }
+            });
+
+            signalRService.on('ProjectArchived', async () => {
+                const data = await getProjectsAsync();
+                setProjects(data);
+                if (activeProject?.id) {
+                    const updated = data.find(p => p.id === activeProject!.id);
+                    if (updated) setActiveProject(updated);
+                }
+            });
+
+            signalRService.on('ProjectUnarchived', async () => {
+                const data = await getProjectsAsync();
+                setProjects(data);
                 if (activeProject?.id) {
                     const updated = data.find(p => p.id === activeProject!.id);
                     if (updated) setActiveProject(updated);
@@ -66,6 +83,8 @@
         signalRService.off('LabelCreated');
         signalRService.off('LabelDeleted');
         signalRService.off('ProjectUpdated');
+        signalRService.off('ProjectArchived');
+        signalRService.off('ProjectUnarchived');
         await signalRService.disconnect();
     });
 
