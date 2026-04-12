@@ -121,6 +121,16 @@ namespace ProjectManager.API.Services.ProjectService
             };
             _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
 
+            var initSprint = new Sprint
+            {
+                ProjectId = project.Id,
+                Name = "Sprint 0",
+                Goal = "Created with project init.",
+                StartDate = DateTime.UtcNow,
+                State = "Active"
+            };
+            _context.Sprints.Add(initSprint);
+
             await _context.SaveChangesAsync();
             
             var response = new ProjectResponseDto
