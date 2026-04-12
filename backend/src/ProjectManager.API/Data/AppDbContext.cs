@@ -62,6 +62,7 @@ public class AppDbContext : DbContext
     public DbSet<PrLink> PrLinks => Set<PrLink>();
     public DbSet<ProjectCounter> ProjectCounters => Set<ProjectCounter>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ProjectInvite> ProjectInvites => Set<ProjectInvite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -686,6 +687,29 @@ public class AppDbContext : DbContext
                   .WithOne(p => p.ProjectCounter)
                   .HasForeignKey<ProjectCounter>(pc => pc.ProjectId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectInvite>(entity =>
+        {
+            entity.Property(i => i.Token)
+                  .HasMaxLength(64)
+                  .IsRequired();
+
+            entity.HasIndex(i => i.Token)
+                  .IsUnique();
+
+            entity.Property(i => i.CreatedAt)
+                  .IsRequired();
+
+            entity.HasOne(i => i.Project)
+                  .WithMany(p => p.Invites)
+                  .HasForeignKey(i => i.ProjectId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(i => i.CreatedBy)
+                  .WithMany()
+                  .HasForeignKey(i => i.CreatedById)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

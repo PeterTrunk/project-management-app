@@ -20,5 +20,6 @@ namespace ProjectManager.API.Model
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();
         public ICollection<Label> Labels { get; set; } = new List<Label>();
         public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
+        public ICollection<ProjectInvite> Invites { get; set; } = new List<ProjectInvite>();
     }
 }
