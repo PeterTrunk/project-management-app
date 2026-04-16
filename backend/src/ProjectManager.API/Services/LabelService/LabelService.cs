@@ -123,6 +123,7 @@ namespace ProjectManager.API.Services.LabelService
                 throw new Exception("Ez a cimke nincs ehhez a feladathoz rendelve!");
 
             _context.LabelTasks.Remove(labelTask);
+            await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("TaskLabelRemoved", new { taskId });
