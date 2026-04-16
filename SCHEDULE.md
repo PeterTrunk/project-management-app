@@ -307,66 +307,86 @@ Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
 
 **1. Szekvenciális frissítés (1, 2, 3, 4...)**
 Minden mozgatásnál az összes utána lévő task pozícióját frissítjük sorozatosan.
-- pozitívum: Egyszerű implementáció
-- pozitívum: Könnyen érthető
-- negatívum: Skálázási szempontból: N darab task mozgatásakor N db UPDATE szükséges -> teljesítmény problémásabb
+- pozitívum: Egyszerű implementáció, könnyen érthető
+- pozitívum: Kis projekteknél (< 100 task/oszlop) elfogadható teljesítmény
+- negatívum: N darab task mozgatásakor N db UPDATE szükséges
 - negatívum: Párhuzamos mozgatásnál könnyen ütközések keletkeznek
+
+**Megjegyzés:** Konzulens tanár visszajelzése alapján ennél a use-case-nél
+(projekt menedzsment tool, nem Twitter skála) ez a megoldás is elfogadható
+lett volna. Az egyszerűség szempontjából valóban versenyképes alternatíva.
 
 **2. Linked List (nextTaskId mutató)**
 Minden tasknak van egy nextTaskId mutatója a következő taskra.
 - pozitívum: Közbeszúrás mindig csak 2 sor frissítése
 - pozitívum: Sosem fogy el a "hely"
-- negatívum: ORDER BY nem működik egyszerűen — rekurzív CTE szükséges -> lassú
-- negatívum: Indexeléssel sem oldható meg a sorrendezési probléma (O(n))
+- negatívum: ORDER BY nem működik egyszerűen — rekurzív CTE szükséges (O(n))
+- negatívum: Indexeléssel sem oldható meg a sorrendezési probléma
 - negatívum: Lánc integritás sérülhet (FK constraint + tranzakció részben megoldja)
 - negatívum: Párhuzamos mozgatásnál optimistic locking szükséges
-- (negatívum: Iparági szinten nem elfogadott megoldás erre a problémára)
+- negatívum: Iparági szinten nem elfogadott megoldás erre a problémára
 
-**3. Float alapú pozíció(az első megoldás volt a problémára.)** 
-Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 közé -> 1.5).
-- pozitívum: Egyszerű implementáció 
+**3. Float alapú pozíció (első implementált megoldás)**
+Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 közé → 1.5).
+- pozitívum: Egyszerű implementáció
 - pozitívum: ORDER BY egyszerű és gyors
-- pozitívum: Közbeszúráshoz csak 1 sor frissítése kell és két sort csak olvasunk
+- pozitívum: Közbeszúráshoz csak 1 sor frissítése kell
 - negatívum: IEEE 754 float precizitási korlát — sok közbeszúrás után elfogy a hely
-- negatívum: Renormalizálás szükséges (manuális trigger, ellenörzés hogy a float kifáradás közeli e.)
-- negatívum: Párhuzamos ütközésnél (két user egyszerre mozgat) nem determinisztikus
+- negatívum: Renormalizálás szükséges (manuális trigger)
+- negatívum: Párhuzamos ütközésnél nem determinisztikus sorrend
+
+**Megjegyzés:** A Lexorank elvében nagyon hasonló a float megoldáshoz
+(mindkettő átlagot számít közbeszúrásnál) — a fő különbség a precizitási
+korlát hiánya és az öngyógyító bucket rendszer.
 
 **4. Lexorank (Jira megoldása) — VÁLASZTOTT MEGOLDÁS**
-String alapú pozíció Base36 karakterkészlettel, bucket rendszerrel. (hasonló kissé a float alapúhoz, átlagot számít alap esetben)
-Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé -> "0|am"
+String alapú pozíció Base36 karakterkészlettel, bucket rendszerrel.
+Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé → "0|am"
 
-Bucket rendszer:
+**Bucket rendszer:**
 - 3 bucket (0, 1, 2) körkörösen — a prefix jelzi melyik bucketben van az elem
 - Ütközés esetén (két azonos pozíció) az egész oszlop átkerül a következő bucketbe
+- String hossz > 50 karakter esetén automatikus rebalancing triggerelődik
 - Bucket 2 exhaustion után visszaáll bucket 0-ra (öngyógyító, végtelen ciklus)
+- Inicializálás "0|i"-vel (Base36 közép) — mindkét irányban egyenlő hely
 
-Base36 kapacitás:
+**Base36 kapacitás:**
 - 1 karakter: 36^1 = 36 pozíció
 - 2 karakter: 36^2 = 1,296 pozíció
 - 3 karakter: 36^3 = 46,656 pozíció
 - String csak hosszabbodik, sosem fogy el a hely
 
 - pozitívum: Végtelen közbeszúrás — sosem fogy el a hely
-- pozitívum: ORDER BY egyszerű és gyors (localeCompare / abc sorrend)
+- pozitívum: ORDER BY egyszerű és gyors (localeCompare / ABC sorrend)
 - pozitívum: SignalR barát — csak a position stringet kell broadcastolni
 - pozitívum: Öngyógyító bucket rendszer — automatikus rebalancing ütközéskor
 - pozitívum: Iparági standard (Jira, Linear)
 - pozitívum: Adatbázis szinten hatékony index támogatás
-- negatívum: Komplexebb implementáció mint a float
+- negatívum: Komplexebb implementáció mint a float vagy int megoldás
 - negatívum: Párhuzamos dupla mozgatás esetén a task "kicsit más helyre" kerülhet
   (nem adatvesztés, csak nem determinisztikus sorrend — elfogadható tradeoff)
 
 #### Döntés
-A **Lexorank** implementálása melletti döntés mert a komplexitás 
-növekedés elfogadható tradeoff a jelentős scaling és robusztussági előnyökért.
-A float megoldás ideiglenesen implementálva marad amíg a Lexorank 
-implementáció el nem készül.
+A **Lexorank** implementálása mellett döntöttünk. Konzulens tanár visszajelzése
+alapján az egyszerűbb int/szekvenciális megoldás is elfogadható lett volna
+ennél a méretskálánál — azonban a Lexorank mellett szóló érvek:
 
-#### Implementációs terv
-- Position mező típusa: float -> string (migration szükséges)
-- Új LexorankService a pozíció számításhoz
-- MoveTaskAsync frissítése
-- Frontend: sort by position -> sort by localeCompare
+1. **Skálázhatóság:** Közbeszúrás O(1) — mérettől függetlenül 1 UPDATE
+2. **Precizitási korlát hiánya:** A float megoldással ellentétben sosem fogy el a hely
+3. **Öngyógyító rendszer:** Automatikus rebalancing, nincs manuális beavatkozás
+4. **Iparági standard:** Jira, Linear ugyanezt az algoritmust használja
+5. **Szakmai megalapozottság:** A védésen jól indokolható tudatos technikai döntés
+
+A komplexitás növekedés elfogadható tradeoff a fenti előnyökért —
+különösen mivel a Redis backplane + SignalR architektúrával együtt
+egy production-ready skálázható megoldást alkot.
+
+#### Implementáció
+- Position mező típusa: float → string (migration elvégezve)
+- LexorankService: GetInitialPosition, GetMiddle, RebalancePositions, HasCollision
+- MoveTaskAsync: AfterTaskId alapú pozicionálás (backend számítja)
+- RebalanceColumnAsync: automatikus rebalancing ütközés vagy hossz túllépés esetén
+- Frontend: sort by position → localeCompare alapú rendezés
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
@@ -465,6 +485,87 @@ Service metódus fut (pl. CreateTaskAsync)
 - Olvasott/olvasatlan állapot kezelés lehetséges
 
 **Implementáció a Team fül fejlesztésekor kerül sorra**
+
+### Tervezett SignalR Optimalizáció & Refaktor
+
+#### 1. Redis Backplane integráció
+**Backend változtatások:**
+- NuGet csomag: Microsoft.AspNetCore.SignalR.StackExchangeRedis
+- Program.cs: AddSignalR().AddStackExchangeRedis(...) — egyetlen sor változtatás
+- Docker Compose: Redis service hozzáadása
+
+**Frontend változtatások:** Semmi — teljesen transzparens!
+
+---
+
+#### 2. Broadcast payload optimalizáció
+**Jelenlegi probléma:**
+N user × M event = N×M felesleges DB lekérdezés
+(minden SignalR eventnél teljes task lista újralekérése)
+
+**Backend változtatások:**
+- TaskCreated broadcast: teljes TaskResponseDto küldése payload-ban
+- TaskUpdated broadcast: teljes TaskResponseDto küldése payload-ban
+- SprintCreated broadcast: teljes SprintResponseDto küldése
+- SprintUpdated broadcast: teljes SprintResponseDto küldése
+- Többi event payload-ja már elegendő adatot tartalmaz
+
+**Frontend változtatások:**
+TaskCreated:  payload tartalmazza a teljes TaskResponse-t -> store-ba rakjuk API kérés nélkül
+TaskUpdated:  payload tartalmazza a teljes TaskResponse-t -> store-ban frissítjük
+TaskDeleted:  már optimális (csak taskId kell)
+TaskMoved:    már optimális (taskId, columnId, position)
+SprintCreated: payload tartalmazza a teljes SprintResponse-t
+SprintUpdated: payload tartalmazza a teljes SprintResponse-t
+
+**Kivételek ahol API kérés maradhat:**
+- SprintUpdated -> loadAll() maradhat (komplex state változás, taskok is mozognak)
+- BoardDeleted -> getBoardsAsync() maradhat (ritka esemény)
+
+---
+
+#### 3. Centralizált SignalR architektúra
+**Jelenlegi probléma:**
+BoardView   -> saját SignalR feliratkozások
+SprintsView -> saját SignalR feliratkozások
+AppLayout   -> saját SignalR feliratkozások
+-> Duplikált kód, nehéz követni, notification rendszer nehezen megvalósítható
+
+**Tervezett megoldás:**
+AppLayout -> ÖSSZES SignalR esemény kezelése
+-> Store frissítések
+-> Komponensek store-ból olvasnak reaktívan
+
+**Frontend változtatások:**
+- signalRStore.ts létrehozása (kapcsolat állapot kezelés)
+- AppLayout.svelte: centralizált eseménykezelők
+- BoardView.svelte: saját SignalR kód eltávolítása
+- SprintsView.svelte: saját SignalR kód eltávolítása  
+- CommentSection.svelte: saját SignalR kód eltávolítása
+
+**Ismert kihívások:**
+- Komponens belső state frissítése (pl. columnTasks Record, isDragging flag)
+- Explicit Svelte reaktivitás kényszerítés szükséges ([...arr], {...obj})
+- Drag & Drop közbeni store frissítések kezelése
+
+---
+
+#### 4. Activity Log alapú Notification rendszer
+*(Részletesen a Team Management fejezetben)*
+- ActivityCreated SignalR event -> notification bell frissítése
+- Egyetlen feliratkozás az AppLayout-ban
+- Recent Activity feed és Notification bell ugyanazt az adatot használja
+
+---
+
+#### Implementációs sorrend
+
+1. Redis Backplane (deployment fázisban)
+2. Broadcast payload optimalizáció (backend + frontend együtt)
+3. Centralizált SignalR architektúra refaktor
+4. Activity Log + Notification rendszer (Team Management fejezet)
+
+
 
 ## Sprint Management & Team Management
 Sprint lifecycle API: creation, activation, closing. Sprint-to-task assignment. Constraint enforcement (one active sprint per project). Sprint manager interface with sprint status transitions (Open - Active - Closed). 
