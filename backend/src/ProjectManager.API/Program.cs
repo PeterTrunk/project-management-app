@@ -20,6 +20,7 @@ using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
+using ProjectManager.API.Services.TeamService;
 using System.Reflection;
 using System.Text;
 
@@ -136,6 +137,7 @@ builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
+builder.Services.AddScoped<ITeamService, TeamService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
