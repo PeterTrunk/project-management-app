@@ -327,7 +327,7 @@ Minden tasknak van egy nextTaskId mutatója a következő taskra.
 - negatívum: Iparági szinten nem elfogadott megoldás erre a problémára
 
 **3. Float alapú pozíció (első implementált megoldás)**
-Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 közé → 1.5).
+Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 közé -> 1.5).
 - pozitívum: Egyszerű implementáció
 - pozitívum: ORDER BY egyszerű és gyors
 - pozitívum: Közbeszúráshoz csak 1 sor frissítése kell
@@ -341,7 +341,7 @@ korlát hiánya és az öngyógyító bucket rendszer.
 
 **4. Lexorank (Jira megoldása) — VÁLASZTOTT MEGOLDÁS**
 String alapú pozíció Base36 karakterkészlettel, bucket rendszerrel.
-Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé → "0|am"
+Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé -> "0|am"
 
 **Bucket rendszer:**
 - 3 bucket (0, 1, 2) körkörösen — a prefix jelzi melyik bucketben van az elem
@@ -382,11 +382,11 @@ különösen mivel a Redis backplane + SignalR architektúrával együtt
 egy production-ready skálázható megoldást alkot.
 
 #### Implementáció
-- Position mező típusa: float → string (migration elvégezve)
+- Position mező típusa: float -> string (migration elvégezve)
 - LexorankService: GetInitialPosition, GetMiddle, RebalancePositions, HasCollision
 - MoveTaskAsync: AfterTaskId alapú pozicionálás (backend számítja)
 - RebalanceColumnAsync: automatikus rebalancing ütközés vagy hossz túllépés esetén
-- Frontend: sort by position → localeCompare alapú rendezés
+- Frontend: sort by position -> localeCompare alapú rendezés
 
 ## SignalR Real-Time Updates & Notifications
 Spring break week dedicated to the real-time layer - the most complex cross-cutting feature. SignalR hub implementation on the backend (BoardHub, NotificationHub) for real-time task movement, status changes, and new comments. SignalR client connection manager with automatic reconnection. Nginx WebSocket proxy configuration for the /hubs/* route. In-app notification system: notification bell in navbar, unread count, notification list. SignalR-based real-time notification delivery for task assignment, comments, and sprint changes.
@@ -565,8 +565,6 @@ AppLayout -> ÖSSZES SignalR esemény kezelése
 3. Centralizált SignalR architektúra refaktor
 4. Activity Log + Notification rendszer (Team Management fejezet)
 
-
-
 ## Sprint Management & Team Management
 Sprint lifecycle API: creation, activation, closing. Sprint-to-task assignment. Constraint enforcement (one active sprint per project). Sprint manager interface with sprint status transitions (Open - Active - Closed). 
 Team management interface: member list, role display, member invitation (invite link). Permission-based UI rendering based on user roles.
@@ -629,6 +627,34 @@ Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
 - Tag meghívás (meghívó link generálás)
 - Recent Activity feed (Activity Log rendszer alapjai)
 - Jogosultság alapú UI renderelés (szerepkör alapján)
+
+### Elvégzett munkák
+**Backend**
+- ProjectInvite model + migration (Token, ExpiresAt, MaxUses, UseCount)
+- Team DTO-k: ProjectMemberResponseDto, UpdateMemberRoleDto, GenerateInviteLinkDto, InviteLinkResponseDto
+- ITeamService + TeamService: GetMembers, RemoveMember, UpdateMemberRole, GenerateInviteLink, JoinProject
+- TeamController: GET/DELETE/PATCH members + POST invite
+- ProjectJoinController: POST /api/projects/join/{token}
+- SignalR broadcasts: MemberAdded, MemberRemoved, MemberRoleUpdated
+- ProjectNotArchivedFilter: archivált projekten nem engedélyezett módosítás
+- CurrentUserService: egységes JWT identity kinyerés
+
+**Frontend**
+- teamApi.ts: getMembersAsync, removeMemberAsync, updateMemberRoleAsync, generateInviteLinkAsync, joinProjectAsync
+- teamStore.ts: members, refreshTrigger, setMembers, triggerTeamRefresh, clearTeam
+- MemberCard.svelte: tag megjelenítés, szerepkör módosítás, eltávolítás
+- InviteModal.svelte: meghívó link generálás MaxUses + ExpiresInDays beállítással
+- TeamView.svelte: tagok listája rendezve (Owner -> Admin -> Member -> Viewer)
+- InvitePage.svelte: token alapú csatlakozás, pending invite token kezelés
+- SignalR: MemberAdded, MemberRemoved, MemberRoleUpdated kezelés AppLayout-ban
+
+### Még elvégzendő ebben a fejezetben
+- **Recent Activity feed** — Activity Log rendszer backend + frontend
+- **Assignee kezelés** — Task hozzárendelés tagokhoz:
+  - Backend: AssigneeIds visszaadása AssigneeNames helyett (TaskResponseDto)
+  - Frontend: TaskDetailModal edit módban assignee hozzáadás/eltávolítás
+  - Frontend: TaskCard assignee megjelenítés teamStore alapján
+  - Frontend: BacklogTaskCard assignee megjelenítés
 
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
