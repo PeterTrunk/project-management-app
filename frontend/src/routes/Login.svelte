@@ -19,6 +19,15 @@
         } catch (e) {
             error = "Hibás email vagy jelszó!";
         }
+
+        // Pending invite token kezelése
+        const pendingToken = localStorage.getItem('pendingInviteToken');
+        if (pendingToken) {
+            localStorage.removeItem('pendingInviteToken');
+            push(`/invite/${pendingToken}`);
+        } else {
+            push('/app');
+        }
     }
 
     async function goToRegister() {

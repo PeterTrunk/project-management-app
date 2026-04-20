@@ -10,11 +10,14 @@
     import type { ProjectResponse } from '../lib/api/projectApi';
     import { getLabelsAsync } from '../lib/api/labelApi';
     import { setLabels } from '../lib/stores/projectStore';
+    import { triggerTeamRefresh } from '../lib/stores/teamStore';
+    import { clearTeam } from '../lib/stores/teamStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
     import BoardView from '../lib/components/BoardView.svelte';
     import SprintsView from '../lib/components/SprintsView.svelte';
+    import TeamView from '../lib/components/TeamView.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -23,6 +26,11 @@
     let isUserSettingsOpen = false;
     
     let token = '';
+
+    let currentUserId = '';
+    authStore.subscribe(state => {
+        currentUserId = state.user?.userId ?? '';
+    });
 
     onMount(async () => {
         if (token) {
@@ -71,6 +79,27 @@
                     if (updated) setActiveProject(updated);
                 }
             });
+
+            signalRService.on('MemberRemoved', async (data) => {
+                console.log('MemberRemoved:', data.userId, 'currentUserId:', currentUserId);
+                if (data.userId === currentUserId) {
+                    const projects = await getProjectsAsync();
+                    setProjects(projects);
+                    setActiveProject(null);
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    push('/app');
+                } else {
+                    triggerTeamRefresh();
+                }
+            });
+
+            signalRService.on('MemberAdded', () => {
+                triggerTeamRefresh();
+            });
+
+            signalRService.on('MemberRoleUpdated', () => {
+                triggerTeamRefresh();
+            });
         }
     });
 
@@ -85,6 +114,9 @@
         signalRService.off('ProjectUpdated');
         signalRService.off('ProjectArchived');
         signalRService.off('ProjectUnarchived');
+        signalRService.off('MemberAdded');
+        signalRService.off('MemberRemoved');
+        signalRService.off('MemberRoleUpdated');
         await signalRService.disconnect();
     });
 
@@ -210,7 +242,7 @@
                 {:else if activeView === 'sprints'}
                     <SprintsView projectId={activeProject.id} />
                 {:else if activeView === 'team'}
-                    <p>Team nézet</p>
+                    <TeamView projectId={activeProject.id} />
                 {:else if activeView === 'git'}
                     <p>Git nézet</p>
                 {:else if activeView === 'statistics'}
