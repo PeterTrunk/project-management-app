@@ -11,5 +11,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         Task<TaskResponseDto> MoveTaskAsync(Guid projectId, Guid taskId, MoveTaskDto dto);
         Task DeleteTaskAsync(Guid taskId);
         Task<TaskResponseDto> AssignTaskToBoardAsync(Guid projectId, Guid taskId, AssignTaskToBoardDto dto);
+        Task AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId);
+        Task RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId);
     }
 }

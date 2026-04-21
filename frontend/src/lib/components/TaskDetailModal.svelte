@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
-    import { updateTaskAsync, deleteTaskAsync, type TaskResponse  } from '../api/taskApi';
+    import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
     import { validateTaskTitle, validateTaskDescription } from '../validators';
@@ -14,6 +14,9 @@
     import type { BoardResponse } from '../api/boardApi';
     import { sprintStore } from '../stores/sprintStore';
     import type { SprintResponse } from '../api/sprintApi';
+    import { teamStore } from '../stores/teamStore';
+    import type { MemberResponse } from '../api/teamApi';
+
 
     export let task: TaskResponse;
     $: isBacklogTask = !task.boardId && !task.columnId && !task.sprintId;
@@ -64,6 +67,11 @@
 
     sprintStore.subscribe(state => {
         sprints = state.sprints;
+    });
+
+    let members: MemberResponse[] = [];
+    teamStore.subscribe(state => {
+        members = state.members;
     });
 
     onMount(async () => {
@@ -163,6 +171,25 @@
         }
     }
 
+    async function handleAddAssignee(userId: string) {
+        try {
+            await addAssigneeAsync(projectId, task.id, userId);
+            task = { ...task, assigneeIds: [...task.assigneeIds, userId] };
+        } catch (e) {
+            console.error('Hiba az assignee hozzáadásakor!');
+        }
+    }
+
+    async function handleRemoveAssignee(userId: string) {
+        try {
+            await removeAssigneeAsync(projectId, task.id, userId);
+            task = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
+        } catch (e) {
+            console.error('Hiba az assignee eltávolításakor!');
+        }
+    }
+
+
     function closeModal() {
         isTaskDetailOpen = false;
         onClose();
@@ -217,10 +244,15 @@
                 <!-- Assignee-k -->
                 <div class="section">
                     <h3>Hozzárendelt személyek</h3>
-                    {#if task.assigneeNames.length > 0}
-                        {#each task.assigneeNames as name}
-                            <span class="tag">{name}</span>
-                        {/each}
+                    {#if task.assigneeIds.length > 0}
+                        <div class="assignees-row">
+                            {#each task.assigneeIds as userId}
+                                {@const member = members.find(m => m.userId === userId)}
+                                {#if member}
+                                    <span class="assignee-badge">{member.displayName}</span>
+                                {/if}
+                            {/each}
+                        </div>
                     {:else}
                         <p class="empty">Nincs hozzárendelt személy</p>
                     {/if}
@@ -272,6 +304,23 @@
                 </div>
             {:else}
                 <h2>Módosítások</h2>
+                <div class="section">
+                    <h3>Hozzárendelt személyek</h3>
+                    <div class="labels-grid">
+                        {#each members as member}
+                            <div class="label-select-row">
+                                <span class="assignee-name">{member.displayName}</span>
+                                {#if task.assigneeIds.includes(member.userId)}
+                                    <button class="label-remove-btn" 
+                                        on:click={() => handleRemoveAssignee(member.userId)}>✕</button>
+                                {:else}
+                                    <button class="label-add-btn"
+                                        on:click={() => handleAddAssignee(member.userId)}>+</button>
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                </div>
                 <div class="section">
                     <h3>Labelek</h3>
                     <div class="labels-grid">
@@ -554,6 +603,25 @@
         cursor: pointer;
         font-size: 0.8rem;
         padding: 0 0.25rem;
+    }
+
+    .assignees-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .assignee-badge {
+        background: #1a2a3a;
+        color: #4a9eff;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+
+    .assignee-name {
+        font-size: 0.9rem;
+        flex: 1;
     }
 
 

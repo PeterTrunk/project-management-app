@@ -263,6 +263,8 @@
         signalRService.off('SprintUpdated');
         signalRService.off('TaskLabelAdded');
         signalRService.off('TaskLabelRemoved');
+        signalRService.off('TaskAssigneeAdded');
+        signalRService.off('TaskAssigneeRemoved');
 
         signalRService.on('TaskLabelAdded', async (data) => {
             const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined);
@@ -392,6 +394,32 @@
                 await loadBoards(activeProjectId);
             }
         });
+
+        signalRService.on('TaskAssigneeAdded', async (data) => {
+            let activeTask: TaskResponse | null = null;
+            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
+            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
+
+            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => { currentTasks = state.tasks; })();
+            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
+            setTasks([...updated]);
+            distributeTasks([...updated]);
+        });
+
+        signalRService.on('TaskAssigneeRemoved', async (data) => {
+            let activeTask: TaskResponse | null = null;
+            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
+            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
+
+            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
+            let currentTasks: TaskResponse[] = [];
+            taskStore.subscribe(state => { currentTasks = state.tasks; })();
+            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
+            setTasks([...updated]);
+            distributeTasks([...updated]);
+        });
     }
 
     onDestroy(async () => {
@@ -413,6 +441,8 @@
         signalRService.off('SprintUpdated');
         signalRService.off('TaskLabelAdded');
         signalRService.off('TaskLabelRemoved');
+        signalRService.off('TaskAssigneeAdded');
+        signalRService.off('TaskAssigneeRemoved');
     });
  
     function handleTaskClick(task: TaskResponse) {

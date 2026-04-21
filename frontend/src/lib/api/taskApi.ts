@@ -43,7 +43,7 @@ export interface TaskResponse {
     position: string;
     estimateInMinutes: number | null;
     dueDate: Date | null;
-    assigneeNames: string[];
+    assigneeIds: string[];
     labelIds: string[];
     commitLinks: string[];
     prLinks: string[];
@@ -90,4 +90,12 @@ export async function moveTaskAsync(projectId: string, taskId: string, data: Mov
 export async function assignTaskToBoardAsync(projectId: string, taskId: string, data: AssignTaskToBoardRequest): Promise<TaskResponse> {
     const response = await apiClient.post('/projects/' + projectId + '/tasks/' + taskId + '/board', data);
     return response.data;
+}
+
+export async function addAssigneeAsync(projectId: string, taskId: string, userId: string): Promise<void> {
+    await apiClient.post(`/projects/${projectId}/tasks/${taskId}/assignees/${userId}`);
+}
+
+export async function removeAssigneeAsync(projectId: string, taskId: string, userId: string): Promise<void> {
+    await apiClient.delete(`/projects/${projectId}/tasks/${taskId}/assignees/${userId}`);
 }

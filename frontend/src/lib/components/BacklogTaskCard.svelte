@@ -6,6 +6,8 @@
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
     import { assignTaskToBoardAsync } from '../api/taskApi';
+    import { teamStore } from '../stores/teamStore';
+import type { MemberResponse } from '../api/teamApi';
     
     export let task: TaskResponse;
     export let boards: BoardResponse[] = [];
@@ -17,7 +19,10 @@
     export let onOpenDetail: (task: TaskResponse) => void = () => {};
 
     let allLabels: LabelResponse[] = [];
+    let members: MemberResponse[] = [];
     let isMenuOpen = false;
+    
+
 
     $: selectedBoardId = task.boardId ?? '';
     $: selectedSprintId = task.sprintId ?? '';
@@ -25,6 +30,10 @@
 
     projectStore.subscribe(state => {
         allLabels = state.labels;
+    });
+
+    teamStore.subscribe(state => {
+        members = state.members;
     });
 
     function handleSprintAssign() {
@@ -49,6 +58,10 @@
         }
     }
 
+    $: assignees = task.assigneeIds
+        .map(id => members.find(m => m.userId === id))
+        .filter(m => m !== undefined) as MemberResponse[];
+
 </script>
 
 <div class="backlog-task-card">
@@ -68,17 +81,28 @@
                 <span class="due-date">{new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
             {/if}
         </div>
-        
-        {#if task.labelIds.length > 0}
-            <div class="labels-row">
-                {#each task.labelIds as labelId (labelId)}
-                    {@const label = allLabels.find(l => l.id === labelId)}
-                    {#if label}
-                        <LabelCard {label} showDelete={false} small={true} />
-                    {/if}
-                {/each}
-            </div>
-        {/if}
+        <div class="card-footer">
+            {#if task.labelIds.length > 0}
+                <div class="labels-row">
+                    {#each task.labelIds as labelId (labelId)}
+                        {@const label = allLabels.find(l => l.id === labelId)}
+                        {#if label}
+                            <LabelCard {label} showDelete={false} small={true} />
+                        {/if}
+                    {/each}
+                </div>
+            {/if}
+
+            {#if assignees.length > 0}
+                <div class="assignees-row">
+                    {#each assignees as member}
+                        <span class="assignee-badge" title={member.displayName}>
+                            {member.displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </span>
+                    {/each}
+                </div>
+            {/if}
+        </div>
     </div>
 
     <!-- Hamburger menü -->
@@ -265,4 +289,32 @@
     }
 
     .menu-delete-btn:hover { color: #ff3333; }
+
+    .assignees-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+    }
+
+    .assignee-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1a2a3a;
+        color: #4a9eff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        font-weight: bold;
+    }
+
+    .card-footer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.25rem;
+    }
 </style>

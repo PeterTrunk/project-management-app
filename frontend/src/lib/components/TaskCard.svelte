@@ -3,14 +3,25 @@
     import LabelCard from './LabelCard.svelte';
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
+    import { teamStore } from '../stores/teamStore';
+    import type { MemberResponse } from '../api/teamApi';
 
     let allLabels: LabelResponse[] = [];
     projectStore.subscribe(state => {
         allLabels = state.labels;
     });
 
+    let members: MemberResponse[] = [];
+    teamStore.subscribe(state => {
+        members = state.members;
+    });
+
     export let task: TaskResponse;
     export let onClick: (task: TaskResponse) => void = () => {};
+
+    $: assignees = task.assigneeIds
+        .map(id => members.find(m => m.userId === id))
+        .filter(m => m !== undefined) as MemberResponse[];
 </script>
 
 <div 
@@ -22,22 +33,35 @@
 >
     <div class="task-header">
         <p class="task-key">{task.taskKey}</p>
+        <!--
         {#if task.priority}
             <span class="priority priority-{task.priority}">{task.priority}</span>
-        {/if}
+        {/if} 
+        -->
     </div>
     <p class="task-title">{task.title}</p>
-    {#if task.labelIds.length > 0}
-        <div class="labels-row">
-            <!-- {console.log(JSON.stringify(task.labelIds))} -->    
-            {#each task.labelIds as labelId (labelId)}
-                {@const label = allLabels.find(l => l.id === labelId)}
-                {#if label}
-                    <LabelCard {label} showDelete={false} small={true} />
-                {/if}
-            {/each}
-        </div>
-    {/if}
+    <div class="card-footer">
+        {#if task.labelIds.length > 0}
+            <div class="labels-row">
+                <!-- {console.log(JSON.stringify(task.labelIds))} -->    
+                {#each task.labelIds as labelId (labelId)}
+                    {@const label = allLabels.find(l => l.id === labelId)}
+                    {#if label}
+                        <LabelCard {label} showDelete={false} small={true} />
+                    {/if}
+                {/each}
+            </div>
+        {/if}
+        {#if assignees.length > 0}
+            <div class="assignees-row">
+                {#each assignees as member}
+                    <span class="assignee-badge" title={member.displayName}>
+                        {member.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </span>
+                {/each}
+            </div>
+        {/if}
+    </div>
     {#if task.dueDate}
         <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
     {/if}
@@ -94,9 +118,38 @@
         margin-top: 0.25rem;
     }
 
+    .assignees-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+    }
+
+    .assignee-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1a2a3a;
+        color: #4a9eff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        font-weight: bold;
+        title: attr(title);
+    }
+
     .priority-low { background: #1a3a1a; color: #4caf50; }
     .priority-medium { background: #3a3a1a; color: #ffeb3b; }
     .priority-high { background: #3a1a1a; color: #ff5722; }
     .priority-critical { background: #4a0000; color: #ff0000; }
     .priority-normal { background: #2a2a2a; color: #aaa; }
+
+    .card-footer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.25rem;
+    }
 </style>

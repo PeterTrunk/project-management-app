@@ -73,6 +73,8 @@
         signalRService.off('SprintCreated');
         signalRService.off('TaskLabelAdded');
         signalRService.off('TaskLabelRemoved');
+        signalRService.off('TaskAssigneeAdded');
+        signalRService.off('TaskAssigneeRemoved');
 
         signalRService.on('TaskLabelAdded', async () => {
             await refreshTasks();
@@ -105,6 +107,14 @@
         signalRService.on('TaskDeleted', async () => {
             await refreshTasks();
         });
+
+        signalRService.on('TaskAssigneeAdded', async () => {
+            await refreshTasks();
+        });
+
+        signalRService.on('TaskAssigneeRemoved', async () => {
+            await refreshTasks();
+        });
     }
 
     onDestroy(() => {
@@ -116,6 +126,8 @@
         signalRService.off('SprintCreated');
         signalRService.off('TaskLabelAdded');
         signalRService.off('TaskLabelRemoved');
+        signalRService.off('TaskAssigneeAdded');
+        signalRService.off('TaskAssigneeRemoved');
     });
 
     async function refreshTasks() {

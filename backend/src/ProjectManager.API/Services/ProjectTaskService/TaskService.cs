@@ -97,7 +97,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 BoardId= task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
-                AssigneeNames = new List<string>(),
+                AssigneeIds = new List<string>(),
                 LabelIds = new List<string>(),
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
@@ -157,7 +157,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
             //Id alapján az 5 listát feltöltjük
             var assignments = await _context.TaskAssignments
                 .Where(ta => taskIds.Contains(ta.TaskId))
-                .Include(ta => ta.User)
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -186,9 +185,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 ColumnId = t.ColumnId,
                 SprintId = t.SprintId,
                 //Taskonként kinyerjük a listákból csak az adotthoz hozzátartozó lista bejegyzéseket
-                AssigneeNames = assignments
+                AssigneeIds = assignments
                     .Where(ta => ta.TaskId == t.Id)
-                    .Select(ta => ta.User.DisplayName)
+                    .Select(ta => ta.UserId.ToString())
                     .ToList(),
                 LabelIds = labels
                     .Where(lt => lt.TaskId == t.Id)
@@ -244,10 +243,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
-            var assigneeNames = await _context.TaskAssignments
+            var assigneeIds = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Include(ta => ta.User)
-                .Select(ta => ta.User.DisplayName)
+                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -282,7 +280,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 BoardId = task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
-                AssigneeNames = assigneeNames,
+                AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
@@ -417,10 +415,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
             }
 
-            var assigneeNames = await _context.TaskAssignments
+            var assigneeIds = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Include(ta => ta.User)
-                .Select(ta => ta.User.DisplayName)
+                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -445,7 +442,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 BoardId = task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
-                AssigneeNames = assigneeNames,
+                AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
@@ -495,10 +492,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     dueDate = task.DueDate
                 });
 
-            var assigneeNames = await _context.TaskAssignments
+            var assigneeIds = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Include(ta => ta.User)
-                .Select(ta => ta.User.DisplayName)
+                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -523,7 +519,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 BoardId = task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
-                AssigneeNames = assigneeNames,
+                AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
@@ -634,10 +630,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
 
             // Response összerakása
-            var assigneeNames = await _context.TaskAssignments
+            var assigneeIds = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Include(ta => ta.User)
-                .Select(ta => ta.User.DisplayName)
+                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -652,7 +647,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 BoardId = task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
-                AssigneeNames = assigneeNames,
+                AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
@@ -703,6 +698,48 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     columnId,
                     tasks = allTasksInColumn.Select(t => new { t.Id, t.Position })
                 });
+        }
+
+        public async Task AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
+        {
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
+            if (task == null)
+                throw new Exception("Task nem található!");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+            var existing = await _context.TaskAssignments
+                .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
+            if (existing != null)
+                throw new Exception("Ez a felhasználó már hozzá van rendelve!");
+
+            await _context.TaskAssignments.AddAsync(new TaskAssignment
+            {
+                TaskId = taskId,
+                UserId = userId
+            });
+
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("TaskAssigneeAdded", new { taskId, userId });
+        }
+
+        public async Task RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
+        {
+            var assignment = await _context.TaskAssignments
+                .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
+            if (assignment == null)
+                throw new Exception("Ez a felhasználó nincs hozzárendelve!");
+
+            _context.TaskAssignments.Remove(assignment);
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("TaskAssigneeRemoved", new { taskId, userId });
         }
     }
 }

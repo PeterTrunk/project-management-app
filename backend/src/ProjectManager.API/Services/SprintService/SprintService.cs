@@ -266,7 +266,6 @@ namespace ProjectManager.API.Services.SprintService
             //Id alapján az 5 listát feltöltjük
             var assignments = await _context.TaskAssignments
                 .Where(ta => taskIds.Contains(ta.TaskId))
-                .Include(ta => ta.User)
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
@@ -294,9 +293,9 @@ namespace ProjectManager.API.Services.SprintService
                 ColumnId = t.ColumnId,
                 SprintId = t.SprintId,
                 //Taskonként kinyerjük a listákból csak az adotthoz hozzátartozó lista bejegyzéseket
-                AssigneeNames = assignments
+                AssigneeIds = assignments
                     .Where(ta => ta.TaskId == t.Id)
-                    .Select(ta => ta.User.DisplayName)
+                    .Select(ta => ta.UserId.ToString())
                     .ToList(),
                 LabelIds = labels
                     .Where(lt => lt.TaskId == t.Id)

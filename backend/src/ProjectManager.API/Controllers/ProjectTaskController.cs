@@ -135,5 +135,39 @@ namespace ProjectManager.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpPost("{taskId}/assignees/{userId}")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
+        {
+            try
+            {
+                await _taskService.AddAssigneeAsync(projectId, taskId, userId);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{taskId}/assignees/{userId}")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
+        {
+            try
+            {
+                await _taskService.RemoveAssigneeAsync(projectId, taskId, userId);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

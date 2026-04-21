@@ -12,6 +12,8 @@
     import { setLabels } from '../lib/stores/projectStore';
     import { triggerTeamRefresh } from '../lib/stores/teamStore';
     import { clearTeam } from '../lib/stores/teamStore';
+    import { getMembersAsync } from '../lib/api/teamApi';
+    import { setMembers } from '../lib/stores/teamStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -108,6 +110,11 @@
         setLabels(labels);
     }
 
+    async function loadMembers(projectId: string) {
+        const members = await getMembersAsync(projectId);
+        setMembers(members);
+    }
+
     onDestroy(async () => {
         signalRService.off('LabelCreated');
         signalRService.off('LabelDeleted');
@@ -167,6 +174,7 @@
             signalRService.joinProject(state.activeProject.id).catch(console.error);
 
             loadLabels(state.activeProject.id).catch(console.error);
+            loadMembers(state.activeProject.id).catch(console.error);
         }
     });
 
