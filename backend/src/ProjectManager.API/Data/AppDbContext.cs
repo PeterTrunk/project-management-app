@@ -545,6 +545,10 @@ public class AppDbContext : DbContext
             entity.Property(a => a.Payload)
                   .HasColumnType("text");
 
+            entity.Property(a => a.Description)
+                  .HasMaxLength(500)
+                  .IsRequired();
+
             entity.Property(a => a.CreatedAt)
                   .IsRequired();
 

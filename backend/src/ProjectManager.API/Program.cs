@@ -10,6 +10,7 @@ using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
@@ -138,6 +139,7 @@ builder.Services.AddScoped<IColumnService, ColumnService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<IActivityService, ActivityService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 

@@ -40,28 +40,26 @@
         -->
     </div>
     <p class="task-title">{task.title}</p>
-    <div class="card-footer">
-        {#if task.labelIds.length > 0}
-            <div class="labels-row">
-                <!-- {console.log(JSON.stringify(task.labelIds))} -->    
-                {#each task.labelIds as labelId (labelId)}
-                    {@const label = allLabels.find(l => l.id === labelId)}
-                    {#if label}
-                        <LabelCard {label} showDelete={false} small={true} />
-                    {/if}
-                {/each}
-            </div>
-        {/if}
-        {#if assignees.length > 0}
-            <div class="assignees-row">
-                {#each assignees as member}
-                    <span class="assignee-badge" title={member.displayName}>
-                        {member.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </span>
-                {/each}
-            </div>
-        {/if}
-    </div>
+    {#if task.labelIds.length > 0}
+        <div class="labels-row">
+            <!-- {console.log(JSON.stringify(task.labelIds))} -->    
+            {#each task.labelIds as labelId (labelId)}
+                {@const label = allLabels.find(l => l.id === labelId)}
+                {#if label}
+                    <LabelCard {label} showDelete={false} small={true} />
+                {/if}
+            {/each}
+        </div>
+    {/if}
+    {#if assignees.length > 0}
+        <div class="assignees-row">
+            {#each assignees as member}
+                <span class="assignee-badge" title={member.displayName}>
+                    {member.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                </span>
+            {/each}
+        </div>
+    {/if}
     {#if task.dueDate}
         <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
     {/if}
@@ -144,12 +142,4 @@
     .priority-high { background: #3a1a1a; color: #ff5722; }
     .priority-critical { background: #4a0000; color: #ff0000; }
     .priority-normal { background: #2a2a2a; color: #aaa; }
-
-    .card-footer {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin-top: 0.25rem;
-    }
 </style>
