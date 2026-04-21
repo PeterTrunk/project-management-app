@@ -622,6 +622,16 @@ Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
 
 **Implementáció a Team Management fejlesztésekor kerül sorra**
 
+**Activity Log i18n terv (jövőbeli fejlesztés)**
+Jelenleg a Description mező magyarul tartalmazza a leírást.
+Jövőbeli fejlesztésként az i18n támogatáshoz:
+- Description mező opcionálissá tétele
+- Action + Payload alapján frontend fordítás
+- Nyelvi fájlok: hu.json, en.json
+- Példa: Action="TaskCreated", Payload={"taskKey":"TP-5"}
+  -> hu: "{actorName} létrehozta a {taskKey} taskot"
+  -> en: "{actorName} created task {taskKey}"
+
 ### Elvégzendő ebben a fejezetben:
 - Team Management UI: tagok listája, szerepkörök megjelenítése
 - Tag meghívás (meghívó link generálás)
@@ -638,6 +648,9 @@ Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
 - SignalR broadcasts: MemberAdded, MemberRemoved, MemberRoleUpdated
 - ProjectNotArchivedFilter: archivált projekten nem engedélyezett módosítás
 - CurrentUserService: egységes JWT identity kinyerés
+- AddAssigneeAsync + RemoveAssigneeAsync: task hozzárendelés service + controller
+- AssigneeIds refaktor: TaskResponseDto AssigneeNames -> AssigneeIds
+- SignalR broadcasts: TaskAssigneeAdded, TaskAssigneeRemoved
 
 **Frontend**
 - teamApi.ts: getMembersAsync, removeMemberAsync, updateMemberRoleAsync, generateInviteLinkAsync, joinProjectAsync
@@ -647,14 +660,27 @@ Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
 - TeamView.svelte: tagok listája rendezve (Owner -> Admin -> Member -> Viewer)
 - InvitePage.svelte: token alapú csatlakozás, pending invite token kezelés
 - SignalR: MemberAdded, MemberRemoved, MemberRoleUpdated kezelés AppLayout-ban
+- taskApi.ts: AssigneeIds, addAssigneeAsync, removeAssigneeAsync
+- TaskDetailModal: assignee view + edit mód
+- TaskCard: assignee initials megjelenítés
+- BacklogTaskCard: assignee initials + labelek egy sorban
+- SignalR: TaskAssigneeAdded/Removed kezelés BoardView + SprintsView-ban
+- AppLayout: tagok betöltése projekt váltáskor (teamStore)
 
 ### Még elvégzendő ebben a fejezetben
 - **Recent Activity feed** — Activity Log rendszer backend + frontend
-- **Assignee kezelés** — Task hozzárendelés tagokhoz:
-  - Backend: AssigneeIds visszaadása AssigneeNames helyett (TaskResponseDto)
-  - Frontend: TaskDetailModal edit módban assignee hozzáadás/eltávolítás
-  - Frontend: TaskCard assignee megjelenítés teamStore alapján
-  - Frontend: BacklogTaskCard assignee megjelenítés
+  - Activity model kiegészítés: Description mező hozzáadása
+  - Migration
+  - IActivityService + ActivityService
+  - LogActivityAsync hívások service metódusokban
+  - GetActivitiesAsync endpoint (pagination: 20/oldal)
+  - SignalR ActivityCreated broadcast
+  - activityApi.ts
+  - ActivityFeed.svelte komponens
+  - TeamView kiegészítése Activity Feed szekcióval
+  - AppLayout: ActivityCreated SignalR handler
+
+
 
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
