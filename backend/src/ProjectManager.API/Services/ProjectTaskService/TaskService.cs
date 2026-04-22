@@ -6,6 +6,7 @@ using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LexorankService;
 
@@ -18,13 +19,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
         private readonly ILexorankService _lexorankService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly IActivityService _activityService;
 
-        public TaskService(AppDbContext context, ILexorankService lexorankService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
+        public TaskService(AppDbContext context, ILexorankService lexorankService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
         {
             _context = context;
             _lexorankService = lexorankService;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
+            _activityService = activityService;
         }
         
         public async Task<TaskResponseDto> CreateTaskAsync(Guid projectId, CreateTaskDto dto)
@@ -90,6 +93,21 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.TaskKey
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Task",
+                    task.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} létrehozta a {task.TaskKey} taskot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch (Exception ex) { }
+
             var response = new TaskResponseDto
             {
                 Id = task.Id,
@@ -136,6 +154,21 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 {
                     taskId
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    task.ProjectId,
+                    "Task",
+                    task.Id,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölte a {task.TaskKey} taskot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch (Exception ex) { }
         }
 
         public async Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null)
@@ -492,6 +525,21 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     dueDate = task.DueDate
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    task.ProjectId,
+                    "Task",
+                    task.Id,
+                    "Updated",
+                    $"{_currentUserService.DisplayName} módosította a {task.TaskKey} taskot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             var assigneeIds = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
                 .Select(ta => ta.UserId.ToString())
@@ -627,6 +675,21 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         columnId = task.ColumnId,
                         position = task.Position
                     });
+
+                try
+                {
+                    var activity = await _activityService.LogActivityAsync(
+                        task.ProjectId,
+                        "Task",
+                        task.Id,
+                        "BoardAssigned",
+                        $"{_currentUserService.DisplayName} boardhoz rendelte a {task.TaskKey} taskot"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{task.ProjectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
             }
 
             // Response összerakása
@@ -726,6 +789,21 @@ namespace ProjectManager.API.Services.ProjectTaskService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("TaskAssigneeAdded", new { taskId, userId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Task",
+                    taskId,
+                    "AssigneeAdded",
+                    $"{_currentUserService.DisplayName} hozzárendelte {user.DisplayName}-t a {task.TaskKey} taskhoz"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
@@ -735,11 +813,37 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (assignment == null)
                 throw new Exception("Ez a felhasználó nincs hozzárendelve!");
 
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
+            if (task == null)
+                throw new Exception("Task nem található!");
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+
             _context.TaskAssignments.Remove(assignment);
             await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("TaskAssigneeRemoved", new { taskId, userId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Task",
+                    taskId,
+                    "AssigneeRemoved",
+                    $"{_currentUserService.DisplayName} eltávolította {user.DisplayName}-t a {task.TaskKey} taskból"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
     }
 }

@@ -6,6 +6,8 @@ using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.DTOs.Sprints;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LexorankService;
 
 namespace ProjectManager.API.Services.SprintService
@@ -15,16 +17,20 @@ namespace ProjectManager.API.Services.SprintService
         private readonly AppDbContext _context;
         private readonly ILexorankService _lexorankService;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IActivityService _activityService;
         //Status:
         //"Planning"
         //"Active"
         //"Completed"
 
-        public SprintService(AppDbContext context, ILexorankService lexorankService, IHubContext<ProjectHub> hubContext)
+        public SprintService(AppDbContext context, ILexorankService lexorankService, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
         {
             _context = context;
             _lexorankService = lexorankService;
             _hubContext = hubContext;
+            _currentUserService = currentUserService;
+            _activityService = activityService;
         }
 
         public async Task<SprintResponseDto> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -73,6 +79,21 @@ namespace ProjectManager.API.Services.SprintService
                     sprintId = sprint.Id,
                     state = sprint.State
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Activated",
+                    $"{_currentUserService.DisplayName} aktiválta a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new SprintResponseDto
             {
@@ -147,6 +168,21 @@ namespace ProjectManager.API.Services.SprintService
                     state = sprint.State
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Completed",
+                    $"{_currentUserService.DisplayName} lezárta a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             return new SprintResponseDto
             {
                 Id = sprint.Id,
@@ -187,6 +223,21 @@ namespace ProjectManager.API.Services.SprintService
                     sprint.State
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} létrehozta a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+            
             var response = new SprintResponseDto
             {
                 Id = sprint.Id,
@@ -222,6 +273,21 @@ namespace ProjectManager.API.Services.SprintService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("SprintDeleted", new { sprintId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölte a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<List<SprintResponseDto>> GetSprintsAsync(Guid projectId)
@@ -381,6 +447,21 @@ namespace ProjectManager.API.Services.SprintService
                     state = sprint.State
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Replanned",
+                    $"{_currentUserService.DisplayName} visszatervezte a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             var response = new SprintResponseDto
             {
                 Id = sprint.Id,
@@ -412,6 +493,33 @@ namespace ProjectManager.API.Services.SprintService
             if(dto.EndDate != null) sprint.EndDate = dto.EndDate;
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("SprintUpdated", new
+                {
+                    sprintId = sprint.Id,
+                    sprint.Name,
+                    sprint.Goal,
+                    sprint.StartDate,
+                    sprint.EndDate,
+                    sprint.State
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Sprint",
+                    sprint.Id,
+                    "Updated",
+                    $"{_currentUserService.DisplayName} módosította a {sprint.Name} sprintet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             var response = new SprintResponseDto
             {
                 Id = sprint.Id,
@@ -498,6 +606,23 @@ namespace ProjectManager.API.Services.SprintService
                     columnId = task.ColumnId,
                     position = task.Position
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    task.ProjectId,
+                    "Task",
+                    task.Id,
+                    "SprintAssigned",
+                    task.SprintId.HasValue
+                        ? $"{_currentUserService.DisplayName} sprinthez rendelte a {task.TaskKey} taskot"
+                        : $"{_currentUserService.DisplayName} visszatette a {task.TaskKey} taskot a backlogba"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
     }
 }
