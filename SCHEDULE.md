@@ -652,6 +652,22 @@ Jövőbeli fejlesztésként az i18n támogatáshoz:
 - AssigneeIds refaktor: TaskResponseDto AssigneeNames -> AssigneeIds
 - SignalR broadcasts: TaskAssigneeAdded, TaskAssigneeRemoved
 
+- Activity model kiegészítés: Description mező hozzáadása
+- AddDescriptionToActivity migration
+- ActivityResponseDto: ActorName, EntityType, Action, Description, Payload, CreatedAt
+- IActivityService + ActivityService: LogActivityAsync (pagination), GetActivitiesAsync
+- ActivityController: GET /api/projects/{projectId}/activities (page, pageSize query paraméterek)
+- LogActivityAsync hívások service metódusokban:
+  - TaskService: CreateTask, UpdateTask, DeleteTask, AssignTaskToBoard, AssignTaskToSprint, AddAssignee, RemoveAssignee
+  - SprintService: CreateSprint, UpdateSprint, ActivateSprint, PlanSprint, CompleteSprint, DeleteSprint
+  - CommentService: CreateComment, DeleteComment
+  - TeamService: JoinProject, RemoveMember, UpdateMemberRole
+  - ProjectService: CreateProject, UpdateProject, ArchiveProject, UnarchiveProject
+  - BoardService: CreateBoard, UpdateBoard, DeleteBoard
+  - ColumnService: CreateColumn, UpdateColumn, DeleteColumn
+- ActivityCreated SignalR broadcast minden LogActivityAsync hívás után
+- Minden activity logging try/catch-ben — másodlagos nem kritikus funkció
+
 **Frontend**
 - teamApi.ts: getMembersAsync, removeMemberAsync, updateMemberRoleAsync, generateInviteLinkAsync, joinProjectAsync
 - teamStore.ts: members, refreshTrigger, setMembers, triggerTeamRefresh, clearTeam
@@ -667,18 +683,34 @@ Jövőbeli fejlesztésként az i18n támogatáshoz:
 - SignalR: TaskAssigneeAdded/Removed kezelés BoardView + SprintsView-ban
 - AppLayout: tagok betöltése projekt váltáskor (teamStore)
 
-### Még elvégzendő ebben a fejezetben
-- **Recent Activity feed** — Activity Log rendszer backend + frontend
-  - Activity model kiegészítés: Description mező hozzáadása
-  - Migration
-  - IActivityService + ActivityService
-  - LogActivityAsync hívások service metódusokban
-  - GetActivitiesAsync endpoint (pagination: 20/oldal)
-  - SignalR ActivityCreated broadcast
-  - activityApi.ts
-  - ActivityFeed.svelte komponens
-  - TeamView kiegészítése Activity Feed szekcióval
-  - AppLayout: ActivityCreated SignalR handler
+- activityApi.ts: ActivityResponse interface, getActivitiesAsync (pagination)
+- ActivityFeed.svelte: pagination, real-time SignalR frissítés, relatív idő formázás
+- Entity típus ikonok: Task, Sprint, Comment, Board, Column, Member, Project
+- Actor név kiemelés: fehér félkövér
+- Leírás és idő egy sorban, idő jobbra igazítva
+- TeamView: Recent Activity placeholder -> ActivityFeed komponens
+
+### Tervezett jövőbeli fejlesztések
+**Invitation kezelés a TeamView-on**
+- Létrehozott meghívó linkek listázása
+- Link másolás újra
+- Meghívó törlés
+- Lejárat és használati szám megjelenítése
+
+**Activity Log i18n terv**
+Jelenleg a Description mező magyarul tartalmazza a leírást.
+Jövőbeli fejlesztésként az i18n támogatáshoz:
+- Description mező opcionálissá tétele
+- Action + Payload alapján frontend fordítás
+- Nyelvi fájlok: hu.json, en.json
+- Példa: Action="TaskCreated", Payload={"taskKey":"TP-5"}
+  -> hu: "{actorName} létrehozta a {taskKey} taskot"
+  -> en: "{actorName} created task {taskKey}"
+
+**Actor szerepkör megjelenítés az Activity Feed-ben**
+- ActorRole visszaadása az ActivityResponseDto-ban
+- Rang alapú színkiemelés (Owner=narancs, Admin=kék, Member=zöld, Viewer=szürke)
+- Jelenleg fehér félkövér kiemelés — szerepkör nem egyértelműen azonosítható csak névből
 
 
 
