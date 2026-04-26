@@ -71,7 +71,7 @@ namespace ProjectManager.API.Services.BoardService
                 BoardId = board.Id,
                 Name = "In Progress",
                 MapsToStatus = "In Progress",
-                Position = 1
+                Position = 2
             };
             var doneColumn = new ColumnDefinition
             {

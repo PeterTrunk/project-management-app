@@ -145,6 +145,13 @@ namespace ProjectManager.API.Services.ProjectService
                 MapsToStatus = "To Do",
                 Position = 1
             };
+            var inProgressColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "In Progress",
+                MapsToStatus = "In Progress",
+                Position = 2
+            };
             var doneColumn = new ColumnDefinition
             {
                 BoardId = board.Id,
