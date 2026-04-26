@@ -106,7 +106,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch (Exception ex) { }
+            catch { }
 
             var response = new TaskResponseDto
             {
@@ -168,7 +168,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{task.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch (Exception ex) { }
+            catch { }
         }
 
         public async Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null)
