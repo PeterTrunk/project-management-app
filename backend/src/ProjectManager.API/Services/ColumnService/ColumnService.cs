@@ -4,6 +4,8 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Columns;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.ColumnService
 {
@@ -11,11 +13,15 @@ namespace ProjectManager.API.Services.ColumnService
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IActivityService _activityService;
 
-        public ColumnService(AppDbContext context, IHubContext<ProjectHub> hubContext)
+        public ColumnService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
         {
             _context = context;
             _hubContext = hubContext;
+            _currentUserService = currentUserService;
+            _activityService = activityService;
         }
 
         public async Task<ColumnResponseDto> CreateColumnAsync(Guid projectId, Guid boardId, CreateColumnDto dto)
@@ -48,6 +54,21 @@ namespace ProjectManager.API.Services.ColumnService
                     column.Position,
                     column.MapsToStatus
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Column",
+                    column.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} létrehozta a {column.Name} oszlopot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new ColumnResponseDto
             {
@@ -86,6 +107,21 @@ namespace ProjectManager.API.Services.ColumnService
             await _hubContext.Clients
                 .Group($"board-{boardId}")
                 .SendAsync("ColumnDeleted", new { columnId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Column",
+                    column.Id,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölte a {column.Name} oszlopot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<List<ColumnResponseDto>> GetColumnsAsync(Guid projectId, Guid boardId)
@@ -194,6 +230,21 @@ namespace ProjectManager.API.Services.ColumnService
                     column.MapsToStatus,
                     column.WipLimit
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Column",
+                    column.Id,
+                    "Updated",
+                    $"{_currentUserService.DisplayName} módosította a {column.Name} oszlopot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new ColumnResponseDto
             {

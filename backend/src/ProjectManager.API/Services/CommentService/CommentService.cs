@@ -4,6 +4,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Comments;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.CommentService
@@ -13,12 +14,14 @@ namespace ProjectManager.API.Services.CommentService
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly IActivityService _activityService;
 
-        public CommentService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
+        public CommentService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
+            _activityService = activityService;
         }
 
         public async Task<CommentResponseDto> CommentOnTaskAsync(Guid projectId, Guid taskId, CreateCommentDto dto)
@@ -57,6 +60,21 @@ namespace ProjectManager.API.Services.CommentService
                     createdAt = comment.CreatedAt
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Comment",
+                    comment.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} kommentelt a {task.TaskKey} taskon"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+            
             var response = new CommentResponseDto
             {
                 Id = comment.Id,
@@ -98,6 +116,21 @@ namespace ProjectManager.API.Services.CommentService
                     taskId,
                     commentId
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Comment",
+                    commentId,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölt egy kommentet a {task.TaskKey} taskon"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<List<CommentResponseDto>> GetCommentsAsync(Guid projectId, Guid taskId)

@@ -4,6 +4,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.ProjectService
@@ -13,12 +14,14 @@ namespace ProjectManager.API.Services.ProjectService
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly IActivityService _activityService;
 
-        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
+        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
+            _activityService = activityService;
         }
 
         public async Task DeleteProjectAsync(Guid projectId)
@@ -40,6 +43,21 @@ namespace ProjectManager.API.Services.ProjectService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ProjectArchived", new { projectId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Project",
+                    projectId,
+                    "Archived",
+                    $"{_currentUserService.DisplayName} archivált a projektet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task UnarchiveProjectAsync(Guid projectId)
@@ -52,6 +70,21 @@ namespace ProjectManager.API.Services.ProjectService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ProjectUnarchived", new { projectId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Project",
+                    projectId,
+                    "Unarchived",
+                    $"{_currentUserService.DisplayName} dearchivált a projektet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<ProjectResponseDto> CreateProjectAsync(CreateProjectDto dto)
@@ -132,7 +165,22 @@ namespace ProjectManager.API.Services.ProjectService
             _context.Sprints.Add(initSprint);
 
             await _context.SaveChangesAsync();
-            
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    project.Id,
+                    "Project",
+                    project.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} létrehozta a {project.Name} projektet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{project.Id}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             var response = new ProjectResponseDto
             {
                 Id = project.Id,
@@ -218,6 +266,21 @@ namespace ProjectManager.API.Services.ProjectService
                     project.Name,
                     project.Description
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Project",
+                    projectId,
+                    "Updated",
+                    $"{_currentUserService.DisplayName} módosította a projektet"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new ProjectResponseDto
             {

@@ -4,6 +4,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.TeamService
@@ -13,12 +14,14 @@ namespace ProjectManager.API.Services.TeamService
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IActivityService _activityService;
 
-        public TeamService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService)
+        public TeamService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
         {
             _context = context;
             _hubContext = hubContext;
             _currentUserService = currentUserService;
+            _activityService = activityService;
         }
 
         public async Task<InviteLinkResponseDto> GenerateInviteLinkAsync(Guid projectId, GenerateInviteLinkDto dto)
@@ -130,6 +133,21 @@ namespace ProjectManager.API.Services.TeamService
                     projectRole = "Member"
                 });
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    invite.ProjectId,
+                    "Member",
+                    callerId,
+                    "Joined",
+                    $"{user?.DisplayName} csatlakozott a projekthez"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{invite.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             return new ProjectMemberResponseDto
             {
                 UserId = callerId,
@@ -166,6 +184,22 @@ namespace ProjectManager.API.Services.TeamService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("MemberRemoved", new { userId });
+
+            try
+            {
+                var removedUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Member",
+                    userId,
+                    "Removed",
+                    $"{_currentUserService.DisplayName} eltávolította {removedUser?.DisplayName}-t a projektből"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<ProjectMemberResponseDto> UpdateMemberRoleAsync(Guid projectId, Guid userId, UpdateMemberRoleDto dto)
@@ -194,6 +228,21 @@ namespace ProjectManager.API.Services.TeamService
                     userId,
                     projectRole = dto.ProjectRole
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Member",
+                    userId,
+                    "RoleUpdated",
+                    $"{_currentUserService.DisplayName} módosította {member.User.DisplayName} szerepkörét {dto.ProjectRole}-re"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             return new ProjectMemberResponseDto
             {

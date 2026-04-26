@@ -4,6 +4,8 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Boards;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.BoardService
 {
@@ -11,11 +13,15 @@ namespace ProjectManager.API.Services.BoardService
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IActivityService _activityService;
 
-        public BoardService(AppDbContext context, IHubContext<ProjectHub> hubContext)
+        public BoardService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
         {
             _context = context;
             _hubContext = hubContext;
+            _currentUserService = currentUserService;
+            _activityService = activityService;
         }
         public async Task<BoardResponseDto> CreateBoardAsync(Guid projectId, CreateBoardDto dto)
         {
@@ -60,6 +66,13 @@ namespace ProjectManager.API.Services.BoardService
                 MapsToStatus = "To Do",
                 Position = 1
             };
+            var inProgressColumn = new ColumnDefinition
+            {
+                BoardId = board.Id,
+                Name = "In Progress",
+                MapsToStatus = "In Progress",
+                Position = 1
+            };
             var doneColumn = new ColumnDefinition
             {
                 BoardId = board.Id,
@@ -78,6 +91,21 @@ namespace ProjectManager.API.Services.BoardService
                     board.Name,
                     board.IsDefault
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Board",
+                    board.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} létrehozta a {board.Name} boardot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new BoardResponseDto
             {
@@ -107,6 +135,21 @@ namespace ProjectManager.API.Services.BoardService
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("BoardDeleted", new { boardId });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Board",
+                    board.Id,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölte a {board.Name} boardot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<List<BoardResponseDto>> GetBoardsAsync(Guid projectId)
@@ -169,6 +212,21 @@ namespace ProjectManager.API.Services.BoardService
                     board.Name,
                     board.IsDefault
                 });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Board",
+                    board.Id,
+                    "Updated",
+                    $"{_currentUserService.DisplayName} módosította a {board.Name} boardot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             var response = new BoardResponseDto
             {
