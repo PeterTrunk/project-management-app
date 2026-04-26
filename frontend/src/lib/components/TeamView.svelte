@@ -9,6 +9,7 @@
     import { teamStore, setMembers, triggerTeamRefresh } from '../stores/teamStore';
     import MemberCard from './MemberCard.svelte';
     import InviteModal from './InviteModal.svelte';
+    import ActivityFeed from './ActivityFeed.svelte';
 
     export let projectId: string;
 
@@ -114,12 +115,9 @@
         {/if}
     </div>
 
-    <!-- Recent Activity placeholder -->
     <div class="activity-section">
         <h3>Recent Activity</h3>
-        <div class="activity-placeholder">
-            <p class="empty">Hamarosan elérhető...</p>
-        </div>
+        <ActivityFeed {projectId} />
     </div>
 </div>
 
