@@ -712,10 +712,78 @@ Jövőbeli fejlesztésként az i18n támogatáshoz:
 - Rang alapú színkiemelés (Owner=narancs, Admin=kék, Member=zöld, Viewer=szürke)
 - Jelenleg fehér félkövér kiemelés — szerepkör nem egyértelműen azonosítható csak névből
 
-
-
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
+
+### Architekturális döntések
+
+**Environment Variables**
+- Érzékeny adatok (JWT secret, MinIO credentials, Webhook secret) .env fájlban
+- ASP.NET Core AddEnvironmentVariables() + Docker Compose env átadás
+
+**Git Webhook URL**
+- Projekt specifikus token alapú URL: POST /api/git/webhook/{webhookToken}
+- Minden projekthez egyedi token generálódik
+- Project Settings-ben megjeleníthető + regenerálható
+- HMAC-SHA256 secret validáció (GitHub kompatibilis)
+
+**File Storage — Streaming megközelítés**
+- Fájl letöltés backend streaminggel (nem presigned URL)
+- Biztonsági indok: minden letöltésnél auth ellenőrzés történik
+- Tag eltávolítás után azonnal elvész a hozzáférés
+- Projekt menedzsment use-case-nél elfogadható terhelés (ritka letöltések, kis csapat)
+- IFileStorageService interface mögé bújtatva → könnyen cserélhető
+
+**Skálázhatóság — Monolith first**
+- Jelenlegi megközelítés: Monolith + IFileStorageService interface
+- Jövőbeli optimalizáció szükség esetén:
+  - File Service kiszervezése külön microservice-be
+  - Redis backplane SignalR-hez
+  - Kubernetes ha szükséges
+- Performance tesztelés után döntés a kiszervezésről
+
+### Tervezett implementáció
+
+**Backend:**
+- Environment variables konfiguráció (.env + Docker Compose)
+- WebhookToken mező hozzáadása Project modellhez + migration
+- IFileStorageService + MinIOFileStorageService
+- AttachmentController: task szintű és projekt szintű (Team Resources) feltöltés/letöltés/törlés
+- WebhookController: POST /api/git/webhook/{webhookToken}
+- IGitWebhookService + GitWebhookService:
+  - HMAC-SHA256 secret validáció
+  - GitHub + GitLab payload parse
+  - Task matching regex: /\b{projektKey}-\d+\b/g
+  - CommitLink + PrLink létrehozás
+- SignalR broadcasts: CommitLinked, PrLinked
+
+**Frontend:**
+- TaskDetailModal: Git szekció (commitok, PR-ok megjelenítése)
+- TaskDetailModal: Attachment szekció (feltöltés, letöltés, törlés)
+- Team Resources oldal: projekt szintű dokumentumok
+- Project Settings: Webhook URL megjelenítés + regenerálás
+
+**MinIO bucket struktúra:**
+  project-manager/
+  attachments/
+  {projectId}/
+  tasks/
+    {taskId}/
+      {fileId}{fileName}
+  shared/
+  {fileId}{fileName}  <- Team Resources
+
+**Implementációs sorrend:**
+1. Environment variables konfiguráció
+2. MinIO Docker Compose + IFileStorageService + MinIOFileStorageService
+3. AttachmentController (task szintű)
+4. TaskDetailModal attachment szekció
+5. Team Resources oldal (projekt szintű feltöltés)
+6. WebhookToken Project modellhez + migration
+7. WebhookController + secret validáció
+8. GitWebhookService: task matching + CommitLink/PrLink
+9. TaskDetailModal Git szekció
+10. SignalR broadcasts
 
 ## Statistics Dashboard & ECharts Integration
 Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using PostgreSQL views for efficient aggregation. Filterable by sprint, user, and date range.
