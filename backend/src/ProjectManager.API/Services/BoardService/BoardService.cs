@@ -80,7 +80,7 @@ namespace ProjectManager.API.Services.BoardService
                 MapsToStatus = "Done",
                 Position = 99
             };
-            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
+            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn, inProgressColumn);
 
             await _context.SaveChangesAsync();
             await _hubContext.Clients

@@ -159,7 +159,7 @@ namespace ProjectManager.API.Services.ProjectService
                 MapsToStatus = "Done",
                 Position = 99
             };
-            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn);
+            _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn, inProgressColumn);
 
             var initSprint = new Sprint
             {
