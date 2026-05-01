@@ -8,14 +8,17 @@ using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
+using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.AttachmentService;
 using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
@@ -167,6 +170,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddSingleton<ILexorankService, LexorankService>();
+builder.Services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
 
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
@@ -177,6 +181,7 @@ builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 

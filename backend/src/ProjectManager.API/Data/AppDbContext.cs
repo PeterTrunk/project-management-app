@@ -498,7 +498,7 @@ public class AppDbContext : DbContext
             entity.Property(a => a.SizeBytes)
                   .IsRequired();
 
-            entity.Property(a => a.StoragePath)
+            entity.Property(a => a.StorageKey)
                   .IsRequired();
 
             entity.Property(a => a.AttachmentType)
