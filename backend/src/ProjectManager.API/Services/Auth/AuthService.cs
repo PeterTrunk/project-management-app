@@ -13,12 +13,10 @@ namespace ProjectManager.API.Services.Auth
     public class AuthService : IAuthService
     {
         private readonly AppDbContext _context;
-        private readonly IConfiguration _configuration;
 
-        public AuthService(AppDbContext context, IConfiguration configuration)
+        public AuthService(AppDbContext context)
         {
             _context = context;
-            _configuration = configuration;
         }
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {   
@@ -63,11 +61,12 @@ namespace ProjectManager.API.Services.Auth
             };
             //Aláíró kulcs
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+            Encoding.UTF8.GetBytes(
+                Environment.GetEnvironmentVariable("JWT_SECRET")!));
             //Token összerakása
             var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
+                issuer: Environment.GetEnvironmentVariable("JWT_ISSUER"),
+                audience: Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
                 claims: claims,
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)

@@ -40,7 +40,8 @@
             const response = await registerAsync({ email, displayName, password });
             success = 'Sikeres regisztráció! Átirányítás...';
             setTimeout(() => push('/'), 2000);
-        } catch (e) {
+        } catch (e: any) {
+            console.error('Backend hiba:', e.response?.data);
             error = 'Hiba történt a regisztráció során!';
         }
     }

@@ -2,6 +2,7 @@
 
 # Enviromental Variables
 .env
+.env.local
 
 # .NET
 backend/**/bin/
