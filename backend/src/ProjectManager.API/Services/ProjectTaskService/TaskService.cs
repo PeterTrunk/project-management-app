@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using ProjectManager.API.Data;
+using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.Hubs;
@@ -112,13 +113,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
             {
                 Id = task.Id,
                 ProjectId = task.ProjectId,
-                BoardId= task.BoardId,
+                BoardId = task.BoardId,
                 ColumnId = task.ColumnId,
                 SprintId = task.SprintId,
                 AssigneeIds = new List<string>(),
                 LabelIds = new List<string>(),
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
+                Attachments = new List<AttachmentResponseDto>(),
                 CreatedByName = user.DisplayName,
                 TaskKey = task.TaskKey,
                 Title = task.Title,
@@ -207,9 +209,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
             var attachments = await _context.Attachments
                 .Where(a => a.TaskId.HasValue && taskIds.Contains(a.TaskId.Value))
+                .Include(a => a.UploadedBy)
                 .ToListAsync();
-
-
+            
             return tasks.Select(t => new TaskResponseDto
             {
                 Id = t.Id,
@@ -236,11 +238,17 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .ToList(),
                 Attachments = attachments
                     .Where(a => a.TaskId == t.Id)
-                    .Select(a => new AttachmentDto
+                    .Select(a => new AttachmentResponseDto
                     {
                         Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
                         FileName = a.FileName,
-                        FileSizeBytes = a.SizeBytes
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
                     })
                     .ToList(),
                 CreatedByName = t.CreatedByUser.DisplayName,
@@ -297,13 +305,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .ToListAsync();
 
             var attachments = await _context.Attachments
-                .Where(a => a.TaskId == task.Id)
-                .Select(a => new AttachmentDto
-                {
-                    Id = a.Id,
-                    FileName = a.FileName,
-                    FileSizeBytes = a.SizeBytes
-                })
+                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Include(a => a.UploadedBy)
                 .ToListAsync();
 
             var response = new TaskResponseDto
@@ -317,7 +320,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
-                Attachments = attachments,
+                Attachments = attachments
+                    .Select(a => new AttachmentResponseDto
+                    {
+                        Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
+                        FileName = a.FileName,
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
+                    })
+                    .ToList(),
                 CreatedByName = task.CreatedByUser?.DisplayName ?? "Ismeretlen",
                 TaskKey = task.TaskKey,
                 Title = task.Title,
@@ -468,6 +484,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
 
+            var attachments = await _context.Attachments
+                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Include(a => a.UploadedBy)
+                .ToListAsync();
+
             var response = new TaskResponseDto
             {
                 Id = task.Id,
@@ -479,6 +500,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
+                Attachments = attachments
+                    .Select(a => new AttachmentResponseDto
+                    {
+                        Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
+                        FileName = a.FileName,
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
+                    })
+                    .ToList(),
                 CreatedByName = task.CreatedByUser.DisplayName,
                 TaskKey = task.TaskKey,
                 Title = task.Title,
@@ -560,6 +595,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
 
+            var attachments = await _context.Attachments
+                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Include(a => a.UploadedBy)
+                .ToListAsync();
+
             var response = new TaskResponseDto
             {
                 Id = task.Id,
@@ -571,6 +611,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 LabelIds = labels,
                 CommitLinks = commitLinks,
                 PrLinks = prLinks,
+                Attachments = attachments
+                    .Select(a => new AttachmentResponseDto
+                    {
+                        Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
+                        FileName = a.FileName,
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
+                    })
+                    .ToList(),
                 CreatedByName = user.DisplayName,
                 TaskKey = task.TaskKey,
                 Title = task.Title,
@@ -703,6 +757,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(lt => lt.LabelId.ToString())
                 .ToListAsync();
 
+            var attachments = await _context.Attachments
+                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Include(a => a.UploadedBy)
+                .ToListAsync();
+
             return new TaskResponseDto
             {
                 Id = task.Id,
@@ -714,6 +773,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 LabelIds = labels,
                 CommitLinks = new List<string>(),
                 PrLinks = new List<string>(),
+                Attachments = attachments
+                    .Select(a => new AttachmentResponseDto
+                    {
+                        Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
+                        FileName = a.FileName,
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
+                    })
+                    .ToList(),
                 CreatedByName = task.CreatedByUser.DisplayName,
                 TaskKey = task.TaskKey,
                 Title = task.Title,

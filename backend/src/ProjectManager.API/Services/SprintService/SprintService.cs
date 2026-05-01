@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
+using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.DTOs.Sprints;
@@ -349,8 +350,9 @@ namespace ProjectManager.API.Services.SprintService
 
             var attachments = await _context.Attachments
                 .Where(a => a.TaskId.HasValue && taskIds.Contains(a.TaskId.Value))
+                .Include(a => a.UploadedBy)
                 .ToListAsync();
-            
+
             return tasks.Select(t => new TaskResponseDto
             {
                 Id = t.Id,
@@ -377,11 +379,17 @@ namespace ProjectManager.API.Services.SprintService
                     .ToList(),
                 Attachments = attachments
                     .Where(a => a.TaskId == t.Id)
-                    .Select(a => new AttachmentDto
+                    .Select(a => new AttachmentResponseDto
                     {
                         Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
                         FileName = a.FileName,
-                        FileSizeBytes = a.SizeBytes
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
                     })
                     .ToList(),
                 CreatedByName = t.CreatedByUser?.DisplayName ?? "Ismeretlen",

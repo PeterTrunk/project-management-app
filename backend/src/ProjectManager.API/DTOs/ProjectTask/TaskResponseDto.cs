@@ -1,4 +1,5 @@
-﻿using ProjectManager.API.DTOs.Shared;
+﻿using ProjectManager.API.DTOs.Attachment;
+using ProjectManager.API.DTOs.Shared;
 
 namespace ProjectManager.API.DTOs.ProjectTask
 {
@@ -13,7 +14,7 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public List<string> LabelIds { get; set; } = new List<string>();
         public List<string> CommitLinks { get; set; } = new List<string>();
         public List<string> PrLinks { get; set; } = new List<string>();
-        public List<AttachmentDto> Attachments { get; set; } = new List<AttachmentDto>();
+        public List<AttachmentResponseDto> Attachments { get; set; } = new List<AttachmentResponseDto>();
         public string CreatedByName { get; set; } = string.Empty;
         public string TaskKey { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
