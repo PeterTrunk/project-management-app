@@ -1,3 +1,4 @@
+import type { AttachmentResponse } from './attachmentApi';
 import apiClient from './client';
 
 interface CreateTaskRequest {
@@ -47,6 +48,7 @@ export interface TaskResponse {
     labelIds: string[];
     commitLinks: string[];
     prLinks: string[];
+    attachments: AttachmentResponse[];
     createdByName: string;
     closedAt: Date;
     createdAt: Date;

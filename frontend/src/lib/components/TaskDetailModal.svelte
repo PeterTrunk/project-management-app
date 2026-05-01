@@ -16,7 +16,9 @@
     import type { SprintResponse } from '../api/sprintApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
-
+    import type { AttachmentResponse } from '../api/attachmentApi';
+    import { uploadTaskAttachmentAsync, downloadAttachmentAsync, deleteTaskAttachmentAsync } from '../api/attachmentApi';
+    import AttachmentCard from './AttachmentCard.svelte';
 
     export let task: TaskResponse;
     $: isBacklogTask = !task.boardId && !task.columnId && !task.sprintId;
@@ -50,6 +52,13 @@
     let editPriority = task.priority ?? '';
     let editEstimateInMinutes = task.estimateInMinutes ?? 0;
     let editDueDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '';
+
+    let attachments: AttachmentResponse[] = [];
+    $: attachments = (task.attachments ?? []) as AttachmentResponse[];
+    let isUploading = false;
+    let uploadError = '';
+
+
 
     let modalRef: HTMLElement;
 
@@ -189,6 +198,27 @@
         }
     }
 
+    async function handleFileUpload(e: Event) {
+        const input = e.target as HTMLInputElement;
+        if (!input.files || input.files.length === 0) return;
+        
+        const file = input.files[0];
+        isUploading = true;
+        uploadError = '';
+        
+        try {
+            const uploaded = await uploadTaskAttachmentAsync(projectId, task.id, file);
+            task = { ...task, attachments: [...task.attachments, uploaded] };
+        } catch (e: any) {
+            uploadError = 'Hiba történt a feltöltéskor!';
+        } finally {
+            isUploading = false;
+            input.value = '';
+        }
+    }
+
+    
+
 
     function closeModal() {
         isTaskDetailOpen = false;
@@ -273,6 +303,45 @@
                         {/if}
                     </div>
                 </div>
+                <!-- Attachmentek -->
+                <div class="section">
+                    <h3>Csatolmányok</h3>
+                    {#if task.attachments && task.attachments.length > 0}
+                        <div class="attachments-list">
+                            {#each task.attachments as attachment (attachment.id)}
+                                <AttachmentCard
+                                    {attachment}
+                                    {projectId}
+                                    taskId={task.id}
+                                    onDelete={(id) => {
+                                        task = { 
+                                            ...task, 
+                                            attachments: task.attachments.filter(a => a.id !== id) 
+                                        };
+                                    }}
+                                />
+                            {/each}
+                        </div>
+                    {:else}
+                        <p class="empty">Nincs csatolmány</p>
+                    {/if}
+
+                    <div class="upload-section">
+                        <label class="upload-btn" class:loading={isUploading}>
+                            {isUploading ? 'Feltöltés...' : '+ Fájl feltöltése'}
+                            <input 
+                                type="file" 
+                                style="display: none"
+                                on:change={handleFileUpload}
+                                disabled={isUploading}
+                            />
+                        </label>
+                        {#if uploadError}
+                            <p class="error">{uploadError}</p>
+                        {/if}
+                    </div>
+                </div>
+                <!-- Optional fields -->
                 <div id="optional-fields">
                     <h2>Opcionális mezők</h2>
                     <p>Leírás: {task.description ?? 'Nincs leírás'}</p>
@@ -624,6 +693,28 @@
         flex: 1;
     }
 
+    .attachments-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .upload-btn {
+        display: inline-block;
+        background: #2a2a2a;
+        border: 1px dashed #444;
+        color: #aaa;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        width: 100%;
+        text-align: center;
+    }
+    
+    .upload-btn:hover { background: #333; border-color: #666; }
+    .upload-btn.loading { opacity: 0.5; cursor: not-allowed; }
 
     #success { color: greenyellow; }
     #failed { color: red; white-space: pre-line; }
