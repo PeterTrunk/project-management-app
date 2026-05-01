@@ -20,6 +20,7 @@
     import BoardView from '../lib/components/BoardView.svelte';
     import SprintsView from '../lib/components/SprintsView.svelte';
     import TeamView from '../lib/components/TeamView.svelte';
+    import TeamResources from '../lib/components/TeamResources.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -256,7 +257,7 @@
                 {:else if activeView === 'statistics'}
                     <p>Statistics nézet</p>
                 {:else if activeView === 'teamResources'}
-                    <p>Team Resources nézet</p>
+                    <TeamResources projectId={activeProject.id} />
                 {:else if activeView === 'projectSettings'}
                     <ProjectSettings project={activeProject} />
                 {/if}
