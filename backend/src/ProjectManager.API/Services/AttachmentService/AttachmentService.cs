@@ -2,11 +2,10 @@
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Model;
-using ProjectManager.API.Services.AttachmentService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.FileStorageService;
 
-namespace ProjectManager.API.DTOs.Attachment
+namespace ProjectManager.API.Services.AttachmentService
 {
     public class AttachmentService : IAttachmentService
     {
@@ -76,7 +75,7 @@ namespace ProjectManager.API.DTOs.Attachment
 
             await _fileStorageService.UploadFileAsync(fileStream, fileName, contentType, storageKey);
 
-            var attachment = new Model.Attachment
+            var attachment = new Attachment
             {
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
@@ -102,7 +101,7 @@ namespace ProjectManager.API.DTOs.Attachment
 
             await _fileStorageService.UploadFileAsync(fileStream, fileName, contentType, storageKey);
 
-            var attachment = new Model.Attachment
+            var attachment = new Attachment
             {
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
@@ -122,7 +121,7 @@ namespace ProjectManager.API.DTOs.Attachment
             return MapToDto(attachment);
         }
 
-        private AttachmentResponseDto MapToDto(Model.Attachment attachment)
+        private AttachmentResponseDto MapToDto(Attachment attachment)
         {
             return new AttachmentResponseDto
             {

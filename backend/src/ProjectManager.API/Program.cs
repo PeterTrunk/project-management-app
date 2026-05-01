@@ -8,7 +8,6 @@ using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Data;
-using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Services.ActivityService;
