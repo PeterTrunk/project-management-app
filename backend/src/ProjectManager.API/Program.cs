@@ -28,7 +28,11 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // .env fájl betöltése
-var envFile = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+var envFile = Path.Combine(
+    Directory.GetCurrentDirectory(),
+    "..", "..", "..",
+    ".env"
+);
 if (File.Exists(envFile))
 {
     foreach (var line in File.ReadAllLines(envFile))
