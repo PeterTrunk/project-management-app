@@ -373,10 +373,12 @@ namespace ProjectManager.API.Services.SprintService
                     .Where(cl => cl.TaskId == t.Id)
                     .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                     .ToList(),
+                /*
                 PrLinks = prLinks
                     .Where(pl => pl.TaskId == t.Id)
                     .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                     .ToList(),
+                */
                 Attachments = attachments
                     .Where(a => a.TaskId == t.Id)
                     .Select(a => new AttachmentResponseDto

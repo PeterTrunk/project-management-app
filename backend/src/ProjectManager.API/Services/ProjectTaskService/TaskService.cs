@@ -232,10 +232,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Where(cl => cl.TaskId == t.Id)
                     .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                     .ToList(),
+                /*
                 PrLinks = prLinks
                     .Where(pl => pl.TaskId == t.Id)
                     .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                     .ToList(),
+                */
                 Attachments = attachments
                     .Where(a => a.TaskId == t.Id)
                     .Select(a => new AttachmentResponseDto
@@ -299,10 +301,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
+            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
                 .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
+            */
 
             var attachments = await _context.Attachments
                 .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
@@ -319,7 +323,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
-                PrLinks = prLinks,
+                //PrLinks = prLinks,
                 Attachments = attachments
                     .Select(a => new AttachmentResponseDto
                     {
@@ -479,10 +483,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
+            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
                 .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
+            */
 
             var attachments = await _context.Attachments
                 .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
@@ -499,7 +505,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
-                PrLinks = prLinks,
+                //PrLinks = prLinks,
                 Attachments = attachments
                     .Select(a => new AttachmentResponseDto
                     {
@@ -590,10 +596,12 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
+            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
                 .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
+            */
 
             var attachments = await _context.Attachments
                 .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
@@ -610,7 +618,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 AssigneeIds = assigneeIds,
                 LabelIds = labels,
                 CommitLinks = commitLinks,
-                PrLinks = prLinks,
+                //PrLinks = prLinks,
                 Attachments = attachments
                     .Select(a => new AttachmentResponseDto
                     {

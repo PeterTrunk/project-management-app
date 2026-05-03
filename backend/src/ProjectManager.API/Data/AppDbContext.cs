@@ -570,19 +570,22 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<Integration>(entity =>
         {
-            //Constraints
             entity.Property(i => i.Provider)
-                  .HasMaxLength(16)
-                  .IsRequired();
+          .HasMaxLength(16)
+          .IsRequired();
 
             entity.Property(i => i.RepoFullName)
                   .HasMaxLength(200)
                   .IsRequired();
 
             entity.Property(i => i.AccessToken)
-                  .IsRequired();
+                  .IsRequired(false);
 
             entity.Property(i => i.WebhookSecret)
+                  .IsRequired();
+
+            entity.Property(i => i.WebhookToken)
+                  .HasMaxLength(64)
                   .IsRequired();
 
             entity.Property(i => i.IsEnabled)
@@ -592,12 +595,17 @@ public class AppDbContext : DbContext
             entity.Property(i => i.CreatedAt)
                   .IsRequired();
 
-            //Indexes
-            // Egy projekthez providerenként csak egy integráció
-            entity.HasIndex(i => new { i.ProjectId, i.Provider })
+            entity.Property(i => i.UpdatedAt)
+                  .IsRequired();
+
+            //Egy projekthez providerenként + reponként csak egy integráció
+            entity.HasIndex(i => new { i.ProjectId, i.Provider, i.RepoFullName })
                   .IsUnique();
 
-            //Foreign keys
+            //gyors lookup webhook érkezésekor
+            entity.HasIndex(i => i.WebhookToken)  
+                  .IsUnique();
+
             entity.HasOne(i => i.Project)
                   .WithMany(p => p.Integrations)
                   .HasForeignKey(i => i.ProjectId)
@@ -606,74 +614,65 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<CommitLink>(entity =>
         {
-            //Constraints
-            entity.Property(cl => cl.Provider)
-                  .HasMaxLength(16)
-                  .IsRequired();
-
-            entity.Property(cl => cl.RepoFullName)
-                  .HasMaxLength(200)
-                  .IsRequired();
-
             entity.Property(cl => cl.CommitSha)
-                  .HasMaxLength(40)
-                  .IsRequired();
+          .HasMaxLength(40)
+          .IsRequired();
 
             entity.Property(cl => cl.AuthorEmail)
                   .HasMaxLength(255);
 
+            entity.Property(cl => cl.AuthorName)
+                  .HasMaxLength(100);
+
             entity.Property(cl => cl.CommittedAt)
                   .IsRequired();
 
-            //Indexes
-            // Unique: egy commit egy taskhoz csak egyszer linkelhető
-            entity.HasIndex(cl => new { cl.TaskId, cl.CommitSha })
+            //Unique: egy commit egy integrationhoz csak egyszer
+            entity.HasIndex(cl => new { cl.IntegrationId, cl.CommitSha })
                   .IsUnique();
 
-            entity.HasIndex(cl => new { cl.RepoFullName, cl.CommitSha });
-
-            //Foreign keys
             entity.HasOne(cl => cl.ProjectTask)
                   .WithMany(t => t.CommitLinks)
                   .HasForeignKey(cl => cl.TaskId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(cl => cl.Integration)
+                  .WithMany(i => i.CommitLinks)
+                  .HasForeignKey(cl => cl.IntegrationId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
         
         modelBuilder.Entity<PrLink>(entity =>
         {
-            //Constraints
-            entity.Property(pl => pl.Provider)
-                  .HasMaxLength(16)
-                  .IsRequired();
-
-            entity.Property(pl => pl.RepoFullName)
-                  .HasMaxLength(200)
-                  .IsRequired();
-
             entity.Property(pl => pl.Title)
-                  .HasMaxLength(240);
+          .HasMaxLength(240);
 
             entity.Property(pl => pl.State)
                   .HasMaxLength(24)
                   .IsRequired()
                   .HasDefaultValue("open");
 
+            entity.Property(pl => pl.AuthorName)
+                  .HasMaxLength(100);
+
             entity.Property(pl => pl.CreatedAt)
                   .IsRequired();
 
-            //Indexes
-            // Unique: egy PR egy taskhoz csak egyszer linkelhető
-            entity.HasIndex(pl => new { pl.TaskId, pl.Provider, pl.RepoFullName, pl.PrNumber })
+            //Unique: egy PR egy integrationhoz csak egyszer
+            entity.HasIndex(pl => new { pl.IntegrationId, pl.PrNumber })
                   .IsUnique();
 
-            entity.HasIndex(pl => new { pl.RepoFullName, pl.PrNumber });
             entity.HasIndex(pl => pl.State);
 
-            //Foreign keys
             entity.HasOne(pl => pl.ProjectTask)
                   .WithMany(t => t.PrLinks)
                   .HasForeignKey(pl => pl.TaskId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(pl => pl.Integration)
+                  .WithMany(i => i.PrLinks)
+                  .HasForeignKey(pl => pl.IntegrationId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
         
         modelBuilder.Entity<ProjectCounter>(entity =>
