@@ -1,0 +1,25 @@
+﻿using FluentValidation;
+using ProjectManager.API.DTOs.Integration;
+
+namespace ProjectManager.API.Validators.IntegrationValidators
+{
+    public class CreateIntegrationDtoValidator : AbstractValidator<CreateIntegrationDto>
+    {
+        private static readonly string[] ValidProviders = { "GitHub", "GitLab" };
+
+        public CreateIntegrationDtoValidator()
+        {
+            RuleFor(x => x.Provider)
+                .NotEmpty()
+                .WithMessage("Provider megadása kötelező!")
+                .Must(p => ValidProviders.Contains(p))
+                .WithMessage("Érvénytelen provider! Lehetséges értékek: GitHub, GitLab");
+
+            RuleFor(x => x.RepoFullName)
+                .NotEmpty()
+                .WithMessage("Repository neve kötelező!")
+                .Matches(@"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
+                .WithMessage("Érvénytelen repository formátum! Helyes formátum: owner/repo");
+        }
+    }
+}

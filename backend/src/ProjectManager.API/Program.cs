@@ -18,6 +18,7 @@ using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.FileStorageService;
+using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
@@ -181,6 +182,7 @@ builder.Services.AddScoped<ISprintService, SprintService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
