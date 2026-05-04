@@ -11,5 +11,6 @@ namespace ProjectManager.API.Services.IntegrationService
         Task<IntegrationResponseDto> RegenerateWebhookTokenAsync(Guid projectId, Guid integrationId);
         Task<Integration?> GetByWebhookTokenAsync(string webhookToken);
         Task EnableDisableIntegrationAsync(Guid projectId, Guid integrationId, bool isEnabled);
+        Task VerifyIntegrationAsync(Guid integrationId);
     }
 }

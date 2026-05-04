@@ -592,6 +592,10 @@ public class AppDbContext : DbContext
                   .IsRequired()
                   .HasDefaultValue(true);
 
+            entity.Property(i => i.IsVerified)
+                  .IsRequired()
+                  .HasDefaultValue(false);
+
             entity.Property(i => i.CreatedAt)
                   .IsRequired();
 

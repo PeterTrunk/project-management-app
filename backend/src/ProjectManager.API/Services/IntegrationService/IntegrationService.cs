@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Integration;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.CurrentUserService;
 
@@ -10,11 +12,13 @@ namespace ProjectManager.API.Services.IntegrationService
     {
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IHubContext<ProjectHub> _hubContext;
 
-        public IntegrationService(AppDbContext context, ICurrentUserService currentUserService)
+        public IntegrationService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _hubContext = hubContext;
         }
 
         public async Task<IntegrationResponseDto> CreateIntegrationAsync(Guid projectId, CreateIntegrationDto dto)
@@ -107,6 +111,26 @@ namespace ProjectManager.API.Services.IntegrationService
             return MapToDto(integration);
         }
 
+        public async Task VerifyIntegrationAsync(Guid integrationId)
+        {
+            var integration = await _context.Integrations
+                .FirstOrDefaultAsync(i => i.Id == integrationId);
+            if (integration == null)
+                throw new Exception("Integráció nem található!");
+
+            integration.IsVerified = true;
+            integration.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients
+                .Group($"project-{integration.ProjectId}")
+                .SendAsync("IntegrationVerified", new
+                {
+                    integrationId = integration.Id,
+                    projectId = integration.ProjectId
+                });
+        }
+
         private IntegrationResponseDto MapToDto(Integration integration)
         {
             var baseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
@@ -120,6 +144,7 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookToken = integration.WebhookToken,
                 WebhookUrl = $"{baseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
+                IsVerified = integration.IsVerified,
                 HasAccessToken = !string.IsNullOrEmpty(integration.AccessToken),
                 CreatedAt = integration.CreatedAt,
                 UpdatedAt = integration.UpdatedAt

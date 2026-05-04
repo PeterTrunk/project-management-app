@@ -10,6 +10,7 @@
         public string WebhookSecret { get; set; } = string.Empty;
         public string WebhookToken { get; set; } = string.Empty;
         public bool IsEnabled { get; set; } = true;
+        public bool IsVerified { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 

@@ -65,6 +65,9 @@ namespace ProjectManager.API.Controllers
                 {
                     switch (gitHubEvent)
                     {
+                        case "ping":
+                            await _integrationService.VerifyIntegrationAsync(integration.Id);
+                            return Ok("pong");
                         case "push":
                             await _gitWebhookService.ProcessPushEventAsync(
                                 integration.ProjectId, integration.Id, payloadJson);
