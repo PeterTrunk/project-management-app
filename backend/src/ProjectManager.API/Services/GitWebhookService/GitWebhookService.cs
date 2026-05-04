@@ -1,0 +1,228 @@
+﻿using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Data;
+using ProjectManager.API.Model;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
+namespace ProjectManager.API.Services.GitWebhookService
+{
+    public class GitWebhookService : IGitWebhookService
+    {
+        private readonly AppDbContext _context;
+
+        public GitWebhookService(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
+        {
+            var action = payload.GetProperty("action").GetString();
+            var pr = payload.GetProperty("pull_request");
+
+            var prNumber = pr.GetProperty("number").GetInt32();
+            var title = pr.GetProperty("title").GetString() ?? string.Empty;
+            var prUrl = pr.TryGetProperty("html_url", out var urlProp)
+                ? urlProp.GetString() : null;
+            var authorName = pr.GetProperty("user")
+                .GetProperty("login").GetString() ?? string.Empty;
+            var repoFullName = payload.GetProperty("repository")
+                .GetProperty("full_name").GetString() ?? string.Empty;
+
+            // State meghatározása
+            var state = action switch
+            {
+                "opened" or "reopened" => "open",
+                "closed" => pr.TryGetProperty("merged", out var merged) &&
+                             merged.GetBoolean() ? "merged" : "closed",
+                _ => "open"
+            };
+
+            DateTime? mergedAt = null;
+            if (state == "merged" && pr.TryGetProperty("merged_at", out var mergedAtProp))
+            {
+                mergedAt = DateTime.Parse(mergedAtProp.GetString()!);
+            }
+
+            // Létező PR frissítése vagy új létrehozása
+            var existingPr = await _context.PrLinks
+                .FirstOrDefaultAsync(pl =>
+                    pl.IntegrationId == integrationId &&
+                    pl.PrNumber == prNumber);
+
+            if (existingPr != null)
+            {
+                existingPr.State = state;
+                existingPr.MergedAt = mergedAt;
+                existingPr.Title = title;
+            }
+            else
+            {
+                // Task matching
+                var tasks = await MatchTasksAsync(projectId, title);
+
+                if (tasks.Count == 0)
+                {
+                    // Unmatched PR
+                    _context.PrLinks.Add(new PrLink
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = null,
+                        IntegrationId = integrationId,
+                        PrNumber = prNumber,
+                        PrUrl = prUrl,
+                        Title = title,
+                        State = state,
+                        AuthorName = authorName,
+                        CreatedAt = DateTime.UtcNow,
+                        MergedAt = mergedAt
+                    });
+                }
+                else
+                {
+                    foreach (var task in tasks)
+                    {
+                        _context.PrLinks.Add(new PrLink
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            IntegrationId = integrationId,
+                            PrNumber = prNumber,
+                            PrUrl = prUrl,
+                            Title = title,
+                            State = state,
+                            AuthorName = authorName,
+                            CreatedAt = DateTime.UtcNow,
+                            MergedAt = mergedAt
+                        });
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ProcessPushEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
+        {
+            var commits = payload.GetProperty("commits");
+
+            foreach (var commit in commits.EnumerateArray())
+            {
+                var sha = commit.GetProperty("id").GetString() ?? string.Empty;
+                var message = commit.GetProperty("message").GetString() ?? string.Empty;
+                var url = commit.TryGetProperty("url", out var urlProp)
+                    ? urlProp.GetString() : null;
+                var authorName = commit.GetProperty("author")
+                    .GetProperty("name").GetString() ?? string.Empty;
+                var authorEmail = commit.GetProperty("author")
+                    .GetProperty("email").GetString() ?? string.Empty;
+                var committedAt = commit.TryGetProperty("timestamp", out var tsProp)
+                    ? DateTime.Parse(tsProp.GetString()!)
+                    : DateTime.UtcNow;
+
+                // Task matching
+                var tasks = await MatchTasksAsync(projectId, message);
+
+                if (tasks.Count == 0)
+                {
+                    // Unmatched commit — TaskId null
+                    await CreateCommitLinkAsync(
+                        null, integrationId, sha, url, message,
+                        authorName, authorEmail, committedAt);
+                }
+                else
+                {
+                    foreach (var task in tasks)
+                    {
+                        // Már létezik?
+                        var existing = await _context.CommitLinks
+                            .FirstOrDefaultAsync(cl =>
+                                cl.IntegrationId == integrationId &&
+                                cl.CommitSha == sha &&
+                                cl.TaskId == task.Id);
+                        if (existing != null) continue;
+
+                        await CreateCommitLinkAsync(
+                            task.Id, integrationId, sha, url, message,
+                            authorName, authorEmail, committedAt);
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        public bool ValidateGitHubSignature(string payload, string signature)
+        {
+            var secret = Environment.GetEnvironmentVariable("GIT_WEBHOOK_SECRET");
+            if (string.IsNullOrEmpty(secret)) return false;
+
+            var secretBytes = Encoding.UTF8.GetBytes(secret);
+            var payloadBytes = Encoding.UTF8.GetBytes(payload);
+
+            using var hmac = new HMACSHA256(secretBytes);
+            var hash = hmac.ComputeHash(payloadBytes);
+            var expectedSignature = "sha256=" + Convert.ToHexString(hash).ToLower();
+
+            return CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(expectedSignature),
+                Encoding.UTF8.GetBytes(signature)
+            );
+        }
+
+        public bool ValidateGitLabSignature(string token)
+        {
+            var secret = Environment.GetEnvironmentVariable("GIT_WEBHOOK_SECRET");
+            if (string.IsNullOrEmpty(secret)) return false;
+            return CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(secret),
+                Encoding.UTF8.GetBytes(token)
+            );
+        }
+
+        private async Task<List<ProjectTask>> MatchTasksAsync(Guid projectId, string text)
+        {
+            //Projekt ProjKey lekérése
+            var project = await _context.Projects
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null) return new List<ProjectTask>();
+
+            //Valid Regexek: PM-123, #PM-123, [PM-123], (PM-123)
+            var pattern = $@"(?:^|[\s\[(\#])({project.ProjKey}-\d+)(?:$|[\s\])\.,!])";
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                text, pattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            var taskKeys = matches
+                .Select(m => m.Groups[1].Value.ToUpper())
+                .Distinct()
+                .ToList();
+
+            if (!taskKeys.Any()) return new List<ProjectTask>();
+
+            return await _context.ProjectTasks
+                .Where(t => t.ProjectId == projectId && taskKeys.Contains(t.TaskKey))
+                .ToListAsync();
+        }
+
+        private async Task CreateCommitLinkAsync(
+            Guid? taskId, Guid integrationId,
+            string sha, string? url, string message, string authorName, string authorEmail,
+            DateTime committedAt)
+        {
+            _context.CommitLinks.Add(new CommitLink
+            {
+                Id = Guid.NewGuid(),
+                TaskId = taskId,
+                IntegrationId = integrationId,
+                CommitSha = sha,
+                CommitUrl = url,
+                Message = message,
+                AuthorName = authorName,
+                AuthorEmail = authorEmail,
+                CommittedAt = committedAt
+            });
+        }
+    }
+}
