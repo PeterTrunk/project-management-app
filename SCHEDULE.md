@@ -718,50 +718,72 @@ GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret vali
 ### Architekturális döntések
 
 **Environment Variables**
-- Érzékeny adatok (JWT secret, MinIO credentials, Webhook secret) .env fájlban
+- Érzékeny adatok (JWT secret, MinIO credentials) .env fájlban
 - ASP.NET Core AddEnvironmentVariables() + Docker Compose env átadás
+- PostgreSQL credentials is environment variable-ökből
 
-**Git Webhook URL**
-- Projekt specifikus token alapú URL: POST /api/git/webhook/{webhookToken}
-- Minden projekthez egyedi token generálódik
-- Project Settings-ben megjeleníthető + regenerálható
-- HMAC-SHA256 secret validáció (GitHub kompatibilis)
+**Git Webhook — Per-Integration Secret**
+- Projekt + repo specifikus token alapú URL: POST /api/git/webhook/{webhookToken}
+- Minden integrációhoz egyedi WebhookToken és WebhookSecret generálódik
+- WebhookSecret DB-ben tárolva (per-integration) — nem globális env variable!
+- HMAC-SHA256 validáció az integration-specifikus secrettel
+- Secret soha nem kerül vissza a frontend felé — csak beállításkor adja meg a user
+- Secret reset lehetséges — régi secret érvénytelen, új secret megadása szükséges
+- Token regenerálás: régi webhook URL érvénytelen -> GitHub/GitLab-on frissíteni kell
+- Ping event kezelés: IsVerified flag beállítása + SignalR broadcast
+
+**WebhookSecret tárolás biztonsági terv:**
+Jelenlegi: Plain text DB tárolás (fejlesztési fázis)
+Tervezett (production):
+1. AES-256 titkosítás + ENCRYPTION_KEY environment variable
+- DB-ben titkosított string
+- Szerver oldali visszafejtés webhook érkezésekor
+- DB breach esetén értéktelen adatok
+2. HashiCorp Vault (nagy skálán):
+- Self-hosted, Docker-ben futtatható
+- Centralizált secret kezelés
+- Audit log, automatikus rotation
+- Fine-grained access control
 
 **File Storage — Streaming megközelítés**
 - Fájl letöltés backend streaminggel (nem presigned URL)
 - Biztonsági indok: minden letöltésnél auth ellenőrzés történik
 - Tag eltávolítás után azonnal elvész a hozzáférés
-- Projekt menedzsment use-case-nél elfogadható terhelés (ritka letöltések, kis csapat)
-- IFileStorageService interface mögé bújtatva → könnyen cserélhető
+- IFileStorageService interface mögé bújtatva -> könnyen cserélhető
 
 **Skálázhatóság — Monolith first**
-- Jelenlegi megközelítés: Monolith + IFileStorageService interface
+- Jelenlegi: Monolith + IFileStorageService interface
 - Jövőbeli optimalizáció szükség esetén:
   - File Service kiszervezése külön microservice-be
   - Redis backplane SignalR-hez
   - Kubernetes ha szükséges
 - Performance tesztelés után döntés a kiszervezésről
 
-### Tervezett implementáció
+**Integration modell**
+- Egy projekthez több integráció is tartozhat (több repo, több provider)
+- Provider: GitHub | GitLab
+- Ismeretlen token -> request ignorálva
+- IsEnabled flag -> integráció bármikor letiltható
+
+### Elvégzett munkák
 
 **Backend:**
 - Environment variables konfiguráció (.env + Docker Compose)
-- WebhookToken mező hozzáadása Project modellhez + migration
-- IFileStorageService + MinIOFileStorageService
-- AttachmentController: task szintű és projekt szintű (Team Resources) feltöltés/letöltés/törlés
-- WebhookController: POST /api/git/webhook/{webhookToken}
+- IFileStorageService + MinIOFileStorageService (MinIO Docker service)
+- AttachmentService + TaskAttachmentController + ProjectAttachmentController
+- Integration model: WebhookToken, WebhookSecret, IsVerified, IsEnabled
+- IIntegrationService + IntegrationService: CRUD, token regenerálás, secret reset, enable/disable, verify
+- IntegrationController: GET/POST/DELETE/regenerate/toggle/reset-secret endpoints
 - IGitWebhookService + GitWebhookService:
-  - HMAC-SHA256 secret validáció
-  - GitHub + GitLab payload parse
-  - Task matching regex: /\b{projektKey}-\d+\b/g
-  - CommitLink + PrLink létrehozás
-- SignalR broadcasts: CommitLinked, PrLinked
-
-**Frontend:**
-- TaskDetailModal: Git szekció (commitok, PR-ok megjelenítése)
-- TaskDetailModal: Attachment szekció (feltöltés, letöltés, törlés)
-- Team Resources oldal: projekt szintű dokumentumok
-- Project Settings: Webhook URL megjelenítés + regenerálás
+  - Per-integration HMAC-SHA256 secret validáció
+  - GitHub ping event -> IsVerified beállítás
+  - Push event -> CommitLink létrehozás (matched + unmatched)
+  - PR event -> PrLink létrehozás/frissítés (open/closed/merged)
+  - Task matching regex: `/(?:^|[\s\[(\#])({projKey}-\d+)(?:$|[\s\])\.,!])/gi`
+  - Unmatched commits/PRs: TaskId = null
+- WebhookController: POST /api/git/webhook/{webhookToken} (publikus, token alapú auth)
+- SignalR broadcasts: CommitLinked, PrLinked, IntegrationVerified, IntegrationUpdated
+- Activity log: commit és PR események logolása
 
 **MinIO bucket struktúra:**
   project-manager/
@@ -773,17 +795,63 @@ GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret vali
   shared/
   {fileId}{fileName}  <- Team Resources
 
-**Implementációs sorrend:**
-1. Environment variables konfiguráció
-2. MinIO Docker Compose + IFileStorageService + MinIOFileStorageService
-3. AttachmentController (task szintű)
-4. TaskDetailModal attachment szekció
-5. Team Resources oldal (projekt szintű feltöltés)
-6. WebhookToken Project modellhez + migration
-7. WebhookController + secret validáció
-8. GitWebhookService: task matching + CommitLink/PrLink
-9. TaskDetailModal Git szekció
-10. SignalR broadcasts
+**Frontend:**
+- attachmentApi.ts + AttachmentCard.svelte
+- TaskDetailModal: Attachment szekció (feltöltés, letöltés, törlés)
+- TeamResources.svelte: projekt szintű dokumentumok + task attachmentek
+- integrationApi.ts + integrationStore.ts
+- CreateIntegrationModal.svelte: provider select, repoFullName, webhookSecret
+- IntegrationCard.svelte: webhook URL másolás, setup guide, toggle, regenerate, secret reset, delete, verified badge
+- ProjectSettings.svelte: Git Integration szekció
+- AppLayout: IntegrationVerified/IntegrationUpdated SignalR kezelés, loadIntegrations projekt váltáskor
+
+**Git Webhook Routing & Tesztelés**
+
+*Routing:*
+- Publikus endpoint: POST /api/git/webhook/{webhookToken} — nincs JWT auth
+- Token alapú biztonság: csak érvényes, engedélyezett integration token fogadható el
+- Elkülönített controller (WebhookController) — nem tartozik a projekt RBAC rendszeréhez
+- ProjectNotArchivedFilter nem szükséges — webhook fogadás archivált projekten is működhet
+
+*Lokális tesztelés ngrok-kal:*
+- GitHub/GitLab nem éri el a localhost-ot -> ngrok tunnel szükséges
+- `ngrok http 5178` -> ideiglenes publikus URL generálódik
+- `API_BASE_URL` environment variable-be kell az ngrok URL
+- Backend újraindítás szükséges az új URL felvételéhez
+- Ingyenes ngrok fiók: minden indításkor új URL -> `API_BASE_URL` frissítendő
+- Production-ban fix URL lesz -> ngrok nem szükséges
+
+*Webhook verifikáció flow:*
+- Integration létrehozás -> WebhookToken + WebhookSecret generálva
+- User beállítja GitHub-on: Payload URL + Secret
+- GitHub küld ping ->
+- Backend validálja HMAC-SHA256 signature-t
+- Sikeres -> IsVerified = true -> SignalR IntegrationVerified broadcast
+- IntegrationCard-on Verified badge megjelenik
+
+### Még elvégzendő
+
+**Közvetlen következő lépések (MVP):**
+- Push event teszt valódi committal (PM-{taskKey} a commit üzenetben)
+- PR event teszt
+- TaskDetailModal: Git szekció (CommitLink + PrLink megjelenítése)
+- Git View: unmatched commits/PRs manuális task hozzárendeléssel
+
+**Biztonsági fejlesztések:**
+- AES-256 titkosítás WebhookSecret tárolásához
+  - `ENCRYPTION_KEY` environment variable
+  - `AesEncryptionService` helper class
+  - Visszafejtés webhook érkezésekor
+
+**Jövőbeli fejlesztések:**
+- HashiCorp Vault integráció (production skálán)
+- TOTP 2FA:
+  - Bejelentkezéskor opcionális
+  - Kritikus műveleteknél (secret reset, integráció törlés) kötelező
+  - Google Authenticator kompatibilis (Otp.NET NuGet)
+- GitLab webhook tesztelés
+- PR státusz szinkronizálás AccessToken alapján (opcionális)
+- Több repo egy projekthez (már támogatott az Integration modellben)
 
 ## Statistics Dashboard & ECharts Integration
 Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using PostgreSQL views for efficient aggregation. Filterable by sprint, user, and date range.
