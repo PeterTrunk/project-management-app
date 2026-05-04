@@ -97,5 +97,21 @@ namespace ProjectManager.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpPost("{integrationId}/reset-secret")]
+        [Authorize(Policy = "ProjectAdmin")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> ResetWebhookSecretAsync(Guid projectId, Guid integrationId, [FromBody] ResetWebhookSecretDto dto)
+        {
+            try
+            {
+                await _integrationService.ResetWebhookSecretAsync(projectId, integrationId, dto.NewSecret);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

@@ -43,8 +43,7 @@ namespace ProjectManager.API.Services.IntegrationService
                 Provider = dto.Provider,
                 RepoFullName = dto.RepoFullName,
                 AccessToken = dto.AccessToken,
-                WebhookSecret = Environment.GetEnvironmentVariable("GIT_WEBHOOK_SECRET")
-                    ?? throw new InvalidOperationException("GIT_WEBHOOK_SECRET nincs beállítva!"),
+                WebhookSecret = dto.WebhookSecret,
                 WebhookToken = Guid.NewGuid().ToString("N"),
                 IsEnabled = true,
                 CreatedAt = DateTime.UtcNow,
@@ -109,6 +108,26 @@ namespace ProjectManager.API.Services.IntegrationService
             await _context.SaveChangesAsync();
 
             return MapToDto(integration);
+        }
+
+        public async Task ResetWebhookSecretAsync(Guid projectId, Guid integrationId, string newSecret)
+        {
+            var integration = await _context.Integrations
+                .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
+            if (integration == null)
+                throw new Exception("Integráció nem található");
+
+            integration.WebhookSecret = newSecret;
+            integration.IsVerified = false;
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("IntegrationUpdated", new
+                {
+                    integrationId = integration.Id,
+                    isVerified = false
+                });
         }
 
         public async Task VerifyIntegrationAsync(Guid integrationId)

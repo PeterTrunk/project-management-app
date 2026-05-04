@@ -20,6 +20,12 @@ namespace ProjectManager.API.Validators.IntegrationValidators
                 .WithMessage("Repository neve kötelező!")
                 .Matches(@"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
                 .WithMessage("Érvénytelen repository formátum! Helyes formátum: owner/repo");
+
+            RuleFor(x => x.WebhookSecret)
+                .NotEmpty()
+                .WithMessage("Webhook secret megadása kötelező!")
+                .MinimumLength(16)
+                .WithMessage("A webhook secret legalább 16 karakter kell legyen!");
         }
     }
 }
