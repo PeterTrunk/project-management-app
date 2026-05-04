@@ -1,6 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
+using System.Runtime.Intrinsics.Arm;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,10 +14,14 @@ namespace ProjectManager.API.Services.GitWebhookService
     public class GitWebhookService : IGitWebhookService
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly IActivityService _activityService;
 
-        public GitWebhookService(AppDbContext context)
+        public GitWebhookService(AppDbContext context, IHubContext<ProjectHub> hubContext, IActivityService activityService)
         {
             _context = context;
+            _hubContext = hubContext;
+            _activityService = activityService;
         }
 
         public async Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
@@ -29,6 +37,8 @@ namespace ProjectManager.API.Services.GitWebhookService
                 .GetProperty("login").GetString() ?? string.Empty;
             var repoFullName = payload.GetProperty("repository")
                 .GetProperty("full_name").GetString() ?? string.Empty;
+
+            var matchedTasks = new List<ProjectTask>();
 
             // State meghatározása
             var state = action switch
@@ -98,14 +108,36 @@ namespace ProjectManager.API.Services.GitWebhookService
                         });
                     }
                 }
+                matchedTasks = tasks;
             }
 
             await _context.SaveChangesAsync();
+
+            foreach (var task in matchedTasks)
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("PrLinked", new { taskId = task.Id, prNumber, title, state, authorName });
+
+                try
+                {
+                    var activity = await _activityService.LogActivityAsync(
+                        projectId, "PullRequest", task.Id,
+                        state == "merged" ? "Merged" : state == "closed" ? "Closed" : "Opened",
+                        $"{authorName} PR-ja ({state}) kapcsolva a {task.TaskKey} taskhoz: {title}"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
+            }
         }
 
         public async Task ProcessPushEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
         {
             var commits = payload.GetProperty("commits");
+            var matchedTasks = new List<(ProjectTask task, string sha, string message, string authorName)>();
 
             foreach (var commit in commits.EnumerateArray())
             {
@@ -148,9 +180,36 @@ namespace ProjectManager.API.Services.GitWebhookService
                             authorName, authorEmail, committedAt);
                     }
                 }
+                
+                if (tasks.Count > 0)
+                {
+                    foreach (var task in tasks)
+                    {
+                        matchedTasks.Add((task, sha, message, authorName));
+                    }
+                }
             }
 
             await _context.SaveChangesAsync();
+
+            foreach (var (task, sha, message, authorName) in matchedTasks)
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("CommitLinked", new { taskId = task.Id, sha, message, authorName });
+
+                try
+                {
+                    var activity = await _activityService.LogActivityAsync(
+                        projectId, "Commit", task.Id, "Linked",
+                        $"{authorName} commitja kapcsolva a {task.TaskKey} taskhoz: {message[..Math.Min(50, message.Length)]}"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
+            }
         }
 
         public bool ValidateGitHubSignature(string payload, string signature)
