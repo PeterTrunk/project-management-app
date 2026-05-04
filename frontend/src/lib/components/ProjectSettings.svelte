@@ -4,15 +4,25 @@
     import { setActiveProject, setProjects, projectStore, setLabels } from '../../lib/stores/projectStore';
     import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject, getProjectByIdAsync } from '../../lib/api/projectApi'
     import ConfirmModal from '../components/ConfirmModal.svelte';
-
     import { getLabelsAsync, deleteLabelAsync, type LabelResponse } from '../api/labelApi';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
     import { onMount } from 'svelte';
+    import { integrationStore, setIntegrations } from '../stores/integrationStore';
+    import { getIntegrationsAsync } from '../api/integrationApi';
+    import type { IntegrationResponse } from '../api/integrationApi';
+    import IntegrationCard from './IntegrationCard.svelte';
+    import CreateIntegrationModal from './CreateIntegrationModal.svelte';
 
     export let project: ProjectResponse;
     let labels: LabelResponse[] = [];
     let isCreateLabelOpen = false;
+    let integrations: IntegrationResponse[] = [];
+    let isCreateIntegrationOpen = false;
+
+    integrationStore.subscribe(state => {
+        integrations = state.integrations;
+    });
 
     projectStore.subscribe(state => {
         labels = state.labels;
@@ -201,6 +211,22 @@
         </div>
         <button on:click={() => isCreateLabelOpen = true}>+ Új label</button>
     </div>
+    <div class="divider">
+        <h2>Git Integráció</h2>
+        {#if integrations.length > 0}
+            <div class="integrations-list">
+                {#each integrations as integration (integration.id)}
+                    <IntegrationCard
+                        {integration}
+                        projectId={project.id}
+                    />
+                {/each}
+            </div>
+        {:else}
+            <p class="empty">Még nincs git integráció hozzáadva</p>
+        {/if}
+        <button on:click={() => isCreateIntegrationOpen = true}>+ Git integráció hozzáadása</button>
+    </div>
 </div>
 <!--Modal-->
 {#if isConfirmOpen}
@@ -220,6 +246,13 @@
             const data = await getLabelsAsync(project.id);
             setLabels(data);
         }}
+    />
+{/if}
+{#if isCreateIntegrationOpen}
+    <CreateIntegrationModal
+        bind:isOpen={isCreateIntegrationOpen}
+        projectId={project.id}
+        onClose={() => isCreateIntegrationOpen = false}
     />
 {/if}
 

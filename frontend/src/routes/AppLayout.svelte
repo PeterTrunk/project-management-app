@@ -14,6 +14,11 @@
     import { clearTeam } from '../lib/stores/teamStore';
     import { getMembersAsync } from '../lib/api/teamApi';
     import { setMembers } from '../lib/stores/teamStore';
+    import { getIntegrationsAsync } from '../lib/api/integrationApi';
+    import { setIntegrations, clearIntegrations } from '../lib/stores/integrationStore';
+    import { integrationStore } from '../lib/stores/integrationStore';
+    import { updateIntegration } from '../lib/stores/integrationStore';
+    import type { IntegrationResponse } from '../lib/api/integrationApi';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -103,6 +108,26 @@
             signalRService.on('MemberRoleUpdated', () => {
                 triggerTeamRefresh();
             });
+            
+            signalRService.on('IntegrationVerified', (data) => {
+                let currentIntegrations: IntegrationResponse[] = [];
+                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
+                
+                const integration = currentIntegrations.find(i => i.id === data.integrationId);
+                if (integration) {
+                    updateIntegration({ ...integration, isVerified: true });
+                }
+            });
+
+            signalRService.on('IntegrationUpdated', (data) => {
+                let currentIntegrations: IntegrationResponse[] = [];
+                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
+                
+                const integration = currentIntegrations.find(i => i.id === data.integrationId);
+                if (integration) {
+                    updateIntegration({ ...integration, isVerified: data.isVerified });
+                }
+            });
         }
     });
 
@@ -116,6 +141,11 @@
         setMembers(members);
     }
 
+    async function loadIntegrations(projectId: string) {
+        const integrations = await getIntegrationsAsync(projectId);
+        setIntegrations(integrations);
+    }
+
     onDestroy(async () => {
         signalRService.off('LabelCreated');
         signalRService.off('LabelDeleted');
@@ -125,6 +155,8 @@
         signalRService.off('MemberAdded');
         signalRService.off('MemberRemoved');
         signalRService.off('MemberRoleUpdated');
+        signalRService.off('IntegrationVerified');
+        signalRService.off('IntegrationUpdated');
         await signalRService.disconnect();
     });
 
@@ -176,6 +208,7 @@
 
             loadLabels(state.activeProject.id).catch(console.error);
             loadMembers(state.activeProject.id).catch(console.error);
+            loadIntegrations(state.activeProject.id).catch(console.error);
         }
     });
 
