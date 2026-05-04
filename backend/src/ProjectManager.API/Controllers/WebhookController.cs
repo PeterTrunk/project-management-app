@@ -24,15 +24,19 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> HandleWebhookAsync(string webhookToken)
         {
+            // Request body újraolvasásának engedélyezése
+            Request.EnableBuffering();
+
+            //Payload kiolvasása
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var payload = await reader.ReadToEndAsync();
+            Request.Body.Position = 0;
+
             //Token alapján integráció keresése
             var integration = await _integrationService.GetByWebhookTokenAsync(webhookToken);
             if (integration == null)
                 return Unauthorized("Érvénytelen webhook token!");
-
-            //Payload kiolvasása
-            using var reader = new StreamReader(Request.Body);
-            var payload = await reader.ReadToEndAsync();
-
+            
             //Provider alapján validáció
             if (integration.Provider == "GitHub")
             {
@@ -40,7 +44,7 @@ namespace ProjectManager.API.Controllers
                 if (string.IsNullOrEmpty(signature))
                     return Unauthorized("Hiányzó GitHub signature!");
 
-                if (!_gitWebhookService.ValidateGitHubSignature(payload, signature))
+                if (!_gitWebhookService.ValidateGitHubSignature(payload, signature, integration.WebhookSecret))
                     return Unauthorized("Érvénytelen GitHub signature!");
             }
             else if (integration.Provider == "GitLab")

@@ -212,11 +212,8 @@ namespace ProjectManager.API.Services.GitWebhookService
             }
         }
 
-        public bool ValidateGitHubSignature(string payload, string signature)
+        public bool ValidateGitHubSignature(string payload, string signature, string secret)
         {
-            var secret = Environment.GetEnvironmentVariable("GIT_WEBHOOK_SECRET");
-            if (string.IsNullOrEmpty(secret)) return false;
-
             var secretBytes = Encoding.UTF8.GetBytes(secret);
             var payloadBytes = Encoding.UTF8.GetBytes(payload);
 
