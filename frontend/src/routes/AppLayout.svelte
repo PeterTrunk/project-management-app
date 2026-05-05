@@ -26,6 +26,7 @@
     import SprintsView from '../lib/components/SprintsView.svelte';
     import TeamView from '../lib/components/TeamView.svelte';
     import TeamResources from '../lib/components/TeamResources.svelte';
+    import GitView from '../lib/components/GitView.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -274,7 +275,9 @@
         <div 
             class="content"
             class:scrollable={activeView !== 'board'}
-            class:no-padding={activeView === 'sprints'}
+            class:no-padding={activeView === 'board' || 
+            activeView === 'sprints' || activeView === 'teamResources' 
+            || activeView === 'git'}
         >
             {#if activeProject}
                 {#if activeView === 'overview'}
@@ -286,7 +289,7 @@
                 {:else if activeView === 'team'}
                     <TeamView projectId={activeProject.id} />
                 {:else if activeView === 'git'}
-                    <p>Git nézet</p>
+                    <GitView projectId={activeProject.id} />
                 {:else if activeView === 'statistics'}
                     <p>Statistics nézet</p>
                 {:else if activeView === 'teamResources'}

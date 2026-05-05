@@ -83,6 +83,8 @@
             case 'Column': return '📊';
             case 'Member': return '👤';
             case 'Project': return '📁';
+            case 'Commit': return '🔵';
+            case 'PullRequest': return '🟣';
             default: return '•';
         }
     }
