@@ -1,4 +1,5 @@
 ﻿using ProjectManager.API.DTOs.Attachment;
+using ProjectManager.API.DTOs.Git;
 using ProjectManager.API.DTOs.Shared;
 
 namespace ProjectManager.API.DTOs.ProjectTask
@@ -12,8 +13,8 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public Guid? SprintId { get; set; }
         public List<string> AssigneeIds { get; set; } = new List<string>();
         public List<string> LabelIds { get; set; } = new List<string>();
-        public List<string> CommitLinks { get; set; } = new List<string>();
-        public List<string> PrLinks { get; set; } = new List<string>();
+        public List<CommitLinkResponseDto> CommitLinks { get; set; } = new List<CommitLinkResponseDto>();
+        public List<PrLinkResponseDto> PrLinks { get; set; } = new List<PrLinkResponseDto>();
         public List<AttachmentResponseDto> Attachments { get; set; } = new List<AttachmentResponseDto>();
         public string CreatedByName { get; set; } = string.Empty;
         public string TaskKey { get; set; } = string.Empty;

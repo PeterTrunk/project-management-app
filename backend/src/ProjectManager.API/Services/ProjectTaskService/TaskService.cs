@@ -1,10 +1,9 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
+using ProjectManager.API.DTOs.Git;
 using ProjectManager.API.DTOs.ProjectTask;
-using ProjectManager.API.DTOs.Shared;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
@@ -109,33 +108,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch { }
 
-            var response = new TaskResponseDto
-            {
-                Id = task.Id,
-                ProjectId = task.ProjectId,
-                BoardId = task.BoardId,
-                ColumnId = task.ColumnId,
-                SprintId = task.SprintId,
-                AssigneeIds = new List<string>(),
-                LabelIds = new List<string>(),
-                CommitLinks = new List<string>(),
-                PrLinks = new List<string>(),
-                Attachments = new List<AttachmentResponseDto>(),
-                CreatedByName = user.DisplayName,
-                TaskKey = task.TaskKey,
-                Title = task.Title,
-                Description = task.Description,
-                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = task.Priority,
-                Position = task.Position,
-                EstimateInMinutes = task.EstimateInMinutes,
-                DueDate = task.DueDate,
-                ClosedAt = task.ClosedAt,
-                CompletedAt = task.CompletedAt,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt
-            };
-            return response;
+            return MapToTaskResponseDto(
+                task,
+                new List<TaskAssignment>(),
+                new List<LabelTask>(),
+                new List<CommitLink>(),
+                new List<PrLink>(),
+                new List<Attachment>()
+            );
         }
 
         public async Task DeleteTaskAsync(Guid taskId)
@@ -211,62 +191,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Where(a => a.TaskId.HasValue && taskIds.Contains(a.TaskId.Value))
                 .Include(a => a.UploadedBy)
                 .ToListAsync();
-            
-            return tasks.Select(t => new TaskResponseDto
-            {
-                Id = t.Id,
-                ProjectId = t.ProjectId,
-                BoardId = t.BoardId,
-                ColumnId = t.ColumnId,
-                SprintId = t.SprintId,
-                //Taskonként kinyerjük a listákból csak az adotthoz hozzátartozó lista bejegyzéseket
-                AssigneeIds = assignments
-                    .Where(ta => ta.TaskId == t.Id)
-                    .Select(ta => ta.UserId.ToString())
-                    .ToList(),
-                LabelIds = labels
-                    .Where(lt => lt.TaskId == t.Id)
-                    .Select(lt => lt.LabelId.ToString())
-                    .ToList(),
-                CommitLinks = commitLinks
-                    .Where(cl => cl.TaskId == t.Id)
-                    .Select(cl => cl.CommitUrl ?? cl.CommitSha)
-                    .ToList(),
-                /*
-                PrLinks = prLinks
-                    .Where(pl => pl.TaskId == t.Id)
-                    .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
-                    .ToList(),
-                */
-                Attachments = attachments
-                    .Where(a => a.TaskId == t.Id)
-                    .Select(a => new AttachmentResponseDto
-                    {
-                        Id = a.Id,
-                        ProjectId = a.ProjectId,
-                        TaskId = a.TaskId,
-                        FileName = a.FileName,
-                        ContentType = a.ContentType,
-                        SizeBytes = a.SizeBytes,
-                        AttachmentType = a.AttachmentType,
-                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
-                        CreatedAt = a.CreatedAt
-                    })
-                    .ToList(),
-                CreatedByName = t.CreatedByUser.DisplayName,
-                TaskKey = t.TaskKey,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = t.Priority,
-                Position = t.Position,
-                EstimateInMinutes = t.EstimateInMinutes,
-                DueDate = t.DueDate,
-                ClosedAt = t.ClosedAt,
-                CompletedAt = t.CompletedAt,
-                CreatedAt = t.CreatedAt,
-                UpdatedAt = t.UpdatedAt
-            }).ToList();
+
+            return tasks.Select(t => MapToTaskResponseDto(
+                t, assignments, labels, commitLinks, prLinks, attachments
+            )).ToList();
         }
 
         public async Task<TaskResponseDto> GetTaskByIdAsync(Guid projectId, Guid taskId)
@@ -286,73 +214,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
-            var assigneeIds = await _context.TaskAssignments
+            var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Select(lt => lt.LabelId.ToString())
+                .Include(lt => lt.Label)
                 .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
                 .Where(cl => cl.TaskId == task.Id)
-                .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
-            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
-                .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
-            */
 
             var attachments = await _context.Attachments
-                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Where(a => a.TaskId == task.Id)
                 .Include(a => a.UploadedBy)
                 .ToListAsync();
 
-            var response = new TaskResponseDto
-            {
-                Id = task.Id,
-                ProjectId = task.ProjectId,
-                BoardId = task.BoardId,
-                ColumnId = task.ColumnId,
-                SprintId = task.SprintId,
-                AssigneeIds = assigneeIds,
-                LabelIds = labels,
-                CommitLinks = commitLinks,
-                //PrLinks = prLinks,
-                Attachments = attachments
-                    .Select(a => new AttachmentResponseDto
-                    {
-                        Id = a.Id,
-                        ProjectId = a.ProjectId,
-                        TaskId = a.TaskId,
-                        FileName = a.FileName,
-                        ContentType = a.ContentType,
-                        SizeBytes = a.SizeBytes,
-                        AttachmentType = a.AttachmentType,
-                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
-                        CreatedAt = a.CreatedAt
-                    })
-                    .ToList(),
-                CreatedByName = task.CreatedByUser?.DisplayName ?? "Ismeretlen",
-                TaskKey = task.TaskKey,
-                Title = task.Title,
-                Description = task.Description,
-                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = task.Priority,
-                Position = task.Position,
-                EstimateInMinutes = task.EstimateInMinutes,
-                DueDate = task.DueDate,
-                ClosedAt = task.ClosedAt,
-                CompletedAt = task.CompletedAt,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt
-            };
-            return response;
+            return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
         public async Task<TaskResponseDto> MoveTaskAsync(Guid projectId, Guid taskId, MoveTaskDto dto)
@@ -468,73 +352,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
             }
 
-            var assigneeIds = await _context.TaskAssignments
+            var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
-                 .Where(lt => lt.TaskId == task.Id)
-                 .Select(lt => lt.LabelId.ToString())
-                 .ToListAsync();
+                .Where(lt => lt.TaskId == task.Id)
+                .Include(lt => lt.Label)
+                .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
                 .Where(cl => cl.TaskId == task.Id)
-                .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
-            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
-                .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
-            */
 
             var attachments = await _context.Attachments
-                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Where(a => a.TaskId == task.Id)
                 .Include(a => a.UploadedBy)
                 .ToListAsync();
 
-            var response = new TaskResponseDto
-            {
-                Id = task.Id,
-                ProjectId = task.ProjectId,
-                BoardId = task.BoardId,
-                ColumnId = task.ColumnId,
-                SprintId = task.SprintId,
-                AssigneeIds = assigneeIds,
-                LabelIds = labels,
-                CommitLinks = commitLinks,
-                //PrLinks = prLinks,
-                Attachments = attachments
-                    .Select(a => new AttachmentResponseDto
-                    {
-                        Id = a.Id,
-                        ProjectId = a.ProjectId,
-                        TaskId = a.TaskId,
-                        FileName = a.FileName,
-                        ContentType = a.ContentType,
-                        SizeBytes = a.SizeBytes,
-                        AttachmentType = a.AttachmentType,
-                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
-                        CreatedAt = a.CreatedAt
-                    })
-                    .ToList(),
-                CreatedByName = task.CreatedByUser.DisplayName,
-                TaskKey = task.TaskKey,
-                Title = task.Title,
-                Description = task.Description,
-                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = task.Priority,
-                Position = task.Position,
-                EstimateInMinutes = task.EstimateInMinutes,
-                DueDate = task.DueDate,
-                ClosedAt = task.ClosedAt,
-                CompletedAt = task.CompletedAt,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt
-            };
-            return response;
+            return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
         public async Task<TaskResponseDto> UpdateTaskAsync(Guid taskId, UpdateTaskDto dto)
@@ -581,73 +421,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch { }
 
-            var assigneeIds = await _context.TaskAssignments
+            var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Select(lt => lt.LabelId.ToString())
+                .Include(lt => lt.Label)
                 .ToListAsync();
 
             var commitLinks = await _context.CommitLinks
                 .Where(cl => cl.TaskId == task.Id)
-                .Select(cl => cl.CommitUrl ?? cl.CommitSha)
                 .ToListAsync();
 
-            /*
             var prLinks = await _context.PrLinks
                 .Where(pl => pl.TaskId == task.Id)
-                .Select(pl => pl.PrUrl ?? $"{pl.RepoFullName}#{pl.PrNumber}")
                 .ToListAsync();
-            */
 
             var attachments = await _context.Attachments
-                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Where(a => a.TaskId == task.Id)
                 .Include(a => a.UploadedBy)
                 .ToListAsync();
 
-            var response = new TaskResponseDto
-            {
-                Id = task.Id,
-                ProjectId = task.ProjectId,
-                BoardId = task.BoardId,
-                ColumnId = task.ColumnId,
-                SprintId = task.SprintId,
-                AssigneeIds = assigneeIds,
-                LabelIds = labels,
-                CommitLinks = commitLinks,
-                //PrLinks = prLinks,
-                Attachments = attachments
-                    .Select(a => new AttachmentResponseDto
-                    {
-                        Id = a.Id,
-                        ProjectId = a.ProjectId,
-                        TaskId = a.TaskId,
-                        FileName = a.FileName,
-                        ContentType = a.ContentType,
-                        SizeBytes = a.SizeBytes,
-                        AttachmentType = a.AttachmentType,
-                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
-                        CreatedAt = a.CreatedAt
-                    })
-                    .ToList(),
-                CreatedByName = user.DisplayName,
-                TaskKey = task.TaskKey,
-                Title = task.Title,
-                Description = task.Description,
-                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = task.Priority,
-                Position = task.Position,
-                EstimateInMinutes = task.EstimateInMinutes,
-                DueDate = task.DueDate,
-                ClosedAt = task.ClosedAt,
-                CompletedAt = task.CompletedAt,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt
-            };
-            return response;
+            return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
         public async Task<TaskResponseDto> AssignTaskToBoardAsync(Guid projectId, Guid taskId, AssignTaskToBoardDto dto)
@@ -755,60 +551,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
 
             // Response összerakása
-            var assigneeIds = await _context.TaskAssignments
+            var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
-                .Select(ta => ta.UserId.ToString())
                 .ToListAsync();
 
             var labels = await _context.LabelTasks
                 .Where(lt => lt.TaskId == task.Id)
-                .Select(lt => lt.LabelId.ToString())
+                .Include(lt => lt.Label)
+                .ToListAsync();
+
+            var commitLinks = await _context.CommitLinks
+                .Where(cl => cl.TaskId == task.Id)
+                .ToListAsync();
+
+            var prLinks = await _context.PrLinks
+                .Where(pl => pl.TaskId == task.Id)
                 .ToListAsync();
 
             var attachments = await _context.Attachments
-                .Where(a => a.TaskId.HasValue && a.TaskId == taskId)
+                .Where(a => a.TaskId == task.Id)
                 .Include(a => a.UploadedBy)
                 .ToListAsync();
 
-            return new TaskResponseDto
-            {
-                Id = task.Id,
-                ProjectId = task.ProjectId,
-                BoardId = task.BoardId,
-                ColumnId = task.ColumnId,
-                SprintId = task.SprintId,
-                AssigneeIds = assigneeIds,
-                LabelIds = labels,
-                CommitLinks = new List<string>(),
-                PrLinks = new List<string>(),
-                Attachments = attachments
-                    .Select(a => new AttachmentResponseDto
-                    {
-                        Id = a.Id,
-                        ProjectId = a.ProjectId,
-                        TaskId = a.TaskId,
-                        FileName = a.FileName,
-                        ContentType = a.ContentType,
-                        SizeBytes = a.SizeBytes,
-                        AttachmentType = a.AttachmentType,
-                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
-                        CreatedAt = a.CreatedAt
-                    })
-                    .ToList(),
-                CreatedByName = task.CreatedByUser.DisplayName,
-                TaskKey = task.TaskKey,
-                Title = task.Title,
-                Description = task.Description,
-                Status = task.ColumnDefinition?.MapsToStatus ?? "Backlog",
-                Priority = task.Priority,
-                Position = task.Position,
-                EstimateInMinutes = task.EstimateInMinutes,
-                DueDate = task.DueDate,
-                ClosedAt = task.ClosedAt,
-                CompletedAt = task.CompletedAt,
-                CreatedAt = task.CreatedAt,
-                UpdatedAt = task.UpdatedAt
-            };
+            return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
         private async Task RebalanceColumnAsync(Guid columnId, string position)
@@ -925,6 +690,87 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .SendAsync("ActivityCreated", activity);
             }
             catch { }
+        }
+
+        private TaskResponseDto MapToTaskResponseDto(
+            ProjectTask t,
+            List<TaskAssignment> assignments,
+            List<LabelTask> labels,
+            List<CommitLink> commitLinks,
+            List<PrLink> prLinks,
+            List<Attachment> attachments)
+        {
+            return new TaskResponseDto
+            {
+                Id = t.Id,
+                ProjectId = t.ProjectId,
+                BoardId = t.BoardId,
+                ColumnId = t.ColumnId,
+                SprintId = t.SprintId,
+                AssigneeIds = assignments
+                    .Where(ta => ta.TaskId == t.Id)
+                    .Select(ta => ta.UserId.ToString())
+                    .ToList(),
+                LabelIds = labels
+                    .Where(lt => lt.TaskId == t.Id)
+                    .Select(lt => lt.LabelId.ToString())
+                    .ToList(),
+                CommitLinks = commitLinks
+                    .Where(cl => cl.TaskId == t.Id)
+                    .Select(cl => new CommitLinkResponseDto
+                    {
+                        Id = cl.Id,
+                        CommitSha = cl.CommitSha,
+                        CommitUrl = cl.CommitUrl,
+                        Message = cl.Message,
+                        AuthorName = cl.AuthorName,
+                        AuthorEmail = cl.AuthorEmail,
+                        CommittedAt = cl.CommittedAt
+                    })
+                    .ToList(),
+                PrLinks = prLinks
+                    .Where(pl => pl.TaskId == t.Id)
+                    .Select(pl => new PrLinkResponseDto
+                    {
+                        Id = pl.Id,
+                        PrNumber = pl.PrNumber,
+                        PrUrl = pl.PrUrl,
+                        Title = pl.Title,
+                        State = pl.State,
+                        AuthorName = pl.AuthorName,
+                        CreatedAt = pl.CreatedAt,
+                        MergedAt = pl.MergedAt
+                    })
+                    .ToList(),
+                Attachments = attachments
+                    .Where(a => a.TaskId == t.Id)
+                    .Select(a => new AttachmentResponseDto
+                    {
+                        Id = a.Id,
+                        ProjectId = a.ProjectId,
+                        TaskId = a.TaskId,
+                        FileName = a.FileName,
+                        ContentType = a.ContentType,
+                        SizeBytes = a.SizeBytes,
+                        AttachmentType = a.AttachmentType,
+                        UploadedByName = a.UploadedBy?.DisplayName ?? "Ismeretlen",
+                        CreatedAt = a.CreatedAt
+                    })
+                    .ToList(),
+                CreatedByName = t.CreatedByUser?.DisplayName ?? "Ismeretlen",
+                TaskKey = t.TaskKey,
+                Title = t.Title,
+                Description = t.Description,
+                Status = t.ColumnDefinition?.MapsToStatus ?? "Backlog",
+                Priority = t.Priority,
+                Position = t.Position,
+                EstimateInMinutes = t.EstimateInMinutes,
+                DueDate = t.DueDate,
+                ClosedAt = t.ClosedAt,
+                CompletedAt = t.CompletedAt,
+                CreatedAt = t.CreatedAt,
+                UpdatedAt = t.UpdatedAt
+            };
         }
     }
 }
