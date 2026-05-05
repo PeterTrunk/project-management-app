@@ -17,15 +17,15 @@
 Docker Compose environment setup with PostgreSQL, MinIO (S3-compatible object storage), and Nginx reverse proxy. PostgreSQL schema design using dbdiagram.io, defining all core entities (users, projects, tasks, sprints, labels, comments, attachments, activity_log) with proper relations, constraints, and indexing strategy. Project repository initialization with backend (ASP.NET Core) and frontend (Svelte) folder structure.
 
 **Kihagyott elemek (tudatos döntés)**
-- MinIO és Nginx konfiguráció — a Git Webhook & MinIO héten kerül sorra
-- Svelte frontend inicializálás — még nincs kipróbálható funkció
+- MinIO és Nginx konfiguráció - a Git Webhook & MinIO héten kerül sorra
+- Svelte frontend inicializálás - még nincs kipróbálható funkció
 
 ## EF Core Models, Migrations & Database Infrastructure
 Entity Framework Core Code First model classes and initial migration. Npgsql provider configuration for PostgreSQL. Database triggers for automated fields (updated_at, task_key generation). Statistical views for reporting queries. Seed data for development and testing.
 
 **Kihagyott elemek (tudatos döntés)**
-- Statisztikai view-ok — a Statistics Dashboard héten (10. hét) kerül sorra
-- task_key generálás — a CRUD API héten kerül sorra a ProjectCounter alapján
+- Statisztikai view-ok - a Statistics Dashboard héten (10. hét) kerül sorra
+- task_key generálás - a CRUD API héten kerül sorra a ProjectCounter alapján
 
 ## Authentication & Authorization (JWT + RBAC)
 JWT-based authentication with login, registration, refresh, logout, 
@@ -39,9 +39,9 @@ route-alapú projectId kinyeréssel. 4 policy definiálva:
 ProjectOwner, ProjectMaintainer, ProjectMember, ProjectViewer.
 
 **Kihagyott elemek (tudatos döntés)**
-- Svelte frontend JWT token handling (localStorage) — 
+- Svelte frontend JWT token handling (localStorage) - 
   frontend inicializálás a CRUD API hét után kerül sorra
-- Role nevek eltérnek az eredetitől — általánosabb, 
+- Role nevek eltérnek az eredetitől - általánosabb, 
   iparági standard elnevezések (Owner/Maintainer/Member/Viewer) 
   amelyek bármilyen csapattípusra alkalmazhatók.
 
@@ -70,7 +70,7 @@ RESTful API endpoints for project and task management: creation, reading, updati
 - Attachment.SizeBytes: BigInteger -> long (PostgreSQL bigint kompatibilitás, hiba lehetőségek csökkentése)
 
 **Kihagyott elemek (tudatos döntés)**
-- GetTasksAsync: Pagination — jövőbeli fejlesztés, kommentben jelölve (Oka:nagyon sok adatot húzhat be egyetlen kérésben, magas DB Query leterhelés).
+- GetTasksAsync: Pagination - jövőbeli fejlesztés, kommentben jelölve (Oka:nagyon sok adatot húzhat be egyetlen kérésben, magas DB Query leterhelés).
 
 ## Svelte Frontend Setup & Core Layout
 Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router. Core layout components: Navbar, project selector, tabbed navigation (Overview, Board, Team, Recent Activity, Statistics, Manager, Team Resources, Project Settings). API service layer with JWT header injection. Auth store and project store setup.
@@ -118,21 +118,21 @@ Svelte SPA initialization with Vite. Client-side routing with svelte-spa-router.
 
 **Layout**
 - Discord-szerű single-page layout: bal oldali sidebar + jobb oldali dinamikus tartalom
-- Nincs oldalváltás — aktív nézet változóval vezérelt tartalom, vagy modal felugrik
+- Nincs oldalváltás - aktív nézet változóval vezérelt tartalom, vagy modal felugrik
 - Route-ok: "/" (Login), "/register" (Register), "/app" (AppLayout)
 
 **Navbar opciók:**
   Overview | Board | Sprints | Team | Git | Statistics | Team Resources | Project Settings
 
 **Nézetek tartalma**
-- Overview — projekt alapadatok (név, kulcs, leírás, tulajdonos, dátumok, státusz)
-- Board — Kanban tábla, oszlop létrehozás modal-ban ("+ Oszlop hozzáadása")
-- Sprints — sprint kezelés + backlog taskok + task létrehozás
-- Team — tagok listája/kezelése + Recent Activity feed
-- Git — összekapcsolt commitok/PR-ek + manuálisan hozzáköthető össze nem kötött commitok
-- Statistics — grafikonok, metrikák
-- Team Resources — erőforrás elosztás
-- Project Settings — projekt beállítások, archiválás, törlés
+- Overview - projekt alapadatok (név, kulcs, leírás, tulajdonos, dátumok, státusz)
+- Board - Kanban tábla, oszlop létrehozás modal-ban ("+ Oszlop hozzáadása")
+- Sprints - sprint kezelés + backlog taskok + task létrehozás
+- Team - tagok listája/kezelése + Recent Activity feed
+- Git - összekapcsolt commitok/PR-ek + manuálisan hozzáköthető össze nem kötött commitok
+- Statistics - grafikonok, metrikák
+- Team Resources - erőforrás elosztás
+- Project Settings - projekt beállítások, archiválás, törlés
 
 **Modal pattern**
 - Projekt létrehozás -> CreateProjectModal
@@ -169,7 +169,7 @@ Interactive Kanban board with drag-and-drop functionality (svelte-dnd-action). B
 - SprintResponseDto, CreateSprintDto, UpdateSprintDto + validátorok
 - State management: "Planning" | "Active" | "Completed"
 - State csak dedikált endpointokon változtatható
-- Sprint.BoardId eltávolítva — sprint több boardhoz is tartozhat
+- Sprint.BoardId eltávolítva - sprint több boardhoz is tartozhat
 - ISprintService + SprintService:
   - GetSprints, CreateSprint, UpdateSprint, DeleteSprint
   - ActivateSprintAsync: Planning -> Active + taskok az első nem-Backlog oszlopba kerülnek boardonként
@@ -231,7 +231,7 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 
 ### Sprint & Task Modell Architektúra Döntések
 **Task modell refaktorálás**
-- Task.Status eltávolítva — computed property: ColumnDefinition?.MapsToStatus ?? "Backlog"
+- Task.Status eltávolítva - computed property: ColumnDefinition?.MapsToStatus ?? "Backlog"
 - Task.BoardId nullable: ha null -> Projekt Backlogban van
 - Task.ColumnId nullable: ha null -> Projekt Backlogban van
 - Task.CompletedAt: amikor a task az utolsó oszlopba ér (MoveTaskAsync állítja be), visszamozgatáskor nullázódik
@@ -265,7 +265,7 @@ Telepítendő csomag: MicroElements.Swashbuckle.FluentValidation
 - CreateTaskModal: Backlog kizárva az oszlop selectorból
 
 **Sprint modell refaktorálás**
-- Sprint.BoardId eltávolítva — egy sprint több boardhoz is tartozhat
+- Sprint.BoardId eltávolítva - egy sprint több boardhoz is tartozhat
 - Indok: egy projekten belül több board is lehet (pl. Frontend Board + Backend Board)
   és egy sprint mindkét board taskjait tartalmazhatja
 
@@ -293,7 +293,7 @@ Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
 
 ### Technikai döntések
 - Backlog oszlop: minden boardon fix Position=0, nem törölhető, nem rendezhető
-- BoardView: Backlog oszlop elrejtve (Position>0 oszlopok láthatók csak) — TODO
+- BoardView: Backlog oszlop elrejtve (Position>0 oszlopok láthatók csak) - TODO
 - Label kezelés: Project Settings-ben
 - Column törlés: csak üres, nem-Backlog oszlop törölhető
 - Sprint aktiválás: taskok automatikusan az első valódi oszlopba kerülnek
@@ -301,7 +301,7 @@ Létrehozás -> Projekt Backlog (BoardId=null, ColumnId=null, SprintId=null)
 - Sprint lezárás: csak ha minden task CompletedAt != null
 
 
-### Task/Column Pozíció Kezelési Módszerek — Döntési Dokumentáció
+### Task/Column Pozíció Kezelési Módszerek - Döntési Dokumentáció
 
 #### Vizsgált megoldások
 
@@ -320,7 +320,7 @@ lett volna. Az egyszerűség szempontjából valóban versenyképes alternatíva
 Minden tasknak van egy nextTaskId mutatója a következő taskra.
 - pozitívum: Közbeszúrás mindig csak 2 sor frissítése
 - pozitívum: Sosem fogy el a "hely"
-- negatívum: ORDER BY nem működik egyszerűen — rekurzív CTE szükséges (O(n))
+- negatívum: ORDER BY nem működik egyszerűen - rekurzív CTE szükséges (O(n))
 - negatívum: Indexeléssel sem oldható meg a sorrendezési probléma
 - negatívum: Lánc integritás sérülhet (FK constraint + tranzakció részben megoldja)
 - negatívum: Párhuzamos mozgatásnál optimistic locking szükséges
@@ -331,24 +331,24 @@ Közbeszúrásnál a két szomszéd átlaga lesz az új pozíció (pl. 1 és 2 k
 - pozitívum: Egyszerű implementáció
 - pozitívum: ORDER BY egyszerű és gyors
 - pozitívum: Közbeszúráshoz csak 1 sor frissítése kell
-- negatívum: IEEE 754 float precizitási korlát — sok közbeszúrás után elfogy a hely
+- negatívum: IEEE 754 float precizitási korlát - sok közbeszúrás után elfogy a hely
 - negatívum: Renormalizálás szükséges (manuális trigger)
 - negatívum: Párhuzamos ütközésnél nem determinisztikus sorrend
 
 **Megjegyzés:** A Lexorank elvében nagyon hasonló a float megoldáshoz
-(mindkettő átlagot számít közbeszúrásnál) — a fő különbség a precizitási
+(mindkettő átlagot számít közbeszúrásnál) - a fő különbség a precizitási
 korlát hiánya és az öngyógyító bucket rendszer.
 
-**4. Lexorank (Jira megoldása) — VÁLASZTOTT MEGOLDÁS**
+**4. Lexorank (Jira megoldása) - VÁLASZTOTT MEGOLDÁS**
 String alapú pozíció Base36 karakterkészlettel, bucket rendszerrel.
-Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé -> "0|am"
+Például: "0|a", "0|am", "0|b" - közbeszúráskor: "0|a" és "0|b" közé -> "0|am"
 
 **Bucket rendszer:**
-- 3 bucket (0, 1, 2) körkörösen — a prefix jelzi melyik bucketben van az elem
+- 3 bucket (0, 1, 2) körkörösen - a prefix jelzi melyik bucketben van az elem
 - Ütközés esetén (két azonos pozíció) az egész oszlop átkerül a következő bucketbe
 - String hossz > 50 karakter esetén automatikus rebalancing triggerelődik
 - Bucket 2 exhaustion után visszaáll bucket 0-ra (öngyógyító, végtelen ciklus)
-- Inicializálás "0|i"-vel (Base36 közép) — mindkét irányban egyenlő hely
+- Inicializálás "0|i"-vel (Base36 közép) - mindkét irányban egyenlő hely
 
 **Base36 kapacitás:**
 - 1 karakter: 36^1 = 36 pozíció
@@ -356,28 +356,28 @@ Például: "0|a", "0|am", "0|b" — közbeszúráskor: "0|a" és "0|b" közé ->
 - 3 karakter: 36^3 = 46,656 pozíció
 - String csak hosszabbodik, sosem fogy el a hely
 
-- pozitívum: Végtelen közbeszúrás — sosem fogy el a hely
+- pozitívum: Végtelen közbeszúrás - sosem fogy el a hely
 - pozitívum: ORDER BY egyszerű és gyors (localeCompare / ABC sorrend)
-- pozitívum: SignalR barát — csak a position stringet kell broadcastolni
-- pozitívum: Öngyógyító bucket rendszer — automatikus rebalancing ütközéskor
+- pozitívum: SignalR barát - csak a position stringet kell broadcastolni
+- pozitívum: Öngyógyító bucket rendszer - automatikus rebalancing ütközéskor
 - pozitívum: Iparági standard (Jira, Linear)
 - pozitívum: Adatbázis szinten hatékony index támogatás
 - negatívum: Komplexebb implementáció mint a float vagy int megoldás
 - negatívum: Párhuzamos dupla mozgatás esetén a task "kicsit más helyre" kerülhet
-  (nem adatvesztés, csak nem determinisztikus sorrend — elfogadható tradeoff)
+  (nem adatvesztés, csak nem determinisztikus sorrend - elfogadható tradeoff)
 
 #### Döntés
 A **Lexorank** implementálása mellett döntöttünk. Konzulens tanár visszajelzése
 alapján az egyszerűbb int/szekvenciális megoldás is elfogadható lett volna
-ennél a méretskálánál — azonban a Lexorank mellett szóló érvek:
+ennél a méretskálánál - azonban a Lexorank mellett szóló érvek:
 
-1. **Skálázhatóság:** Közbeszúrás O(1) — mérettől függetlenül 1 UPDATE
+1. **Skálázhatóság:** Közbeszúrás O(1) - mérettől függetlenül 1 UPDATE
 2. **Precizitási korlát hiánya:** A float megoldással ellentétben sosem fogy el a hely
 3. **Öngyógyító rendszer:** Automatikus rebalancing, nincs manuális beavatkozás
 4. **Iparági standard:** Jira, Linear ugyanezt az algoritmust használja
 5. **Szakmai megalapozottság:** A védésen jól indokolható tudatos technikai döntés
 
-A komplexitás növekedés elfogadható tradeoff a fenti előnyökért —
+A komplexitás növekedés elfogadható tradeoff a fenti előnyökért -
 különösen mivel a Redis backplane + SignalR architektúrával együtt
 egy production-ready skálázható megoldást alkot.
 
@@ -491,10 +491,10 @@ Service metódus fut (pl. CreateTaskAsync)
 #### 1. Redis Backplane integráció
 **Backend változtatások:**
 - NuGet csomag: Microsoft.AspNetCore.SignalR.StackExchangeRedis
-- Program.cs: AddSignalR().AddStackExchangeRedis(...) — egyetlen sor változtatás
+- Program.cs: AddSignalR().AddStackExchangeRedis(...) - egyetlen sor változtatás
 - Docker Compose: Redis service hozzáadása
 
-**Frontend változtatások:** Semmi — teljesen transzparens!
+**Frontend változtatások:** Semmi - teljesen transzparens!
 
 ---
 
@@ -582,7 +582,7 @@ Az ott elvégzett Sprint munkák összefoglalója:
 
 ### Tervezett technikai fejlesztések
 
-#### CurrentUserService — Egységes felhasználó azonosítás
+#### CurrentUserService - Egységes felhasználó azonosítás
 
 Jelenleg a controllerekben egyedi megoldások vannak a bejelentkezett felhasználó azonosítására.
 
@@ -596,12 +596,12 @@ Tervezett egységes megoldás interface + service class-al.
 
 **Implementáció az Activity Log rendszerrel együtt kerül sorra**
 
-#### ProjectNotArchivedFilter — Archivált projekt védelem
+#### ProjectNotArchivedFilter - Archivált projekt védelem
 
 Jelenleg az archivált projektek nem tiltják meg a műveletek elvégzését
-— csak a státusz jelzésére szolgál.
+- csak a státusz jelzésére szolgál.
 
-Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
+Tervezett megoldás - `ProjectNotArchivedFilter` Action Filter:
 - Automatikusan ellenőrzi hogy a projekt archivált-e
 - Ha archivált -> 403 Forbidden visszaadása
 - Alkalmazható controller osztály szinten vagy metódus szinten
@@ -616,8 +616,8 @@ Tervezett megoldás — `ProjectNotArchivedFilter` Action Filter:
 - CommentController
 
 **Kivételek (ahol archivált projekten is engedélyezett):**
-- GET metódusok — olvasás archivált projekten is megengedett
-- UnarchiveProjectAsync — dearchiválás nyilván engedélyezett
+- GET metódusok - olvasás archivált projekten is megengedett
+- UnarchiveProjectAsync - dearchiválás nyilván engedélyezett
 - ProjectController GET végpontjai
 
 **Implementáció a Team Management fejlesztésekor kerül sorra**
@@ -666,7 +666,7 @@ Jövőbeli fejlesztésként az i18n támogatáshoz:
   - BoardService: CreateBoard, UpdateBoard, DeleteBoard
   - ColumnService: CreateColumn, UpdateColumn, DeleteColumn
 - ActivityCreated SignalR broadcast minden LogActivityAsync hívás után
-- Minden activity logging try/catch-ben — másodlagos nem kritikus funkció
+- Minden activity logging try/catch-ben - másodlagos nem kritikus funkció
 
 **Frontend**
 - teamApi.ts: getMembersAsync, removeMemberAsync, updateMemberRoleAsync, generateInviteLinkAsync, joinProjectAsync
@@ -710,7 +710,7 @@ Jövőbeli fejlesztésként az i18n támogatáshoz:
 **Actor szerepkör megjelenítés az Activity Feed-ben**
 - ActorRole visszaadása az ActivityResponseDto-ban
 - Rang alapú színkiemelés (Owner=narancs, Admin=kék, Member=zöld, Viewer=szürke)
-- Jelenleg fehér félkövér kiemelés — szerepkör nem egyértelműen azonosítható csak névből
+- Jelenleg fehér félkövér kiemelés - szerepkör nem egyértelműen azonosítható csak névből
 
 ## Git Webhook Integration & MinIO File Storage
 GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret validation. Commit and pull request event parsing, task matching by identifier pattern (e.g., PM-123). Git activity display on task detail view. MinIO integration via IFileStorageService interface: file upload, download, and deletion. Attachment metadata storage in PostgreSQL, binary files in MinIO. Team Resources page for shared project documents.
@@ -722,13 +722,13 @@ GitHub/GitLab webhook receiver endpoint (POST /api/git/webhook) with secret vali
 - ASP.NET Core AddEnvironmentVariables() + Docker Compose env átadás
 - PostgreSQL credentials is environment variable-ökből
 
-**Git Webhook — Per-Integration Secret**
+**Git Webhook - Per-Integration Secret**
 - Projekt + repo specifikus token alapú URL: POST /api/git/webhook/{webhookToken}
 - Minden integrációhoz egyedi WebhookToken és WebhookSecret generálódik
-- WebhookSecret DB-ben tárolva (per-integration) — nem globális env variable!
+- WebhookSecret DB-ben tárolva (per-integration) - nem globális env variable!
 - HMAC-SHA256 validáció az integration-specifikus secrettel
-- Secret soha nem kerül vissza a frontend felé — csak beállításkor adja meg a user
-- Secret reset lehetséges — régi secret érvénytelen, új secret megadása szükséges
+- Secret soha nem kerül vissza a frontend felé - csak beállításkor adja meg a user
+- Secret reset lehetséges - régi secret érvénytelen, új secret megadása szükséges
 - Token regenerálás: régi webhook URL érvénytelen -> GitHub/GitLab-on frissíteni kell
 - Ping event kezelés: IsVerified flag beállítása + SignalR broadcast
 
@@ -745,13 +745,13 @@ Tervezett (production):
 - Audit log, automatikus rotation
 - Fine-grained access control
 
-**File Storage — Streaming megközelítés**
+**File Storage - Streaming megközelítés**
 - Fájl letöltés backend streaminggel (nem presigned URL)
 - Biztonsági indok: minden letöltésnél auth ellenőrzés történik
 - Tag eltávolítás után azonnal elvész a hozzáférés
 - IFileStorageService interface mögé bújtatva -> könnyen cserélhető
 
-**Skálázhatóság — Monolith first**
+**Skálázhatóság - Monolith first**
 - Jelenlegi: Monolith + IFileStorageService interface
 - Jövőbeli optimalizáció szükség esetén:
   - File Service kiszervezése külön microservice-be
@@ -764,26 +764,148 @@ Tervezett (production):
 - Provider: GitHub | GitLab
 - Ismeretlen token -> request ignorálva
 - IsEnabled flag -> integráció bármikor letiltható
+- IsVerified flag -> GitHub ping event után true
 
 ### Elvégzett munkák
+#### Backend
 
-**Backend:**
-- Environment variables konfiguráció (.env + Docker Compose)
-- IFileStorageService + MinIOFileStorageService (MinIO Docker service)
-- AttachmentService + TaskAttachmentController + ProjectAttachmentController
-- Integration model: WebhookToken, WebhookSecret, IsVerified, IsEnabled
-- IIntegrationService + IntegrationService: CRUD, token regenerálás, secret reset, enable/disable, verify
-- IntegrationController: GET/POST/DELETE/regenerate/toggle/reset-secret endpoints
-- IGitWebhookService + GitWebhookService:
-  - Per-integration HMAC-SHA256 secret validáció
-  - GitHub ping event -> IsVerified beállítás
-  - Push event -> CommitLink létrehozás (matched + unmatched)
-  - PR event -> PrLink létrehozás/frissítés (open/closed/merged)
-  - Task matching regex: `/(?:^|[\s\[(\#])({projKey}-\d+)(?:$|[\s\])\.,!])/gi`
-  - Unmatched commits/PRs: TaskId = null
-- WebhookController: POST /api/git/webhook/{webhookToken} (publikus, token alapú auth)
-- SignalR broadcasts: CommitLinked, PrLinked, IntegrationVerified, IntegrationUpdated
-- Activity log: commit és PR események logolása
+**File Storage:**
+
+IFileStorageService - fájltárolás absztrakt interfész:
+- `UploadFileAsync` - fájl feltöltése MinIO-ra
+- `GetFileStreamAsync` - fájl streamelése letöltéshez
+- `DeleteFileAsync` - fájl törlése MinIO-ról
+- `GenerateStorageKey` - egyedi tárolási kulcs generálása (projectId/taskId/uuid_filename)
+
+MinIOFileStorageService - MinIO implementáció:
+- Bucket automatikus létrehozás ha nem létezik
+- StorageKey alapú objektum kezelés
+- Environment variable-ökből konfiguráció (MINIO_ENDPOINT, MINIO_ACCESS_KEY stb.)
+
+IAttachmentService / AttachmentService - attachment kezelés:
+- `UploadTaskAttachmentAsync` - task szintű fájl feltöltés
+- `UploadProjectAttachmentAsync` - projekt szintű fájl feltöltés (Team Resources)
+- `GetTaskAttachmentsAsync` - task attachmentjeinek lekérése
+- `GetProjectAttachmentsAsync` - projekt szintű attachmentek lekérése
+- `DownloadAttachmentAsync` - fájl stream visszaadása letöltéshez
+- `DeleteAttachmentAsync` - attachment törlése DB-ből és MinIO-ról
+- `GetAttachmentType` - content type alapján típus meghatározása (image/pdf/spreadsheet/document/other)
+
+TaskAttachmentController - task szintű attachment endpointok:
+- `GET /api/projects/{projectId}/tasks/{taskId}/attachments`
+- `POST /api/projects/{projectId}/tasks/{taskId}/attachments`
+- `GET /api/projects/{projectId}/tasks/{taskId}/attachments/{attachmentId}/download`
+- `DELETE /api/projects/{projectId}/tasks/{taskId}/attachments/{attachmentId}`
+
+ProjectAttachmentController - projekt szintű attachment endpointok (Team Resources):
+- `GET /api/projects/{projectId}/attachments`
+- `POST /api/projects/{projectId}/attachments`
+- `GET /api/projects/{projectId}/attachments/{attachmentId}/download`
+- `DELETE /api/projects/{projectId}/attachments/{attachmentId}`
+
+---
+
+**Git Integration:**
+
+Integration modell - Git integráció tárolása:
+- `Provider` - GitHub vagy GitLab
+- `RepoFullName` - owner/repo formátum
+- `WebhookToken` - egyedi URL token (publikus endpoint azonosításához)
+- `WebhookSecret` - HMAC-SHA256 validációhoz (per-integration, plain text jelenleg)
+- `IsVerified` - ping event után true
+- `IsEnabled` - integráció on/off kapcsoló
+- `AccessToken` - opcionális, jövőbeli API hívásokhoz
+
+CommitLink modell - commit <=> task kapcsolat:
+- `TaskId` - nullable (null = unmatched)
+- `IntegrationId` - melyik integrációból érkezett
+- `CommitSha` - commit hash
+- `CommitUrl` - GitHub/GitLab commit URL
+- `Message` - commit üzenet
+- `AuthorName`, `AuthorEmail` - commit szerzője
+- `CommittedAt` - commit időpontja
+
+PrLink modell - PR <=> task kapcsolat:
+- `TaskId` - nullable (null = unmatched)
+- `IntegrationId` - melyik integrációból érkezett
+- `PrNumber` - PR sorszáma
+- `PrUrl` - GitHub/GitLab PR URL
+- `Title` - PR cím (frissül edited eventnél)
+- `State` - open/closed/merged
+- `AuthorName` - PR szerzője
+- `MergedAt` - merge időpontja (nullable)
+
+IIntegrationService / IntegrationService - integráció kezelés:
+- `GetIntegrationsAsync` - projekt integrációinak lekérése
+- `CreateIntegrationAsync` - új integráció létrehozása WebhookToken generálással
+- `DeleteIntegrationAsync` - integráció törlése
+- `RegenerateWebhookTokenAsync` - új token generálása (régi URL érvénytelen lesz)
+- `GetByWebhookTokenAsync` - token alapján integráció keresése (webhook fogadáshoz)
+- `EnableDisableIntegrationAsync` - integráció engedélyezése/letiltása
+- `VerifyIntegrationAsync` - IsVerified = true beállítása ping event után
+- `ResetWebhookSecretAsync` - új secret beállítása (IsVerified visszaáll false-ra)
+
+IntegrationController - integráció endpointok:
+- `GET /api/projects/{projectId}/integrations`
+- `POST /api/projects/{projectId}/integrations`
+- `DELETE /api/projects/{projectId}/integrations/{integrationId}`
+- `POST /api/projects/{projectId}/integrations/{integrationId}/regenerate`
+- `PATCH /api/projects/{projectId}/integrations/{integrationId}/toggle`
+- `POST /api/projects/{projectId}/integrations/{integrationId}/reset-secret`
+
+IGitWebhookService / GitWebhookService - webhook feldolgozás:
+- `ValidateGitHubSignature` - HMAC-SHA256 validáció integration-specifikus secrettel
+- `ValidateGitLabSignature` - GitLab token validáció
+- `ProcessPushEventAsync` - push event feldolgozása:
+  - Commitok iterálása
+  - Task matching regex alapján
+  - CommitLink létrehozás (matched TaskId-val, unmatched null TaskId-val)
+  - Force push kezelés (meglévő SHA frissítése)
+  - Duplicate check (unique constraint védelem)
+  - Activity log + SignalR broadcast
+- `ProcessPullRequestEventAsync` - PR event feldolgozása:
+  - opened/closed/merged/reopened/edited action kezelés
+  - Létező PR frissítése (state, mergedAt, title)
+  - Új PR task matching + PrLink létrehozás
+  - Activity log + SignalR broadcast
+- `MatchTasksAsync` - task kulcs keresés regex-szel:
+  - Pattern: `/(?:^|[\s\[(\#])({projKey}-\d+)(?:$|[\s\])\.,!])/gi`
+  - PM-123, #PM-123, [PM-123], (PM-123) mind felismeri
+
+WebhookController - publikus webhook fogadó endpoint:
+- `POST /api/git/webhook/{webhookToken}` - nincs JWT auth
+- Token alapján integráció azonosítás
+- Provider alapján signature validáció
+- GitHub: `X-GitHub-Event` header alapján event routing
+- GitLab: `X-Gitlab-Event` header alapján event routing
+- Ping event -> `VerifyIntegrationAsync`
+- Push event -> `ProcessPushEventAsync`
+- PR/MR event -> `ProcessPullRequestEventAsync`
+
+IGitService / GitService - unmatched kezelés és manuális hozzárendelés:
+- `GetUnmatchedCommitsAsync` - TaskId=null commitok lekérése projekt alapján
+- `GetUnmatchedPrsAsync` - TaskId=null PR-ok lekérése projekt alapján
+- `AssignCommitToTaskAsync` - commit manuális hozzárendelése taskhoz
+- `AssignPrToTaskAsync` - PR manuális hozzárendelése taskhoz
+
+GitController - git kezelő endpointok:
+- `GET /api/projects/{projectId}/git/unmatched-commits`
+- `GET /api/projects/{projectId}/git/unmatched-prs`
+- `POST /api/projects/{projectId}/git/commits/{commitId}/assign/{taskId}`
+- `POST /api/projects/{projectId}/git/prs/{prId}/assign/{taskId}`
+
+**Activity Log kiegészítések:**
+- `Activity.ActorId` nullable - system eventeknél null
+- `LogSystemActivityAsync` - actor nélküli activity logolás (GitHub/GitLab eventekhez)
+- `GetActivitiesAsync` - null ActorId esetén "System" ActorName
+
+**SignalR broadcasts:**
+- `CommitLinked` - commit taskhoz kapcsolva
+- `PrLinked` - PR taskhoz kapcsolva
+- `IntegrationCreated` - új integráció létrehozva
+- `IntegrationDeleted` - integráció törölve
+- `IntegrationVerified` - ping event után verified
+- `IntegrationUpdated` - token regenerálás / enable/disable / secret reset
 
 **MinIO bucket struktúra:**
   project-manager/
@@ -795,23 +917,34 @@ Tervezett (production):
   shared/
   {fileId}{fileName}  <- Team Resources
 
-**Frontend:**
-- attachmentApi.ts + AttachmentCard.svelte
-- TaskDetailModal: Attachment szekció (feltöltés, letöltés, törlés)
-- TeamResources.svelte: projekt szintű dokumentumok + task attachmentek
-- integrationApi.ts + integrationStore.ts
-- CreateIntegrationModal.svelte: provider select, repoFullName, webhookSecret
-- IntegrationCard.svelte: webhook URL másolás, setup guide, toggle, regenerate, secret reset, delete, verified badge
-- ProjectSettings.svelte: Git Integration szekció
-- AppLayout: IntegrationVerified/IntegrationUpdated SignalR kezelés, loadIntegrations projekt váltáskor
+#### Frontend
+
+**File Storage:**
+- `attachmentApi.ts` - upload, download, delete task és projekt szintű attachmentekhez
+- `AttachmentCard.svelte` - egy attachment megjelenítése (ikon, fájlnév, méret, feltöltő, letöltés, törlés)
+- `TaskDetailModal` - Attachment szekció (feltöltés + AttachmentCard lista)
+- `TeamResources.svelte` - projekt szintű dokumentumok + task attachmentek szekciókra bontva
+
+**Git Integration:**
+- `integrationApi.ts` - CRUD, regenerate, toggle, reset-secret endpointok
+- `integrationStore.ts` - integrációk store (setIntegrations, updateIntegration, addIntegration, removeIntegration, clearIntegrations)
+- `gitApi.ts` - unmatched commitok/PR-ok lekérése, manuális task hozzárendelés
+- `CreateIntegrationModal.svelte` - provider select (GitHub/GitLab), repoFullName, webhookSecret input
+- `IntegrationCard.svelte` - webhook URL másolás, beállítási útmutató, toggle, token regenerálás, secret reset, törlés, verified/unverified badge
+- `CommitCard.svelte` - egy commit megjelenítése (SHA, üzenet, szerző, dátum, link)
+- `PrCard.svelte` - egy PR megjelenítése (szám, cím, state badge, szerző, dátum, merge dátum, link)
+- `GitView.svelte` - Git nézet: integráció státuszok, unmatched commitok és PR-ok manuális task hozzárendeléssel
+- `TaskDetailModal` - Git szekció (CommitCard + PrCard lista)
+- `ProjectSettings.svelte` - Git Integration szekció
+- `AppLayout` - IntegrationCreated/Deleted/Verified/Updated SignalR kezelés, loadIntegrations projekt váltáskor
 
 **Git Webhook Routing & Tesztelés**
 
 *Routing:*
-- Publikus endpoint: POST /api/git/webhook/{webhookToken} — nincs JWT auth
+- Publikus endpoint: POST /api/git/webhook/{webhookToken} - nincs JWT auth
 - Token alapú biztonság: csak érvényes, engedélyezett integration token fogadható el
-- Elkülönített controller (WebhookController) — nem tartozik a projekt RBAC rendszeréhez
-- ProjectNotArchivedFilter nem szükséges — webhook fogadás archivált projekten is működhet
+- Elkülönített controller (WebhookController) - nem tartozik a projekt RBAC rendszeréhez
+- ProjectNotArchivedFilter nem szükséges - webhook fogadás archivált projekten is működhet
 
 *Lokális tesztelés ngrok-kal:*
 - GitHub/GitLab nem éri el a localhost-ot -> ngrok tunnel szükséges
@@ -829,29 +962,29 @@ Tervezett (production):
 - Sikeres -> IsVerified = true -> SignalR IntegrationVerified broadcast
 - IntegrationCard-on Verified badge megjelenik
 
-### Még elvégzendő
+---
 
-**Közvetlen következő lépések (MVP):**
-- Push event teszt valódi committal (PM-{taskKey} a commit üzenetben)
-- PR event teszt
-- TaskDetailModal: Git szekció (CommitLink + PrLink megjelenítése)
-- Git View: unmatched commits/PRs manuális task hozzárendeléssel
+### Jövőbeli fejlesztések
 
 **Biztonsági fejlesztések:**
 - AES-256 titkosítás WebhookSecret tárolásához
   - `ENCRYPTION_KEY` environment variable
   - `AesEncryptionService` helper class
   - Visszafejtés webhook érkezésekor
-
-**Jövőbeli fejlesztések:**
 - HashiCorp Vault integráció (production skálán)
 - TOTP 2FA:
   - Bejelentkezéskor opcionális
   - Kritikus műveleteknél (secret reset, integráció törlés) kötelező
-  - Google Authenticator kompatibilis (Otp.NET NuGet)
+  - Google Authenticator kompatibilis (`Otp.NET` NuGet)
+
+**Git fejlesztések:**
 - GitLab webhook tesztelés
 - PR státusz szinkronizálás AccessToken alapján (opcionális)
-- Több repo egy projekthez (már támogatott az Integration modellben)
+- Task matching kiterjesztése PR body-ra is
+- Webhook edge case-ek:
+  - PR title változtatás body-ban is keresés
+  - Large push (50+ commit) batch optimalizáció
+  - PR review events kezelése
 
 ## Statistics Dashboard & ECharts Integration
 Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using PostgreSQL views for efficient aggregation. Filterable by sprint, user, and date range.
