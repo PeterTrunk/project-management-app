@@ -52,7 +52,7 @@ namespace ProjectManager.API.Services.GitWebhookService
             DateTime? mergedAt = null;
             if (state == "merged" && pr.TryGetProperty("merged_at", out var mergedAtProp))
             {
-                mergedAt = DateTime.Parse(mergedAtProp.GetString()!);
+                mergedAt = DateTime.Parse(mergedAtProp.GetString()!).ToUniversalTime();
             }
 
             // Létező PR frissítése vagy új létrehozása
@@ -150,7 +150,7 @@ namespace ProjectManager.API.Services.GitWebhookService
                 var authorEmail = commit.GetProperty("author")
                     .GetProperty("email").GetString() ?? string.Empty;
                 var committedAt = commit.TryGetProperty("timestamp", out var tsProp)
-                    ? DateTime.Parse(tsProp.GetString()!)
+                    ? DateTime.Parse(tsProp.GetString()!).ToUniversalTime()
                     : DateTime.UtcNow;
 
                 // Task matching
@@ -158,7 +158,13 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 if (tasks.Count == 0)
                 {
-                    // Unmatched commit — TaskId null
+                    // Unmatched commit — ellenőrzés hogy már létezik-e
+                    var existingUnmatched = await _context.CommitLinks
+                        .FirstOrDefaultAsync(cl =>
+                            cl.IntegrationId == integrationId &&
+                            cl.CommitSha == sha);
+                    if (existingUnmatched != null) continue;
+
                     await CreateCommitLinkAsync(
                         null, integrationId, sha, url, message,
                         authorName, authorEmail, committedAt);
