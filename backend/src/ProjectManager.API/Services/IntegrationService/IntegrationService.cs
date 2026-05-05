@@ -244,6 +244,21 @@ namespace ProjectManager.API.Services.IntegrationService
                     integrationId = integration.Id,
                     projectId = integration.ProjectId
                 });
+
+            try
+            {
+                var activity = await _activityService.LogSystemActivityAsync(
+                    integration.ProjectId,
+                    "Integration",
+                    integration.Id,
+                    "Verified",
+                    $"GitHub webhook sikeresen verifikálva: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{integration.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         private IntegrationResponseDto MapToDto(Integration integration)
