@@ -540,7 +540,7 @@ public class AppDbContext : DbContext
 
             entity.Property(a => a.Action)
                   .HasMaxLength(32)
-                  .IsRequired();
+                  .IsRequired(false);
 
             entity.Property(a => a.Payload)
                   .HasColumnType("text");

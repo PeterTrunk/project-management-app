@@ -70,6 +70,8 @@ namespace ProjectManager.API.Services.GitWebhookService
                     pl.IntegrationId == integrationId &&
                     pl.PrNumber == prNumber);
 
+            bool isUnmatched = false;
+
             if (existingPr != null)
             {
                 existingPr.State = state;
@@ -87,6 +89,7 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 if (tasks.Count == 0)
                 {
+                    isUnmatched = true;
                     // Unmatched PR
                     _context.PrLinks.Add(new PrLink
                     {
@@ -106,6 +109,7 @@ namespace ProjectManager.API.Services.GitWebhookService
                 {
                     foreach (var task in tasks)
                     {
+                        matchedTasks.Add(task);
                         _context.PrLinks.Add(new PrLink
                         {
                             Id = Guid.NewGuid(),
@@ -121,10 +125,28 @@ namespace ProjectManager.API.Services.GitWebhookService
                         });
                     }
                 }
-                matchedTasks = tasks;
             }
 
             await _context.SaveChangesAsync();
+
+            // Unmatched PR logolás
+            if (isUnmatched)
+            {
+                try
+                {
+                    var activity = await _activityService.LogSystemActivityAsync(
+                        projectId,
+                        "PullRequest",
+                        integrationId,
+                        "Unmatched",
+                        $"Hozzárendeletlen PR érkezett: #{prNumber} — {title} ({authorName})"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
+            }
 
             foreach (var task in matchedTasks)
             {
@@ -134,10 +156,19 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 try
                 {
-                    var activity = await _activityService.LogActivityAsync(
-                        projectId, "PullRequest", task.Id,
+                    var actionText = state switch
+                    {
+                        "merged" => "mergelte",
+                        "closed" => "lezárta",
+                        _ => "megnyitotta"
+                    };
+
+                    var activity = await _activityService.LogSystemActivityAsync(
+                        projectId,
+                        "PullRequest",
+                        task.Id,
                         state == "merged" ? "Merged" : state == "closed" ? "Closed" : "Opened",
-                        $"{authorName} PR-ja ({state}) kapcsolva a {task.TaskKey} taskhoz: {title}"
+                        $"GitHub {actionText} a #{prNumber} PR-t a {task.TaskKey} taskhoz: {title}"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
@@ -151,6 +182,7 @@ namespace ProjectManager.API.Services.GitWebhookService
         {
             var commits = payload.GetProperty("commits");
             var matchedTasks = new List<(ProjectTask task, string sha, string message, string authorName)>();
+            var unmatchedMessages = new List<string>();
 
             foreach (var commit in commits.EnumerateArray())
             {
@@ -168,6 +200,7 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 // Task matching
                 var tasks = await MatchTasksAsync(projectId, message);
+                
 
                 if (tasks.Count == 0)
                 {
@@ -181,6 +214,8 @@ namespace ProjectManager.API.Services.GitWebhookService
                     await CreateCommitLinkAsync(
                         null, integrationId, sha, url, message,
                         authorName, authorEmail, committedAt);
+
+                    unmatchedMessages.Add($"{sha[..7]} — {message[..Math.Min(50, message.Length)]} ({authorName})");
                 }
                 else
                 {
@@ -218,6 +253,21 @@ namespace ProjectManager.API.Services.GitWebhookService
 
             await _context.SaveChangesAsync();
 
+            foreach (var msg in unmatchedMessages)
+            {
+                try
+                {
+                    var activity = await _activityService.LogSystemActivityAsync(
+                        projectId, "Commit", integrationId, "Unmatched",
+                        $"Hozzárendeletlen commit érkezett: {msg}"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
+            }
+
             foreach (var (task, sha, message, authorName) in matchedTasks)
             {
                 await _hubContext.Clients
@@ -226,9 +276,12 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 try
                 {
-                    var activity = await _activityService.LogActivityAsync(
-                        projectId, "Commit", task.Id, "Linked",
-                        $"{authorName} commitja kapcsolva a {task.TaskKey} taskhoz: {message[..Math.Min(50, message.Length)]}"
+                    var activity = await _activityService.LogSystemActivityAsync(
+                        projectId,
+                        "Commit",
+                        task.Id,
+                        "Linked",
+                        $"GitHub kapcsolta a {sha[..7]} commitot a {task.TaskKey} taskhoz: {message[..Math.Min(50, message.Length)]}"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")

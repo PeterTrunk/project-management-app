@@ -64,7 +64,9 @@ namespace ProjectManager.API.Services.ActivityService
             return activities.Select(a => new ActivityResponseDto
             {
                 Id = a.Id,
-                ActorName = a.Actor?.DisplayName ?? "Ismeretlen",
+                ActorName = a.ActorId.HasValue
+                    ? (a.Actor?.DisplayName ?? "Ismeretlen") //Ha nem találjuk a usert akkor "Ismeretlen"
+                    : "System", //null ActorId esetén "System", 
                 EntityType = a.EntityType,
                 EntityId = a.EntityId,
                 Action = a.Action,
@@ -72,6 +74,37 @@ namespace ProjectManager.API.Services.ActivityService
                 Payload = a.Payload,
                 CreatedAt = a.CreatedAt
             }).ToList();
+        }
+
+        public async Task<ActivityResponseDto> LogSystemActivityAsync(Guid projectId, string entityType, Guid entityId, string action, string description, string? payload = null)
+        {
+            var activity = new Activity
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                ActorId = null, //System event. pl.: Push vagy Pr webhook érzékelés esetén
+                EntityType = entityType,
+                EntityId = entityId,
+                Action = action,
+                Description = description,
+                Payload = payload,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _context.Activities.AddAsync(activity);
+            await _context.SaveChangesAsync();
+
+            return new ActivityResponseDto
+            {
+                Id = activity.Id,
+                ActorName = "System",
+                EntityType = activity.EntityType,
+                EntityId = activity.EntityId,
+                Action = activity.Action,
+                Description = activity.Description,
+                Payload = activity.Payload,
+                CreatedAt = activity.CreatedAt
+            };
         }
     }
 }
