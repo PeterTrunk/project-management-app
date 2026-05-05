@@ -1,7 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
+using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.FileStorageService;
 
@@ -11,13 +14,17 @@ namespace ProjectManager.API.Services.AttachmentService
     {
         private readonly AppDbContext _context;
         private readonly IFileStorageService _fileStorageService;
+        private readonly IActivityService _activityService;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IHubContext<ProjectHub> _hubContext;
         
-        public AttachmentService(AppDbContext context, IFileStorageService fileStorageService, ICurrentUserService currentUserService)
+        public AttachmentService(AppDbContext context, IFileStorageService fileStorageService, IActivityService activityService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _fileStorageService = fileStorageService;
+            _activityService = activityService;
             _currentUserService = currentUserService;
+            _hubContext = hubContext;
         }
 
         public async Task DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
@@ -32,6 +39,21 @@ namespace ProjectManager.API.Services.AttachmentService
 
             _context.Attachments.Remove(attachment);
             await _context.SaveChangesAsync();
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    attachment.TaskId.HasValue ? attachment.ProjectId : attachment.ProjectId,
+                    attachment.TaskId.HasValue ? "Task" : "Project",
+                    attachment.TaskId ?? attachment.ProjectId,
+                    "AttachmentDeleted",
+                    $"{_currentUserService.DisplayName} törölte a {attachment.FileName} fájlt"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{attachment.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<(Stream stream, string fileName, string contentType)> DownloadAttachmentAsync(Guid projectId, Guid attachmentId)
@@ -92,6 +114,21 @@ namespace ProjectManager.API.Services.AttachmentService
             await _context.Attachments.AddAsync(attachment);
             await _context.SaveChangesAsync();
 
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Project",
+                    projectId,
+                    "AttachmentUploaded",
+                    $"{_currentUserService.DisplayName} feltöltötte a {fileName} fájlt a projekt dokumentumok közé"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+            
             return MapToDto(attachment);
         }
 
@@ -117,6 +154,21 @@ namespace ProjectManager.API.Services.AttachmentService
 
             await _context.Attachments.AddAsync(attachment);
             await _context.SaveChangesAsync();
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Task",
+                    taskId,
+                    "AttachmentUploaded",
+                    $"{_currentUserService.DisplayName} feltöltötte a {fileName} fájlt"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
 
             return MapToDto(attachment);
         }
