@@ -29,6 +29,26 @@ interface AssignTaskToBoardRequest {
     boardId: string | null;
 }
 
+export interface CommitLinkResponse {
+    id: string;
+    commitSha: string;
+    commitUrl: string | null;
+    message: string;
+    authorName: string;
+    authorEmail: string;
+    committedAt: string;
+}
+
+export interface PrLinkResponse {
+    id: string;
+    prNumber: number;
+    prUrl: string | null;
+    title: string;
+    state: string;
+    authorName: string;
+    createdAt: string;
+    mergedAt: string | null;
+}
 
 export interface TaskResponse {
     id: string;
@@ -46,8 +66,8 @@ export interface TaskResponse {
     dueDate: Date | null;
     assigneeIds: string[];
     labelIds: string[];
-    commitLinks: string[];
-    prLinks: string[];
+    commitLinks: CommitLinkResponse[];
+    prLinks: PrLinkResponse[];
     attachments: AttachmentResponse[];
     createdByName: string;
     closedAt: Date;

@@ -19,6 +19,8 @@
     import type { AttachmentResponse } from '../api/attachmentApi';
     import { uploadTaskAttachmentAsync, downloadAttachmentAsync, deleteTaskAttachmentAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
+    import CommitCard from './CommitCard.svelte';
+    import PrCard from './PrCard.svelte';
 
     export let task: TaskResponse;
     $: isBacklogTask = !task.boardId && !task.columnId && !task.sprintId;
@@ -350,27 +352,32 @@
                 </div>
                 <!-- Commit linkek -->
                 <div class="section">
-                    <h3>Commit linkek</h3>
+                    <h3>Commitok</h3>
                     {#if task.commitLinks.length > 0}
-                        {#each task.commitLinks as link}
-                            <a href={link} target="_blank">{link}</a>
-                        {/each}
+                        <div class="git-list">
+                            {#each task.commitLinks as commit (commit.id)}
+                                <CommitCard {commit} />
+                            {/each}
+                        </div>
                     {:else}
-                        <p class="empty">Nincs commit link</p>
+                        <p class="empty">Nincs commit</p>
                     {/if}
                 </div>
-
+                    
                 <!-- PR linkek -->
                 <div class="section">
-                    <h3>PR linkek</h3>
+                    <h3>Pull Requestek</h3>
                     {#if task.prLinks.length > 0}
-                        {#each task.prLinks as link}
-                            <a href={link} target="_blank">{link}</a>
-                        {/each}
+                        <div class="git-list">
+                            {#each task.prLinks as pr (pr.id)}
+                                <PrCard {pr} />
+                            {/each}
+                        </div>
                     {:else}
-                        <p class="empty">Nincs PR link</p>
+                        <p class="empty">Nincs pull request</p>
                     {/if}
                 </div>
+                
             {:else}
                 <h2>Módosítások</h2>
                 <div class="section">
@@ -711,6 +718,12 @@
         font-size: 0.85rem;
         width: 100%;
         text-align: center;
+    }
+
+    .git-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
     }
     
     .upload-btn:hover { background: #333; border-color: #666; }
