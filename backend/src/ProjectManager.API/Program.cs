@@ -18,6 +18,7 @@ using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.FileStorageService;
+using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.LabelService;
@@ -185,6 +186,7 @@ builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IGitWebhookService, GitWebhookService>();
+builder.Services.AddScoped<IGitService, GitService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
