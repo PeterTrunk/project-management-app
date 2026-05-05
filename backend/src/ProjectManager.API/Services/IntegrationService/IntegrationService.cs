@@ -4,6 +4,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Integration;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 
 namespace ProjectManager.API.Services.IntegrationService
@@ -12,12 +13,14 @@ namespace ProjectManager.API.Services.IntegrationService
     {
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IActivityService _activityService;
         private readonly IHubContext<ProjectHub> _hubContext;
 
-        public IntegrationService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
+        public IntegrationService(AppDbContext context, ICurrentUserService currentUserService, IActivityService activityService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _activityService = activityService;
             _hubContext = hubContext;
         }
 
@@ -53,6 +56,30 @@ namespace ProjectManager.API.Services.IntegrationService
             await _context.Integrations.AddAsync(integration);
             await _context.SaveChangesAsync();
 
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("IntegrationCreated", new
+                {
+                    integrationId = integration.Id,
+                    provider = integration.Provider,
+                    repoFullName = integration.RepoFullName
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    "Created",
+                    $"{_currentUserService.DisplayName} hozzáadta a {integration.Provider} integrációt: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
             return MapToDto(integration);
         }
 
@@ -65,6 +92,28 @@ namespace ProjectManager.API.Services.IntegrationService
 
             _context.Integrations.Remove(integration);
             await _context.SaveChangesAsync();
+            
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("IntegrationDeleted", new
+                {
+                    integrationId = integration.Id
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    "Deleted",
+                    $"{_currentUserService.DisplayName} törölte a {integration.Provider} integrációt: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task EnableDisableIntegrationAsync(Guid projectId, Guid integrationId, bool isEnabled)
@@ -77,6 +126,29 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.IsEnabled = isEnabled;
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("IntegrationUpdated", new
+                {
+                    integrationId = integration.Id,
+                    isEnabled = integration.IsEnabled
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    integration.IsEnabled ? "Enabled" : "Disabled",
+                    $"{_currentUserService.DisplayName} {(integration.IsEnabled ? "engedélyezte" : "letiltotta")} a {integration.Provider} integrációt: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
         }
 
         public async Task<Integration?> GetByWebhookTokenAsync(string webhookToken)
@@ -106,6 +178,30 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.WebhookToken = Guid.NewGuid().ToString("N");
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("IntegrationUpdated", new
+                {
+                    integrationId = integration.Id,
+                    isVerified = integration.IsVerified
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    "TokenRegenerated",
+                    $"{_currentUserService.DisplayName} regenerálta a webhook tokent: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
 
             return MapToDto(integration);
         }

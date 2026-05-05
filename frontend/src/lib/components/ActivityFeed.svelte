@@ -85,6 +85,7 @@
             case 'Project': return '📁';
             case 'Commit': return '🔵';
             case 'PullRequest': return '🟣';
+            case 'Integration': return '🔗';
             default: return '•';
         }
     }

@@ -19,6 +19,7 @@
     import { integrationStore } from '../lib/stores/integrationStore';
     import { updateIntegration } from '../lib/stores/integrationStore';
     import type { IntegrationResponse } from '../lib/api/integrationApi';
+    import { addIntegration, removeIntegration } from '../lib/stores/integrationStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -129,6 +130,16 @@
                     updateIntegration({ ...integration, isVerified: data.isVerified });
                 }
             });
+            
+            signalRService.on('IntegrationCreated', async (data) => {
+                // Friss integráció lekérése és store-ba rakása
+                const integrations = await getIntegrationsAsync(currentProjectId);
+                setIntegrations(integrations);
+            });
+
+            signalRService.on('IntegrationDeleted', (data) => {
+                removeIntegration(data.integrationId);
+            });
         }
     });
 
@@ -158,6 +169,8 @@
         signalRService.off('MemberRoleUpdated');
         signalRService.off('IntegrationVerified');
         signalRService.off('IntegrationUpdated');
+        signalRService.off('IntegrationCreated');
+        signalRService.off('IntegrationDeleted');
         await signalRService.disconnect();
     });
 
