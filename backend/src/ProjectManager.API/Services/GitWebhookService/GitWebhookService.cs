@@ -28,7 +28,7 @@ namespace ProjectManager.API.Services.GitWebhookService
         {
             var action = payload.GetProperty("action").GetString();
             var pr = payload.GetProperty("pull_request");
-
+            
             var prNumber = pr.GetProperty("number").GetInt32();
             var title = pr.GetProperty("title").GetString() ?? string.Empty;
             var prUrl = pr.TryGetProperty("html_url", out var urlProp)
@@ -37,7 +37,7 @@ namespace ProjectManager.API.Services.GitWebhookService
                 .GetProperty("login").GetString() ?? string.Empty;
             var repoFullName = payload.GetProperty("repository")
                 .GetProperty("full_name").GetString() ?? string.Empty;
-
+            
             var matchedTasks = new List<ProjectTask>();
 
             // State meghatározása
@@ -49,6 +49,15 @@ namespace ProjectManager.API.Services.GitWebhookService
                 _ => "open"
             };
 
+            // Csak ezeket kezeljük
+            if (action != "opened" &&
+                action != "closed" &&
+                action != "reopened" &&
+                action != "edited")
+            {
+                return;  // ignoráljuk a többi action-t
+            }
+            
             DateTime? mergedAt = null;
             if (state == "merged" && pr.TryGetProperty("merged_at", out var mergedAtProp))
             {
@@ -66,6 +75,10 @@ namespace ProjectManager.API.Services.GitWebhookService
                 existingPr.State = state;
                 existingPr.MergedAt = mergedAt;
                 existingPr.Title = title;
+
+                // Ha csak title változott (edited action), nincs más változás
+                await _context.SaveChangesAsync();
+                return;
             }
             else
             {
@@ -179,7 +192,14 @@ namespace ProjectManager.API.Services.GitWebhookService
                                 cl.IntegrationId == integrationId &&
                                 cl.CommitSha == sha &&
                                 cl.TaskId == task.Id);
-                        if (existing != null) continue;
+                        if (existing != null)
+                        {
+                            //Forcepush: üzenet és URL frissítése.
+                            existing.Message = message;
+                            existing.CommitUrl = url;
+
+                            continue;
+                        }
 
                         await CreateCommitLinkAsync(
                             task.Id, integrationId, sha, url, message,
