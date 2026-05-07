@@ -989,6 +989,90 @@ GitController - git kezelő endpointok:
 ## Statistics Dashboard & ECharts Integration
 Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using PostgreSQL views for efficient aggregation. Filterable by sprint, user, and date range.
 
+### Tervezett implementáció
+
+#### Backend
+**TaskStatusHistory tábla — CFD alapja:**
+- `TaskId`, `ColumnId` (nullable = Backlog), `Status`, `ChangedAt`
+- `MoveTaskAsync`-ban minden mozgatásnál bejegyzés
+- `CompleteSprintAsync`-ban sprint lezáráskor history törlése
+- Migration szükséges
+
+**ClosedAt alapú task védelem:**
+- `MoveTaskAsync`: ClosedAt != null -> exception
+- `AssignTaskToBoardAsync`: ClosedAt != null -> exception
+- Lezárt sprint taskjai nem manipulálhatók
+
+**TaskMoved Activity Log:**
+- Csak az utolsó oszlopba kerüléskor logolunk
+- Action: "Completed"
+- Túl frequent esemény -> közbülső mozgatások nem logolódnak
+
+**StatisticsController endpointok:**
+- `GET /api/projects/{projectId}/statistics/task-status`
+  -> Task státusz eloszlás (Backlog/ToDo/InProgress/Done)
+  -> ORM: ProjectTasks + ColumnDefinition.MapsToStatus GroupBy
+
+- `GET /api/projects/{projectId}/statistics/burndown/{sprintId}`
+  -> Naponta hány task maradt befejezetlen
+  -> ORM: Sprint.StartDate->EndDate, Task.CompletedAt alapján
+
+- `GET /api/projects/{projectId}/statistics/burnup/{sprintId}`
+  -> Naponta hány task lett kumulatívan kész
+  -> ORM: Sprint.StartDate->EndDate, Task.CompletedAt alapján
+
+- `GET /api/projects/{projectId}/statistics/workload`
+  -> Ki hány aktív (ClosedAt=null) taskot kezel
+  -> ORM: TaskAssignment + User GroupBy
+
+- `GET /api/projects/{projectId}/statistics/velocity`
+  -> Sprinterként hány task lett befejezve
+  -> ORM: Completed Sprint-ek + Task.CompletedAt != null Count
+
+- `GET /api/projects/{projectId}/statistics/cumulative-flow`
+  -> Naponta oszloponként hány task volt adott státuszban
+  -> ORM: TaskStatusHistory alapján
+  -> Query paraméter: dateFrom, dateTo
+
+**Szűrési lehetőségek:**
+- Sprint alapján (burndown/burnup)
+- User alapján (workload)
+- Dátum intervallum (CFD, velocity)
+
+#### Frontend
+
+**Telepítendő csomag:**
+npm install echarts
+
+**Komponensek:**
+- `StatisticsView.svelte` — fő nézet, szűrők kezelése
+- `TaskStatusPieChart.svelte` — task státusz eloszlás
+- `SprintBurndownChart.svelte` — burndown vonal diagram
+- `SprintBurnupChart.svelte` — burnup vonal diagram
+- `TeamWorkloadChart.svelte` — team workload oszlop diagram
+- `VelocityChart.svelte` — sprint velocity oszlop diagram
+- `CumulativeFlowChart.svelte` — CFD területi diagram
+
+**statisticsApi.ts:**
+- `getTaskStatusAsync`
+- `getBurndownAsync(sprintId)`
+- `getBurnupAsync(sprintId)`
+- `getWorkloadAsync`
+- `getVelocityAsync`
+- `getCumulativeFlowAsync(dateFrom, dateTo)`
+
+#### Implementációs sorrend
+1. TaskStatusHistory model + migration
+2. ClosedAt védelem MoveTaskAsync + AssignTaskToBoardAsync-ban
+3. TaskMoved activity log (csak utolsó oszlopnál)
+4. MoveTaskAsync kiegészítése TaskStatusHistory bejegyzéssel
+5. CompleteSprintAsync: history törlés sprint lezáráskor
+6. IStatisticsService + StatisticsService (ORM query-k)
+7. StatisticsController endpointok
+8. statisticsApi.ts frontend
+9. ECharts komponensek implementálása
+10. StatisticsView összekötése szűrőkkel
+
 ## Search/Filter, UI Polish & Responsive Design
 Task search and filtering on the board (by assignee, priority, keyword, label). Activity log view with filtering by user and event type. Responsive UI refinements for desktop and notebook resolutions. Consistent spacing, color scheme, and typography across all views. Dark/light mode toggle in profile settings. Overview dashboard with personal task summary, overdue items, and recent activity.
 
