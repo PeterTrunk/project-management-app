@@ -20,8 +20,10 @@ namespace ProjectManager.API.Services.StatisticsService
             if (sprint == null)
                 throw new Exception("Sprint nem található!");
 
-            var startDate = sprint.StartDate ?? DateTime.UtcNow.AddDays(-14);
-            var endDate = sprint.EndDate ?? DateTime.UtcNow;
+            var startDate = DateTime.SpecifyKind(
+                sprint.StartDate ?? DateTime.UtcNow.AddDays(-14), DateTimeKind.Utc);
+            var endDate = DateTime.SpecifyKind(
+                sprint.EndDate ?? DateTime.UtcNow, DateTimeKind.Utc);
 
             var tasks = await _context.ProjectTasks
                 .Where(t => t.SprintId == sprintId)
@@ -49,6 +51,9 @@ namespace ProjectManager.API.Services.StatisticsService
 
         public async Task<List<CumulativeFlowDataPointDto>> GetCumulativeFlowAsync(Guid projectId, DateTime dateFrom, DateTime dateTo)
         {
+            dateFrom = DateTime.SpecifyKind(dateFrom, DateTimeKind.Utc);
+            dateTo = DateTime.SpecifyKind(dateTo, DateTimeKind.Utc).AddDays(1).AddSeconds(-1);
+
             // Projekt összes oszlopának lekérése
             var columns = await _context.ColumnDefinitions
                 .Where(c => c.Board.ProjectId == projectId && c.Position > 0)
