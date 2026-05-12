@@ -63,6 +63,7 @@ public class AppDbContext : DbContext
     public DbSet<ProjectCounter> ProjectCounters => Set<ProjectCounter>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ProjectInvite> ProjectInvites => Set<ProjectInvite>();
+    public DbSet<TaskStatusHistory> TaskStatusHistories => Set<TaskStatusHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -717,6 +718,30 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(i => i.CreatedById)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TaskStatusHistory>(entity =>
+        {
+            entity.Property(h => h.Status)
+                  .HasMaxLength(32)
+                  .IsRequired();
+
+            entity.Property(h => h.CreatedAt)
+                  .IsRequired();
+
+            //Index a CFD lekérdezésekhez
+            entity.HasIndex(h => new { h.TaskId, h.CreatedAt });
+            entity.HasIndex(h => new { h.ColumnId, h.CreatedAt });
+
+            entity.HasOne(h => h.Task)
+                  .WithMany(t => t.StatusHistory)
+                  .HasForeignKey(h => h.TaskId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(h => h.Column)
+                  .WithMany()
+                  .HasForeignKey(h => h.ColumnId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

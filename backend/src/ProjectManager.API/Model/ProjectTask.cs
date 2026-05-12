@@ -31,5 +31,6 @@
         public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
         public ICollection<CommitLink> CommitLinks { get; set; } = new List<CommitLink>();
         public ICollection<PrLink> PrLinks { get; set; } = new List<PrLink>();
+        public ICollection<TaskStatusHistory> StatusHistory { get; set; } = new List<TaskStatusHistory>();
     }
 }
