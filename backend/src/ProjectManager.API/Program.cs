@@ -26,6 +26,7 @@ using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
+using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
 using System.Reflection;
 using System.Text;
@@ -187,6 +188,7 @@ builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IGitWebhookService, GitWebhookService>();
 builder.Services.AddScoped<IGitService, GitService>();
+builder.Services.AddScoped<IStatisticsService, StatisticsService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 

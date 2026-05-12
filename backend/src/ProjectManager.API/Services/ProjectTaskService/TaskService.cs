@@ -331,7 +331,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Id = Guid.NewGuid(),
                 TaskId = task.Id,
                 ColumnId = task.ColumnId,
-                Status = column?.MapsToStatus ?? "Backlog"
+                Status = column?.MapsToStatus ?? "Backlog",
                 CreatedAt = DateTime.Now
             });
 
