@@ -47,7 +47,7 @@
     $: if (chart && data) {
         renderChart();
     }
-
+    
     function renderChart() {
         if (!chart) return;
 
@@ -63,14 +63,16 @@
                 formatter: '{b}: {c} ({d}%)'
             },
             legend: {
-                orient: 'horizontal',
-                bottom: 0,
-                textStyle: { color: '#aaa' }
+                orient: 'vertical',
+                right: '5%',
+                top: 'middle',
+                textStyle: { color: '#aaa' },
+                type: 'scroll',
             },
             series: [{
                 type: 'pie',
-                radius: ['40%', '70%'],
-                center: ['50%', '45%'],
+                radius: ['40%', '65%'],
+                center: ['40%', '50%'],
                 avoidLabelOverlap: true,
                 label: {
                     show: true,

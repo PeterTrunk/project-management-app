@@ -34,6 +34,27 @@
         renderChart();
     }
 
+    function getStatusColor(status: string): string {
+        const knownColors: Record<string, string> = {
+            'Backlog': '#555555',
+            'To Do': '#4a9eff',
+            'In Progress': '#f0a500',
+            'Done': '#4caf50',
+            'Testing': '#b39ddb',
+            'Review': '#ff9800',
+        };
+
+        if (knownColors[status]) return knownColors[status];
+
+        let hash = 0;
+        for (let i = 0; i < status.length; i++) {
+            hash = status.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue}, 60%, 50%)`;
+    }
+
+
     function renderChart() {
         if (!chart || data.length === 0) return;
 
@@ -46,10 +67,10 @@
             stack: 'total',
             smooth: true,
             areaStyle: {
-                color: `${statusColors[status] ?? statusColors['default']}99`
+                color: `${getStatusColor(status)}99`
             },
             itemStyle: {
-                color: statusColors[status] ?? statusColors['default']
+                color: getStatusColor(status)
             },
             symbol: 'none',
             data: data.map(d =>
