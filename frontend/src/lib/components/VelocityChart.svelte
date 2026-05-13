@@ -70,6 +70,7 @@
                 {
                     name: 'Befejezett taskok',
                     type: 'bar',
+                    color: '#4caf50',
                     data: data.map(d => ({
                         value: d.completedTasks,
                         itemStyle: {
