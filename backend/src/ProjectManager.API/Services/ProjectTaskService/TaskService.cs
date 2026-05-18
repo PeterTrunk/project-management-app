@@ -262,7 +262,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 if (column == null)
                     throw new Exception("Oszlop nem található");
             }
-            
+
             ProjectTask? prevTask = null;
             if (dto.AfterTaskId != null)
             {
@@ -275,7 +275,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
             ProjectTask? nextTask;
             if (prevTask == null)
             {
-                // Első helyre kerül, legkisebb pozíciójú task
                 nextTask = await _context.ProjectTasks
                     .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
                     .OrderBy(t => t.Position)
@@ -291,14 +290,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .FirstOrDefaultAsync();
             }
 
+            // Ütközés esetén rebalance, majd újra lekérés
             if (dto.ColumnId.HasValue &&
-                prevTask != null && 
+                prevTask != null &&
                 nextTask != null &&
-                _lexorankService.HasCollision(prevTask.Position, nextTask.Position) )
+                _lexorankService.HasCollision(prevTask.Position, nextTask.Position))
             {
-                await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position);       
+                await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position);
 
-                // Újra lekérés rebalancing után
                 prevTask = dto.AfterTaskId != null
                     ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId)
                     : null;
@@ -316,12 +315,41 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         .FirstOrDefaultAsync();
             }
 
-            // Backend számítja a pozíciót
-            var newPosition = _lexorankService.GetMiddle(
-                prevTask?.Position,
-                nextTask?.Position
-            );
-            
+            // Pozíció számítás – ha extrém edge case-ben kimerülne a hely, rebalance és újra
+            string newPosition;
+            try
+            {
+                newPosition = _lexorankService.GetMiddle(
+                    prevTask?.Position,
+                    nextTask?.Position
+                );
+            }
+            catch (InvalidOperationException)
+            {
+                await RebalanceColumnAsync(
+                    dto.ColumnId!.Value,
+                    prevTask?.Position ?? nextTask!.Position
+                );
+
+                prevTask = dto.AfterTaskId != null
+                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId)
+                    : null;
+
+                nextTask = prevTask == null
+                    ? await _context.ProjectTasks
+                        .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                        .OrderBy(t => t.Position)
+                        .FirstOrDefaultAsync()
+                    : await _context.ProjectTasks
+                        .Where(t => t.ColumnId == dto.ColumnId
+                                 && string.Compare(t.Position, prevTask.Position) > 0
+                                 && t.Id != taskId)
+                        .OrderBy(t => t.Position)
+                        .FirstOrDefaultAsync();
+
+                newPosition = _lexorankService.GetMiddle(prevTask?.Position, nextTask?.Position);
+            }
+
             task.Position = newPosition;
             task.ColumnId = dto.ColumnId;
             task.BoardId = column?.BoardId;
@@ -332,12 +360,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 TaskId = task.Id,
                 ColumnId = task.ColumnId,
                 Status = column?.MapsToStatus ?? "Backlog",
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             });
 
             bool isLastColumn = false;
 
-            // Ellenőrzés: utolsó oszlop-e? (CompletedAt beállítása)
             if (task.BoardId.HasValue)
             {
                 var lastColumn = await _context.ColumnDefinitions
@@ -350,7 +377,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 if (lastColumn != null && task.ColumnId == lastColumn.Id)
                     task.CompletedAt = DateTime.UtcNow;
                 else
-                    task.CompletedAt = null; // ha visszamozgatják akkor törlődik az időpont
+                    task.CompletedAt = null;
             }
 
             await _context.SaveChangesAsync();
@@ -382,6 +409,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 catch { }
             }
 
+            // NeedsRebalancing ellenőrzés a mentés után
             if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
             {
                 await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
@@ -615,7 +643,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         {
             var column = await _context.ColumnDefinitions
                 .FirstOrDefaultAsync(c => c.Id == columnId);
-            
+
             var bucket = _lexorankService.GetBucket(position);
             var nextBucket = _lexorankService.GetNextBucket(bucket);
 
@@ -623,6 +651,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Where(t => t.ColumnId == columnId)
                 .OrderBy(t => t.Position)
                 .ToListAsync();
+
+            if (allTasksInColumn.Count == 0)
+                return;
 
             var newPositions = _lexorankService.RebalancePositions(
                 allTasksInColumn.Count,

@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Numerics;
+using System.Text;
 
 namespace ProjectManager.API.Services.LexorankService
 {
@@ -8,6 +9,7 @@ namespace ProjectManager.API.Services.LexorankService
         private const int BASE = 36;
         private const int BUCKET_COUNT = 3;
         private const int MAX_POSITION_LENGTH = 50;
+        private const int REBALANCE_POSITION_LENGTH = 6;
         private const char MIDDLE_CHAR = 'i'; // 18-as karakter, Base36 közepe
 
         // Kezdeti pozíció új taskhoz egy oszlop végére
@@ -16,6 +18,8 @@ namespace ProjectManager.API.Services.LexorankService
             if (lastPosition == null)
                 return $"{bucket}|{MIDDLE_CHAR}";
 
+            // Meglévő pozíció bucketjét vesszük át!
+            bucket = GetBucket(lastPosition);
             var pos = GetPositionPart(lastPosition);
             return $"{bucket}|{IncrementPosition(pos)}";
         }
@@ -23,7 +27,12 @@ namespace ProjectManager.API.Services.LexorankService
         // Közbeszúrás két pozíció közé
         public string GetMiddle(string? prevPosition, string? nextPosition, int bucket = 0)
         {
-            // Első helyre kerül
+            // Ha van prev vagy next, vegyük át a bucketjüket
+            if (prevPosition != null)
+                bucket = GetBucket(prevPosition);
+            else if (nextPosition != null)
+                bucket = GetBucket(nextPosition);
+
             if (prevPosition == null && nextPosition == null)
                 return $"{bucket}|{MIDDLE_CHAR}";
 
@@ -41,7 +50,6 @@ namespace ProjectManager.API.Services.LexorankService
 
             var prev = GetPositionPart(prevPosition);
             var next = GetPositionPart(nextPosition);
-
             return $"{bucket}|{GetBetween(prev, next)}";
         }
 
@@ -74,20 +82,19 @@ namespace ProjectManager.API.Services.LexorankService
         {
             var positions = new List<string>();
 
-            // Egyenletes elosztás a Base36 skálán
-            var step = (double)BASE / (count + 1);
+            var total = BigInteger.Pow(BASE, REBALANCE_POSITION_LENGTH);
+            var step = total / (count + 1);
 
             for (int i = 1; i <= count; i++)
             {
-                var charIndex = (int)(step * i);
-                charIndex = Math.Clamp(charIndex, 0, BASE - 1);
-                positions.Add($"{bucket}|{BASE36_CHARS[charIndex]}");
+                var val = step * i;
+                positions.Add($"{bucket}|{ToBigBase36(val, REBALANCE_POSITION_LENGTH)}");
             }
 
             return positions;
         }
 
-        // Helper metódusok
+        // --- Helper metódusok ---
 
         private string GetPositionPart(string position)
         {
@@ -95,56 +102,56 @@ namespace ProjectManager.API.Services.LexorankService
             return parts.Length > 1 ? parts[1] : parts[0];
         }
 
+        // String hozzáfűzés helyett hossz-növeléses BigInteger interpoláció
         private string GetBetween(string prev, string next)
         {
-            // Azonos hosszra padding
-            var maxLen = Math.Max(prev.Length, next.Length);
-            var paddedPrev = prev.PadRight(maxLen, '0');
-            var paddedNext = next.PadRight(maxLen, '0');
+            var len = Math.Max(prev.Length, next.Length);
 
-            var prevVal = ToBase10(paddedPrev);
-            var nextVal = ToBase10(paddedNext);
+            while (len <= MAX_POSITION_LENGTH)
+            {
+                var paddedPrev = prev.PadRight(len, '0');
+                var paddedNext = next.PadRight(len, '0');
 
-            if (nextVal - prevVal > 1)
-            {
-                // Van hely közbeszúrásra
-                var midVal = (prevVal + nextVal) / 2;
-                return ToBase36(midVal, maxLen);
+                var prevVal = ToBigInt(paddedPrev);
+                var nextVal = ToBigInt(paddedNext);
+
+                if (nextVal - prevVal > 1)
+                {
+                    var midVal = (prevVal + nextVal) / 2;
+                    return ToBigBase36(midVal, len);
+                }
+
+                len++;
             }
-            else
-            {
-                // Nincs hely -> string hosszabbítás
-                return prev + MIDDLE_CHAR;
-            }
+
+            throw new InvalidOperationException(
+                $"Pozíció kimerült '{prev}' és '{next}' között. Rebalancing szükséges.");
         }
 
         private string GetBefore(string next)
         {
-            var val = ToBase10(next);
-            if (val > 0)
-                return ToBase36(val / 2, next.Length);
+            var val = ToBigInt(next);
+            if (val > 1)
+                return ToBigBase36(val / 2, next.Length);
 
-            // Már a minimum -> prefix hozzáadása
             return "0" + next;
         }
 
         private string IncrementPosition(string pos)
         {
-            var val = ToBase10(pos);
-            return ToBase36(val + 1, pos.Length);
+            var val = ToBigInt(pos);
+            return ToBigBase36(val + 1, pos.Length);
         }
 
-        private long ToBase10(string base36)
+        private BigInteger ToBigInt(string base36)
         {
-            long result = 0;
-            foreach (char c in base36)
-            {
+            BigInteger result = 0;
+            foreach (char c in base36.ToLower())
                 result = result * BASE + BASE36_CHARS.IndexOf(c);
-            }
             return result;
         }
 
-        private string ToBase36(long value, int minLength = 1)
+        private string ToBigBase36(BigInteger value, int minLength = 1)
         {
             if (value == 0)
                 return "0".PadLeft(minLength, '0');
