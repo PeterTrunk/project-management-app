@@ -28,6 +28,7 @@
     import TeamView from '../lib/components/TeamView.svelte';
     import TeamResources from '../lib/components/TeamResources.svelte';
     import GitView from '../lib/components/GitView.svelte';
+    import StatisticsView from '../lib/components/StatisticsView.svelte';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -290,7 +291,7 @@
             class:scrollable={activeView !== 'board'}
             class:no-padding={activeView === 'board' || 
             activeView === 'sprints' || activeView === 'teamResources' 
-            || activeView === 'git'}
+            || activeView === 'git' || activeView === 'statistics'}
         >
             {#if activeProject}
                 {#if activeView === 'overview'}
@@ -304,7 +305,7 @@
                 {:else if activeView === 'git'}
                     <GitView projectId={activeProject.id} />
                 {:else if activeView === 'statistics'}
-                    <p>Statistics nézet</p>
+                    <StatisticsView projectId={activeProject.id} />
                 {:else if activeView === 'teamResources'}
                     <TeamResources projectId={activeProject.id} />
                 {:else if activeView === 'projectSettings'}

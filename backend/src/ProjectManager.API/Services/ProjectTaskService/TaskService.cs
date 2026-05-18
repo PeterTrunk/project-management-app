@@ -250,7 +250,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .FirstOrDefaultAsync(t => t.Id == taskId);
             if (task == null)
                 throw new Exception("Feladat nem található");
-            
+
+            if (task.ClosedAt.HasValue)
+                throw new Exception("Lezárt sprint taskja nem mozgatható!");
+
             ColumnDefinition? column = null;
             if (dto.ColumnId.HasValue)
             {
@@ -322,6 +325,18 @@ namespace ProjectManager.API.Services.ProjectTaskService
             task.Position = newPosition;
             task.ColumnId = dto.ColumnId;
             task.BoardId = column?.BoardId;
+
+            _context.TaskStatusHistories.Add(new TaskStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                ColumnId = task.ColumnId,
+                Status = column?.MapsToStatus ?? "Backlog",
+                CreatedAt = DateTime.Now
+            });
+
+            bool isLastColumn = false;
+
             // Ellenőrzés: utolsó oszlop-e? (CompletedAt beállítása)
             if (task.BoardId.HasValue)
             {
@@ -329,6 +344,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Where(c => c.BoardId == task.BoardId)
                     .OrderByDescending(c => c.Position)
                     .FirstOrDefaultAsync();
+
+                isLastColumn = lastColumn?.Id == task.ColumnId;
 
                 if (lastColumn != null && task.ColumnId == lastColumn.Id)
                     task.CompletedAt = DateTime.UtcNow;
@@ -346,6 +363,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     position = task.Position,
                     triggeredBy = task.CreatedById
                 });
+
+            if (isLastColumn)
+            {
+                try
+                {
+                    var activity = await _activityService.LogActivityAsync(
+                        projectId,
+                        "Task",
+                        task.Id,
+                        "Completed",
+                        $"{_currentUserService.DisplayName} befejezte a {task.TaskKey} taskot"
+                    );
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ActivityCreated", activity);
+                }
+                catch { }
+            }
 
             if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
             {
