@@ -1089,6 +1089,43 @@ Statistics view with ECharts visualizations: task status distribution (pie chart
 ### Jövőbeli fejlesztési lehetőség:
 - Exportálás (PDF/PNG) ECharts beépített funkcióval
 
+### Lexorank Hibás logika javítása! (sajnos hibás logika lett bemutatva az MVP előadáson)
+#### A probléma
+A `GetBetween` metódus long alapú számítással dolgozott, ami két helyen is hibás viselkedést okozott:
+- Ha két szomszédos pozíció közé kellett beszúrni (pl. 0|a és 0|b), a különbség 1 volt, így nem fért be közbülső érték – ilyenkor a kód egyszerűen hozzáfűzte a `MIDDLE_CHAR`-t a stringhez (aa, aaa, stb.), ahelyett hogy numerikusan interpolált volna
+- A long típus ~12 karakter hosszú pozíciónál túlcsordult (`36^12 ≈ long.MaxValue`), miközben a `MAX_POSITION_LENGTH = 50` volt beállítva
+
+#### Javítások – LexorankService
+
+**`GetBetween` – teljes újraírás**
+String hozzáfűzés helyett hossz-növeléses BigInteger interpoláció: ha az aktuális hosszon nincs hely két érték között, a metódus eggyel hosszabb stringként próbálkozik, egészen `MAX_POSITION_LENGTH`-ig. Ha még így sem talál helyet, `InvalidOperationException`-t dob (rebalancing szükséges).
+// Példa: 0|a és 0|b között
+// Régi logika: 0|ai  (string hozzáfűzés)
+// Új logika:   0|ai  (len=2: a0=360, b0=396, mid=378 -> "ai")
+
+**`long` -> `BigInteger`**
+A `ToBase10` / `ToBase36` metódusok ki lettek cserélve `ToBigInt` / `ToBigBase36` metódusokra, amelyek BigInteger-t használnak – így tetszőleges pozíció hosszon túlcsordulás nélkül működnek.
+
+**`RebalancePositions` – javítás**
+Az előző implementáció `step = 36 / (count+1)` képlettel dolgozott, ami 36+ task esetén duplikált pozíciókat generált. Az új verzió fix 6 karakteres (`REBALANCE_POSITION_LENGTH = 6`) pozíciókat generál `BigInteger`-alapú lépésszámítással (`36^6 ≈ 2 milliárd slot`).
+
+**Bucket öröklés**
+A `GetInitialPosition` és `GetMiddle` metódusok mostantól a meglévő pozíciók bucketjét öröklik át az explicit paraméter helyett, így a bucket rotáció konzisztensen megmarad mozgatáskor.
+
+**`ToBigInt` – defenszív kisbetűsítés**
+A Base36 karakter keresés előtt `.ToLower()` hívás történik, hogy nagybetűs karakter esetén se térjen vissza `-1` az IndexOf.
+
+#### Javítások – `MoveTaskAsync`
+
+**`try/catch` a pozíció számítás köré**
+Extrém edge case-ben (ha `GetBetween` mégis `InvalidOperationException`-t dobna) a metódus automatikusan rebalance-ol és újra megpróbálja a pozíció számítást, így a felhasználó felé soha nem kerül ki a kivétel.
+
+#### Javítások – `RebalanceColumnAsync`
+**`Count == 0` early return**
+Ha az oszlop üres, a metódus azonnal visszatér `SaveChanges` és SignalR hívás nélkül.
+
+---
+
 ## Search/Filter, UI Polish & Responsive Design
 Task search and filtering on the board (by assignee, priority, keyword, label). Activity log view with filtering by user and event type. Responsive UI refinements for desktop and notebook resolutions. Consistent spacing, color scheme, and typography across all views. Dark/light mode toggle in profile settings. Overview dashboard with personal task summary, overdue items, and recent activity.
 
