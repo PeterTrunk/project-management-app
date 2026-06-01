@@ -7,8 +7,9 @@
     import type { LabelResponse } from '../api/labelApi';
     import { assignTaskToBoardAsync } from '../api/taskApi';
     import { teamStore } from '../stores/teamStore';
-import type { MemberResponse } from '../api/teamApi';
+    import type { MemberResponse } from '../api/teamApi';
     
+    export let showMenu: boolean = true;
     export let task: TaskResponse;
     export let boards: BoardResponse[] = [];
     export let sprints: SprintResponse[] = [];
@@ -93,36 +94,38 @@ import type { MemberResponse } from '../api/teamApi';
             {/if}
             <span class="task-title">{task.title}</span>
             <!-- Hamburger menü -->
-            <div class="card-actions">
-                <button class="menu-btn" on:click|stopPropagation={() => isMenuOpen = !isMenuOpen}>☰</button>
-                {#if isMenuOpen}
-                    <div class="dropdown-menu">
-                        <div class="menu-section">
-                            <p class="menu-label">Board hozzárendelés:</p>
-                            <select bind:value={selectedBoardId} on:change={handleAssignToBoard}>
-                                <option value="">Nincs Board</option>
-                                {#each boards as board}
-                                    <option value={board.id}>{board.name}</option>
-                                {/each}
-                            </select>
-                            <p class="menu-label">Sprint hozzárendelés:</p>
-                            <select bind:value={selectedSprintId} on:change={handleSprintAssign}>
-                                <option value="">Projekt Backlog</option>
-                                {#each sprints as sprint}
-                                    <option value={sprint.id}>{sprint.name}</option>
-                                {/each}
-                            </select>
+             {#if showMenu}
+                <div class="card-actions">
+                    <button class="menu-btn" on:click|stopPropagation={() => isMenuOpen = !isMenuOpen}>☰</button>
+                    {#if isMenuOpen}
+                        <div class="dropdown-menu">
+                            <div class="menu-section">
+                                <p class="menu-label">Board hozzárendelés:</p>
+                                <select bind:value={selectedBoardId} on:change={handleAssignToBoard}>
+                                    <option value="">Nincs Board</option>
+                                    {#each boards as board}
+                                        <option value={board.id}>{board.name}</option>
+                                    {/each}
+                                </select>
+                                <p class="menu-label">Sprint hozzárendelés:</p>
+                                <select bind:value={selectedSprintId} on:change={handleSprintAssign}>
+                                    <option value="">Projekt Backlog</option>
+                                    {#each sprints as sprint}
+                                        <option value={sprint.id}>{sprint.name}</option>
+                                    {/each}
+                                </select>
+                            </div>
+                            <div class="menu-divider"></div>
+                            <button class="menu-delete-btn" on:click|stopPropagation={() => {
+                                onDelete(task.id);
+                                isMenuOpen = false;
+                            }}>
+                                🗑 Törlés
+                            </button>
                         </div>
-                        <div class="menu-divider"></div>
-                        <button class="menu-delete-btn" on:click|stopPropagation={() => {
-                            onDelete(task.id);
-                            isMenuOpen = false;
-                        }}>
-                            🗑 Törlés
-                        </button>
-                    </div>
-                {/if}
-            </div>
+                    {/if}
+                </div>
+            {/if}
         </div>
         <div class="card-footer">
             {#if task.labelIds.length > 0}

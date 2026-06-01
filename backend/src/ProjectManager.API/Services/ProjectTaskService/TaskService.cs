@@ -391,6 +391,16 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     triggeredBy = task.CreatedById
                 });
 
+            await _hubContext.Clients
+                .Group($"project-{task.ProjectId}")
+                .SendAsync("TaskMoved", new
+                {
+                    taskId = task.Id,
+                    columnId = task.ColumnId,
+                    position = task.Position,
+                    triggeredBy = task.CreatedById
+                });
+
             if (isLastColumn)
             {
                 try
