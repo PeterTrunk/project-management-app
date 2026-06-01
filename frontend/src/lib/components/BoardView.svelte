@@ -358,7 +358,6 @@
         });
         
         signalRService.on('TaskMoved', (data) => {
-            // Store közvetlen olvasása
             let currentTasks: TaskResponse[] = [];
             taskStore.subscribe(state => {
                 currentTasks = state.tasks;
@@ -366,7 +365,7 @@
             
             const updatedTasks = currentTasks.map((t: TaskResponse) =>
                 t.id === data.taskId 
-                    ? { ...t, columnId: data.columnId, position: data.position }
+                    ? { ...t, columnId: data.columnId, position: data.position, completedAt: data.completedAt }
                     : t
             );
             setTasks(updatedTasks);

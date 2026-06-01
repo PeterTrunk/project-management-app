@@ -388,6 +388,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     taskId = task.Id,
                     columnId = task.ColumnId,
                     position = task.Position,
+                    completedAt = task.CompletedAt,
                     triggeredBy = task.CreatedById
                 });
 
@@ -398,6 +399,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     taskId = task.Id,
                     columnId = task.ColumnId,
                     position = task.Position,
+                    completedAt = task.CompletedAt,
                     triggeredBy = task.CreatedById
                 });
 
