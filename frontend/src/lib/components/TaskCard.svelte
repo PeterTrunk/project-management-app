@@ -22,15 +22,30 @@
     $: assignees = task.assigneeIds
         .map(id => members.find(m => m.userId === id))
         .filter(m => m !== undefined) as MemberResponse[];
+
+    $: isOverdue = task.dueDate != null 
+        && new Date(task.dueDate) < new Date() 
+        && task.completedAt == null;
+
+    // 1 napon belül
+    $: isDueSoon = task.dueDate != null 
+        && !isOverdue
+        && task.completedAt == null
+        && (new Date(task.dueDate).getTime() - new Date().getTime()) < 1 * 24 * 60 * 60 * 1000; 
+
+    $: isCompleted = task.completedAt != null;
 </script>
 
 <div 
     class="task-card" 
+    class:overdue={isOverdue} 
+    class:due-soon={isDueSoon}
+    class:completed={isCompleted}
     on:click={() => onClick(task)}
     on:keydown={(e) => e.key === 'Enter' && onClick(task)}
     role="button"
     tabindex="0"
->
+    >
     <div class="task-header">
         <p class="task-key">{task.taskKey}</p>
         <!--
@@ -61,7 +76,12 @@
         </div>
     {/if}
     {#if task.dueDate}
-        <span class="due-date">Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
+        <span class="due-date" class:overdue={isOverdue} class:due-soon={isDueSoon}>
+            {new Date(task.dueDate).toLocaleString('hu-HU', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        </span>
+    {/if}
+    {#if isCompleted}
+        <span class="completed-badge">✓ Kész</span>
     {/if}
 </div>
 
@@ -100,6 +120,7 @@
     .due-date {
         font-size: 0.75rem;
         color: #888;
+        font-weight: bold;
     }
 
     .priority {
@@ -135,6 +156,34 @@
         font-size: 0.9rem;
         font-weight: bold;
         title: attr(title);
+    }
+
+    .due-date.overdue {
+        color: #ff5555;
+        font-weight: bold;
+    }
+
+    .due-date.due-soon {
+        color: #f0a500;
+        font-weight: bold;
+    }
+
+    .task-card.overdue {
+        border-left: 3px solid #ff5555;
+    }
+
+    .task-card.due-soon {
+        border-left: 3px solid #f0a500;
+    }
+
+    .task-card.completed {
+        border-left: 3px solid #4caf50;
+    }
+
+    .completed-badge {
+        font-size: 0.75rem;
+        color: #4caf50;
+        font-weight: bold;
     }
 
     .priority-low { background: #1a3a1a; color: #4caf50; }

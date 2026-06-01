@@ -71,6 +71,7 @@ export interface TaskResponse {
     attachments: AttachmentResponse[];
     createdByName: string;
     closedAt: Date;
+    completedAt: Date;
     createdAt: Date;
     updatedAt: Date;
 }
