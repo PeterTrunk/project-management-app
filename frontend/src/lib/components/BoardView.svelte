@@ -17,6 +17,9 @@
     import { getSprintsAsync } from '../api/sprintApi';
     import type { SprintResponse } from '../api/sprintApi';
     import { getTaskByIdAsync } from '../api/taskApi';
+    import type { LabelResponse } from '../api/labelApi';
+    import { teamStore } from '../stores/teamStore';
+    import type { MemberResponse } from '../api/teamApi';
 
     import ColumnCard from './ColumnCard.svelte';
 
@@ -51,6 +54,67 @@
         }
     });
 
+    // Szűrő state-ek
+    let searchQuery = '';
+    let filterAssigneeId = '';
+    let filterPriority = '';
+    let filterLabelId = '';
+    let filterDue = '';
+
+    // Reaktív szűrés
+    $: filteredTasks = tasks.filter(task => {
+        const matchesSearch = searchQuery === '' || 
+            task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            task.taskKey.toLowerCase().includes(searchQuery.toLowerCase());
+        
+        const matchesAssignee = filterAssigneeId === '' || 
+            task.assigneeIds.includes(filterAssigneeId);
+        
+        const matchesPriority = filterPriority === '' || 
+            task.priority === filterPriority;
+        
+        const matchesLabel = filterLabelId === '' || 
+            task.labelIds.includes(filterLabelId);
+        
+        const now = new Date();
+        const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+        
+        const matchesDue = filterDue === '' ? true :
+            filterDue === 'overdue' 
+                ? dueDate != null && dueDate < now && task.completedAt == null
+                : filterDue === 'due-soon'
+                    ? dueDate != null && !( dueDate < now) && task.completedAt == null &&
+                    (dueDate.getTime() - now.getTime()) < 1 * 24 * 60 * 60 * 1000
+                    : true;
+
+        return matchesSearch && matchesAssignee && matchesPriority && matchesLabel && matchesDue;
+    });
+
+    $: hasActiveFilter = searchQuery !== '' || filterAssigneeId !== '' || 
+        filterPriority !== '' || filterLabelId !== '' || filterDue !== '';
+
+    function clearFilters() {
+        searchQuery = '';
+        filterAssigneeId = '';
+        filterPriority = '';
+        filterLabelId = '';
+        filterDue = '';
+    }
+
+    // Labels és members a szűrőkhöz
+    let allLabels: LabelResponse[] = [];
+    projectStore.subscribe(state => {
+        allLabels = state.labels;
+    });
+
+    let members: MemberResponse[] = [];
+    teamStore.subscribe(state => {
+        members = state.members;
+    });
+    
+    $: distributeTasks(filteredTasks);
+
+    //
     let sprints: SprintResponse[] = [];
     let boards: BoardResponse[] = [];
     let activeBoard: BoardResponse | null = null;
@@ -80,7 +144,7 @@
         boards = state.boards;
         activeBoard = state.activeBoard;
         columns = state.columns;
-        distributeTasks(tasks);
+        //distributeTasks(tasks);
     });
 
     sprintStore.subscribe(state => {
@@ -107,9 +171,9 @@
     let isDragging = false;
     taskStore.subscribe(state => {
         tasks = state.tasks;
-        if (!isDragging) {
-            distributeTasks(tasks);
-        }
+        //if (!isDragging) {
+        //    distributeTasks(tasks);
+        //}
     });
 
     let isDropdownOpen = false;
@@ -449,6 +513,9 @@
         setActiveTask(task);
         isTaskDetailOpen = true;
     }
+
+
+
 </script>
 
 <div class="board-toolbar">
@@ -479,6 +546,49 @@
     > {isReordering ? 'Átrendezés aktív' : 'Átrendezés'} </button>
     
 </div>
+
+<!-- Szűrő toolbar -->
+<div class="filter-toolbar">
+    <input
+        type="text"
+        class="search-input"
+        placeholder="Keresés..."
+        bind:value={searchQuery}
+    />
+
+    <select class="filter-select" bind:value={filterAssigneeId}>
+        <option value="">Összes assignee</option>
+        {#each $teamStore.members as member}
+            <option value={member.userId}>{member.displayName}</option>
+        {/each}
+    </select>
+
+    <select class="filter-select" bind:value={filterPriority}>
+        <option value="">Összes prioritás</option>
+        <option value="low">Alacsony</option>
+        <option value="medium">Közepes</option>
+        <option value="high">Magas</option>
+        <option value="critical">Kritikus</option>
+    </select>
+
+    <select class="filter-select" bind:value={filterLabelId}>
+        <option value="">Összes label</option>
+        {#each allLabels as label}
+            <option value={label.id}>{label.name}</option>
+        {/each}
+    </select>
+
+    <select class="filter-select" bind:value={filterDue}>
+        <option value="">Minden határidő</option>
+        <option value="overdue">Lejárt</option>
+        <option value="due-soon">Hamarosan lejár</option>
+    </select>
+
+    {#if hasActiveFilter}
+        <button class="clear-btn" on:click={clearFilters}>✕ Törlés</button>
+    {/if}
+</div>
+
 <div class="board-container">
     <h2>{activeBoard?.name}</h2>
     <!-- Oszlopok -->
@@ -665,6 +775,57 @@
         margin: 0;
     }
 
-    
+    .filter-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
+        flex-wrap: wrap;
+    }
+
+    .search-input {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: white;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.85rem;
+        width: 180px;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #666;
+    }
+
+    .filter-select {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: white;
+        padding: 0.3rem 0.5rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: #666;
+    }
+
+    .clear-btn {
+        background: #3a1a1a;
+        border: 1px solid #ff5555;
+        color: #ff5555;
+        padding: 0.3rem 0.6rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .clear-btn:hover { background: #4a2a2a; }
     
 </style>
