@@ -140,3 +140,43 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* ===== Responsive Helper Classes ===== */
+
+/* Visibility */
+@media (max-width: 768px) {
+    .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 769px) {
+    .show-mobile-only { display: none !important; }
+}
+
+@media (max-width: 1366px) {
+    .hide-tablet { display: none !important; }
+}
+
+/* Typography */
+@media (max-width: 1366px) {
+    .text-sm-notebook { font-size: 0.85rem !important; }
+}
+
+@media (max-width: 768px) {
+    .text-sm-mobile { font-size: 0.8rem !important; }
+}
+
+/* Layout */
+@media (max-width: 768px) {
+    .stack-mobile {
+        flex-direction: column !important;
+    }
+    .full-width-mobile {
+        width: 100% !important;
+    }
+}
+
+/* Spacing */
+@media (max-width: 768px) {
+    .no-padding-mobile { padding: 0 !important; }
+    .gap-sm-mobile { gap: 0.25rem !important; }
+}
