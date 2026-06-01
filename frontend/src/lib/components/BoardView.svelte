@@ -589,7 +589,7 @@
 </div>
 
 <div class="board-container">
-    <h2>{activeBoard?.name}</h2>
+    <h1>{activeBoard?.name}</h1>
     <!-- Oszlopok -->
     <div class="columns-container" 
             use:dndzone={{
@@ -827,4 +827,8 @@
 
     .clear-btn:hover { background: #4a2a2a; }
     
+    h2{
+        margin: auto;
+    }
+
 </style>

@@ -317,12 +317,11 @@
     }
 
     .divider {
-        width: calc(100vw - 250px);
-        position: relative;
-        left: 50%;
-        transform: translateX(-50%);
+        width: 100%;
         border-top: 1px solid #333;
         padding-top: 1rem;
+        left: unset;
+        transform: unset;
     }
 
     #success { 
