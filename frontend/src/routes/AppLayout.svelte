@@ -32,7 +32,26 @@
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
+
+    import { 
+        LayoutDashboard, Kanban, Timer, Users, BarChart2, 
+        FolderOpen, GitBranch, Settings, LogOut, ChevronLeft, 
+        ChevronRight, Plus, FileText, User
+    } from 'lucide-svelte';
     
+    let sidebarCollapsed = false;
+
+    const navItems = [
+        { view: 'overview', label: 'Overview', icon: LayoutDashboard },
+        { view: 'board', label: 'Board', icon: Kanban },
+        { view: 'sprints', label: 'Sprints', icon: Timer },
+        { view: 'team', label: 'Team', icon: Users },
+        { view: 'statistics', label: 'Statisztika', icon: BarChart2 },
+        { view: 'teamResources', label: 'Resources', icon: FileText },
+        { view: 'git', label: 'Git', icon: GitBranch },
+        { view: 'projectSettings', label: 'Beállítások', icon: Settings },
+    ];
+
     let isProjectCreationOpen = false;
     let isUserSettingsOpen = false;
     
@@ -247,26 +266,79 @@
 
 <div class="app-container">
     <!-- Bal oldal -->
-    <aside class="sidebar">
-    <!-- Felső rész: projekt lista -->
+    <aside class="sidebar" class:collapsed={sidebarCollapsed}>
+        <!-- Collapse gomb -->
+        <button class="collapse-btn" on:click={() => sidebarCollapsed = !sidebarCollapsed}>
+            {#if sidebarCollapsed}
+                <ChevronRight size={18} />
+            {:else}
+                <ChevronLeft size={18} />
+            {/if}
+        </button>
+
+        <!-- Projektek -->
         <div class="sidebar-projects">
-            <h2>Projektek</h2>
+            {#if !sidebarCollapsed}
+                <h2>Projektek</h2>
+            {/if}
             {#each projects as project}
-                <button on:click={() => setActiveProject(project)}>
-                    {project.name}
+                <button 
+                    class="project-btn"
+                    class:active={activeProject?.id === project.id}
+                    on:click={() => setActiveProject(project)}
+                    title={project.name}
+                >
+                    <FolderOpen size={18} />
+                    {#if !sidebarCollapsed}
+                        <span>{project.name}</span>
+                    {/if}
                 </button>
             {/each}
-            {#if projects.length === 0}
-                <p>Nincs még projekt!</p>
+            {#if projects.length === 0 && !sidebarCollapsed}
+                <p class="empty">Nincs még projekt!</p>
             {/if}
-            <button on:click={() => isProjectCreationOpen = true}>+ Új projekt</button>
+            <button 
+                class="new-project-btn"
+                on:click={() => isProjectCreationOpen = true}
+                title="Új projekt"
+            >
+                <Plus size={18} />
+                {#if !sidebarCollapsed}
+                    <span>Új projekt</span>
+                {/if}
+            </button>
         </div>
-        
-        <!-- Alsó rész: user info -->
+
+        <!-- User info -->
         <div class="sidebar-user">
-            <span> Bejelentkezve: {displayName}</span>
-            <button on:click={() => isUserSettingsOpen = true}>Profil</button>
-            <button on:click={handleLogout}>Kijelentkezés</button>
+            {#if !sidebarCollapsed}
+                <div class="username">
+                    <User size={16} />
+                    {#if !sidebarCollapsed}
+                        <span>{displayName}</span>
+                    {/if}
+                </div>
+            {/if}
+            <button 
+                class="icon-btn"
+                on:click={() => isUserSettingsOpen = true}
+                title="Profil"
+            >
+                <Settings size={18} />
+                {#if !sidebarCollapsed}
+                    <span>Profil</span>
+                {/if}
+            </button>
+            <button 
+                class="icon-btn logout-btn"
+                on:click={handleLogout}
+                title="Kijelentkezés"
+            >
+                <LogOut size={18} />
+                {#if !sidebarCollapsed}
+                    <span>Kijelentkezés</span>
+                {/if}
+            </button>
         </div>
     </aside>
 
@@ -274,24 +346,26 @@
     <div class="main">
         <!-- Navbar -->
         <nav class="topbar">
-            <button on:click={() => activeView = 'overview'}>Overview</button>
-            <button on:click={() => activeView = 'board'}>Board</button>
-            <button on:click={() => activeView = 'sprints'}>Sprints</button>
-            <button on:click={() => activeView = 'team'}>Team</button>
-            <button on:click={() => activeView = 'statistics'}>Statistics</button>
-            <button on:click={() => activeView = 'teamResources'}>Team Resources</button>
-            <button on:click={() => activeView = 'git'}>Git</button>
-            <button on:click={() => activeView = 'projectSettings'}>Project Settings</button>
+            {#each navItems as item}
+                <button
+                    class="nav-btn"
+                    class:active={activeView === item.view}
+                    on:click={() => activeView = item.view}
+                    title={item.label}
+                >
+                    <svelte:component this={item.icon} size={18} />
+                    <span class="nav-label">{item.label}</span>
+                </button>
+            {/each}
         </nav>
-        
+
         <!-- Dinamikus tartalom -->
-        <!--(Overview, Board, Team, Statistics, Manager -> Sprints, Team Resources, Project Settings...)-->
         <div 
             class="content"
             class:scrollable={activeView !== 'board'}
             class:no-padding={activeView === 'board' || 
-            activeView === 'sprints' || activeView === 'teamResources' 
-            || activeView === 'git' || activeView === 'statistics'}
+                activeView === 'sprints' || activeView === 'teamResources' || 
+                activeView === 'git' || activeView === 'statistics'}
         >
             {#if activeProject}
                 {#if activeView === 'overview'}
@@ -312,8 +386,14 @@
                     <ProjectSettings project={activeProject} />
                 {/if}
             {:else}
-                <p>Még nincs kiválasztótt projekt!</p>
-                <p>Válassz egy projektet a bal oldali listából!</p>
+                <div class="no-project">
+                    <FolderOpen size={48} color="var(--text-muted)" />
+                    <p>Válassz egy projektet a bal oldali listából!</p>
+                    <button class="new-project-btn" on:click={() => isProjectCreationOpen = true}>
+                        <Plus size={18} />
+                        <span>Új projekt létrehozása</span>
+                    </button>
+                </div>
             {/if}
         </div>
     </div>
@@ -335,7 +415,7 @@
     :global(body){
         margin: 0;
         padding: 0;
-        background: #121212;
+        background: var(--bg-primary);
     }
 
     :global(html) {
@@ -349,6 +429,7 @@
         height: 100vh;
         width: 100vw;
     }
+
     :global(*, *::before, *::after) {
         box-sizing: border-box;
         margin: 0;
@@ -366,33 +447,163 @@
     }
 
     .sidebar {
-        width: 250px;
-        min-width: 250px;
+        overflow: visible;
+        width: 220px;
+        min-width: 220px;
         height: 100vh;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        background: #1e1e1e;
-        padding: 1rem;
-        border-right: 1px solid #333;
+        background: var(--bg-secondary);
+        padding: 1rem 0.75rem;
+        border-right: 1px solid var(--border);
+        transition: width 0.2s ease, min-width 0.2s ease;
+        position: relative;
     }
 
-    .sidebar-user {
-        padding: 1rem 0;
-        border-top: 1px solid #333;
-        flex-shrink: 0;
+    .sidebar.collapsed {
+        width: 60px;
+        min-width: 60px;
+        padding: 1rem 0.5rem;
+    }
+
+    .collapse-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: -12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        z-index: 10;
+    }
+
+    .collapse-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
     }
 
     .sidebar-projects {
         display: flex;
+        padding: 0 0.25rem;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.25rem;
+        flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .sidebar-projects h2 {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.5rem;
+        padding: 0 0.25rem;
+    }
+
+    .project-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.5rem;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+        font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .project-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .project-btn.active {
+        background: var(--accent-blue-bg);
+        color: var(--accent-blue);
+    }
+
+    .new-project-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.5rem;
+        border-radius: 6px;
+        border: 1px dashed var(--border-hover);
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+        font-size: 0.85rem;
+        margin-top: 0.25rem;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .new-project-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        border-color: var(--text-secondary);
     }
 
     .sidebar-user {
-        padding-top: 1rem;
-        border-top: 1px solid #333;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .username {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        padding: 0.25rem 0.75rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .icon-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+        font-size: 0.85rem;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .icon-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .logout-btn:hover {
+        color: var(--accent-red);
     }
 
     .main {
@@ -404,14 +615,40 @@
     }
 
     .topbar {
-        height: 50px;
+        height: 48px;
         display: flex;
         align-items: center;
-        gap: 1rem;
-        padding: 0 1rem;
-        background: #1e1e1e;
-        border-bottom: 1px solid #333;
-        justify-content: space-evenly;
+        gap: 0.25rem;
+        padding: 0 0.75rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        flex-shrink: 0;
+    }
+
+    .nav-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .nav-btn.active {
+        background: var(--accent-blue-bg);
+        color: var(--accent-blue);
     }
 
     .content {
@@ -422,6 +659,7 @@
         flex-direction: column;
         min-width: 0;
     }
+
     .content.scrollable {
         overflow-y: auto;
         padding: 1rem;
@@ -430,5 +668,44 @@
     .content.no-padding {
         padding: 0;
         gap: 0;
+    }
+
+    .no-project {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        height: 100%;
+        color: var(--text-muted);
+    }
+
+    .empty {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        padding: 0.25rem 0.75rem;
+    }
+
+    @media (max-width: 1366px) {
+        .sidebar {
+            width: 180px;
+            min-width: 180px;
+        }
+
+        .nav-label {
+            font-size: 0.8rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .sidebar {
+            width: 60px;
+            min-width: 60px;
+            padding: 1rem 0.5rem;
+        }
+
+        .nav-label {
+            display: none;
+        }
     }
 </style>
