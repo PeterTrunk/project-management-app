@@ -265,8 +265,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
         gap: 1rem;
         flex-wrap: wrap;
@@ -275,7 +275,7 @@
     .statistics-toolbar h2 {
         font-size: 1rem;
         margin: 0;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .filters {
@@ -293,16 +293,21 @@
 
     .filter-group label {
         font-size: 0.85rem;
-        color: #aaa;
+        color: var(--text-muted);
     }
 
     select, input[type="date"] {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.3rem 0.5rem;
         font-size: 0.85rem;
+    }
+
+    select:focus, input[type="date"]:focus {
+        outline: none;
+        border-color: var(--accent-blue);
     }
 
     .statistics-content {
@@ -321,8 +326,8 @@
     }
 
     .chart-card {
-        background: #1e1e1e;
-        border: 1px solid #2a2a2a;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         border-radius: 8px;
         padding: 1rem;
     }
@@ -347,17 +352,18 @@
     .mode-toggle button {
         padding: 0.25rem 0.75rem;
         border-radius: 4px;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: #aaa;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-muted);
         cursor: pointer;
         font-size: 0.8rem;
+        transition: background 0.15s, color 0.15s;
     }
 
     .mode-toggle button.active {
-        background: #1a2a3a;
-        border-color: #4a9eff;
-        color: #4a9eff;
+        background: var(--accent-blue-bg);
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
     }
 
     .date-filters {
@@ -368,13 +374,13 @@
 
     .date-filters label {
         font-size: 0.85rem;
-        color: #aaa;
+        color: var(--text-muted);
     }
 
     .loading, .empty {
         text-align: center;
         padding: 3rem;
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.9rem;
     }
 </style>
