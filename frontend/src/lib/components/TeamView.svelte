@@ -11,6 +11,8 @@
     import InviteModal from './InviteModal.svelte';
     import ActivityFeed from './ActivityFeed.svelte';
 
+    import { UserPlus, ChartNoAxesColumn } from 'lucide-svelte';
+
     export let projectId: string;
 
     let members: MemberResponse[] = [];
@@ -87,7 +89,7 @@
         <h2>Csapattagok ({members.length})</h2>
         {#if canInvite}
             <button class="invite-btn" on:click={() => isInviteModalOpen = true}>
-                + Meghívás
+                <UserPlus size={15} /> Meghívás
             </button>
         {/if}
     </div>
@@ -116,7 +118,7 @@
     </div>
 
     <div class="activity-section">
-        <h3>Recent Activity</h3>
+        <h3><ChartNoAxesColumn size={14} /> Recent Activity</h3>
         <ActivityFeed {projectId} />
     </div>
 </div>
@@ -142,28 +144,32 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
     }
 
     .team-toolbar h2 {
         font-size: 1rem;
         margin: 0;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .invite-btn {
-        background: #1a3a1a;
-        border: 1px solid #4caf50;
-        color: #4caf50;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--accent-green-bg);
+        border: 1px solid var(--accent-green);
+        color: var(--accent-green);
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.9rem;
+        transition: background 0.15s;
     }
 
-    .invite-btn:hover { background: #2a4a2a; }
+    .invite-btn:hover { background: var(--accent-green); color: #fff; }
 
     .members-section {
         padding: 1rem;
@@ -178,32 +184,32 @@
 
     .activity-section {
         padding: 1rem;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid var(--border);
         flex: 1;
     }
 
     .activity-section h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         font-size: 0.95rem;
-        color: #aaa;
+        color: var(--text-secondary);
         margin: 0 0 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
 
-    .activity-placeholder {
-        background: #1e1e1e;
-        border: 1px dashed #333;
-        border-radius: 8px;
-        padding: 2rem;
-        text-align: center;
-    }
-
-    .loading, .empty, .error {
+    .loading, .empty {
         text-align: center;
         padding: 1rem;
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.9rem;
     }
 
-    .error { color: red; }
+    .error {
+        text-align: center;
+        padding: 1rem;
+        color: var(--accent-red);
+        font-size: 0.9rem;
+    }
 </style>

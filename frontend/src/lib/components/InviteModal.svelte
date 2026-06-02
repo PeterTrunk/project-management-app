@@ -2,6 +2,8 @@
     import { onMount } from 'svelte';
     import { generateInviteLinkAsync, type InviteLinkResponse } from '../api/teamApi';
 
+    import { Copy, Check, RefreshCw } from 'lucide-svelte';
+
     export let isInviteModalOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
@@ -116,13 +118,17 @@
                         value={generatedInvite.inviteUrl}
                     />
                     <button class="copy-btn" on:click={handleCopy}>
-                        {copied ? 'Másolva!' : 'Másolás'}
+                        {#if copied}
+                            <Check size={14} /> Másolva!
+                        {:else}
+                            <Copy size={14} /> Másolás
+                        {/if}
                     </button>
                 </div>
 
                 <div class="buttons">
                     <button type="button" on:click={() => generatedInvite = null}>
-                        Új link generálása
+                        <RefreshCw size={14} /> Új link generálása
                     </button>
                     <button type="button" on:click={closeModal}>Bezárás</button>
                 </div>
@@ -138,7 +144,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -146,7 +152,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
@@ -159,6 +166,7 @@
     h1 {
         font-size: 1.3rem;
         margin: 0;
+        color: var(--text-primary);
     }
 
     form {
@@ -175,20 +183,20 @@
 
     .form-group label {
         font-size: 0.9rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .hint {
         font-size: 0.8rem;
-        color: #666;
+        color: var(--text-muted);
         margin-left: 0.5rem;
     }
 
     input[type="number"] {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 1rem;
         width: 100%;
@@ -196,7 +204,7 @@
 
     input[type="number"]:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
     .buttons {
@@ -207,24 +215,28 @@
     }
 
     button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.5rem 1rem;
         border-radius: 6px;
         cursor: pointer;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: white;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
     }
 
-    button:hover { background: #333; }
+    button:hover { background: var(--border-hover); color: var(--text-primary); }
 
     .generate-btn {
-        background: #1a3a1a;
-        border-color: #4caf50;
-        color: #4caf50;
+        background: var(--accent-green-bg);
+        border-color: var(--accent-green);
+        color: var(--accent-green);
     }
 
-    .generate-btn:hover { background: #2a4a2a; }
+    .generate-btn:hover { background: var(--accent-green); color: #fff; }
 
     .invite-result {
         display: flex;
@@ -233,7 +245,8 @@
     }
 
     .invite-info {
-        background: #2a2a2a;
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
         border-radius: 6px;
         padding: 0.75rem 1rem;
         display: flex;
@@ -243,7 +256,7 @@
     .invite-info p {
         margin: 0;
         font-size: 0.9rem;
-        color: #aaa;
+        color: var(--text-secondary);
     }
 
     .invite-link {
@@ -253,25 +266,25 @@
 
     .invite-link input {
         flex: 1;
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
         border-radius: 6px;
-        color: #aaa;
+        color: var(--text-secondary);
         padding: 0.5rem;
         font-size: 0.85rem;
     }
 
     .copy-btn {
-        background: #1a2a3a;
-        border-color: #4a9eff;
-        color: #4a9eff;
+        background: var(--accent-blue-bg);
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
         white-space: nowrap;
     }
 
-    .copy-btn:hover { background: #2a3a4a; }
+    .copy-btn:hover { background: var(--accent-blue); color: #fff; }
 
     .error {
-        color: red;
+        color: var(--accent-red);
         font-size: 0.85rem;
     }
 </style>

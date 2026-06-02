@@ -3,6 +3,8 @@
     import { updateMemberRoleAsync, removeMemberAsync } from '../api/teamApi';
     import ConfirmModal from './ConfirmModal.svelte';
 
+    import { UserMinus } from 'lucide-svelte';
+
     export let member: MemberResponse;
     export let projectId: string;
     export let currentUserRole: string;
@@ -101,7 +103,7 @@
                 {/each}
             </select>
             <button class="remove-btn" on:click={handleRemove}>
-                Eltávolítás
+                <UserMinus size={14} /> Eltávolítás
             </button>
         {:else}
             <span class="role-badge {getRoleBadgeClass(member.projectRole)}">
@@ -131,21 +133,22 @@
         align-items: center;
         gap: 1rem;
         padding: 0.75rem 1rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 8px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
+        transition: border-color 0.15s;
     }
 
     .member-card:hover {
-        border-color: #555;
+        border-color: var(--border-hover);
     }
 
     .member-avatar {
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: #3a3a5a;
-        color: #aaaaff;
+        background: var(--accent-purple-bg);
+        color: var(--accent-purple);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -165,11 +168,12 @@
     .member-name {
         font-size: 0.95rem;
         font-weight: bold;
+        color: var(--text-primary);
     }
 
     .member-email {
         font-size: 0.8rem;
-        color: #888;
+        color: var(--text-muted);
     }
 
     .member-actions {
@@ -179,28 +183,30 @@
     }
 
     .role-select {
-        background: #1e1e1e;
-        border: 1px solid #444;
+        background: var(--bg-card);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.3rem 0.5rem;
         font-size: 0.85rem;
         cursor: pointer;
     }
 
     .remove-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         background: transparent;
-        border: 1px solid #ff5555;
-        color: #ff5555;
+        border: 1px solid var(--accent-red);
+        color: var(--accent-red);
         padding: 0.3rem 0.6rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.85rem;
+        transition: background 0.15s;
     }
 
-    .remove-btn:hover {
-        background: #3a1a1a;
-    }
+    .remove-btn:hover { background: var(--accent-red-bg); }
 
     .role-badge {
         padding: 0.25rem 0.6rem;
@@ -209,13 +215,13 @@
         font-weight: bold;
     }
 
-    .badge-owner { background: #3a2a00; color: #f0a500; }
-    .badge-admin { background: #1a2a3a; color: #4a9eff; }
-    .badge-member { background: #1a3a1a; color: #4caf50; }
-    .badge-viewer { background: #2a2a2a; color: #aaa; }
+    .badge-owner  { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+    .badge-admin  { background: var(--accent-blue-bg);   color: var(--accent-blue); }
+    .badge-member { background: var(--accent-green-bg);  color: var(--accent-green); }
+    .badge-viewer { background: var(--bg-hover);         color: var(--text-muted); }
 
     .error {
-        color: red;
+        color: var(--accent-red);
         font-size: 0.85rem;
         margin-top: 0.25rem;
     }
