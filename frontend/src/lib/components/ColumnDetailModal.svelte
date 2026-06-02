@@ -5,6 +5,8 @@
     import type { ColumnResponse } from '../api/columnApi';
     import ConfirmModal from './ConfirmModal.svelte';
 
+    import { X, Pencil, Trash2 } from 'lucide-svelte';
+
     export let isColumnDetailOpen = false;
     export let projectId: string;
     export let boardId: string;
@@ -87,15 +89,21 @@
     <div class="modal-content">
         <div class="header-actions">
             <button class="edit-btn" on:click={() => isEditing = !isEditing}>
-                {isEditing ? '✕ Mégse' : '✏ Szerkesztés'}
+                {#if isEditing}
+                    <X size={15} /> Mégse
+                {:else}
+                    <Pencil size={15} /> Szerkesztés
+                {/if}
             </button>
             <button class="delete-btn" on:click={() => openConfirm(
                 'Oszlop törlése',
                 'Biztosan törölni szeretnéd az oszlopot? Az oszlopban lévő taskok nem törölhetők, előbb helyezd át őket!',
                 handleDelete
-            )}>🗑 Törlés</button>
+            )}><Trash2 size={15} /> Törlés</button>
         </div>
-        <button class="close-btn" type="button" on:click={closeModal}>✕</button>
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
 
         <h1>{column.name}</h1>
         <p>Státusz: <span>{column.mapsToStatus}</span></p>
@@ -147,7 +155,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -155,7 +163,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
@@ -168,7 +177,7 @@
     .modal-content h1 {
         margin-top: 2.5rem;
         padding-bottom: 1rem;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--border);
     }
 
     .header-actions {
@@ -180,27 +189,36 @@
     }
 
     .edit-btn, .delete-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         background: transparent;
         border: none;
-        color: #aaa;
-        font-size: 1.2rem;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
         cursor: pointer;
+        padding: 0.3rem 0.6rem;
+        border-radius: 5px;
+        transition: background 0.15s, color 0.15s;
     }
 
     .close-btn {
         position: absolute;
         top: 0.75rem;
         right: 0.75rem;
+        display: flex;
+        align-items: center;
         background: transparent;
         border: none;
-        color: #aaa;
-        font-size: 1.2rem;
+        color: var(--text-secondary);
         cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
     }
 
-    .edit-btn:hover { color: white; }
-    .close-btn:hover { color: white; }
-    .delete-btn:hover { color: #ff5555; }
+    .edit-btn:hover   { background: var(--bg-hover); color: var(--text-primary); }
+    .close-btn:hover  { background: var(--bg-hover); color: var(--text-primary); }
+    .delete-btn:hover { background: var(--accent-red-bg); color: var(--accent-red); }
 
     form {
         display: flex;
@@ -209,15 +227,15 @@
     }
 
     input[type="text"], input[type="number"] {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         width: 100%;
     }
 
-    input:focus { outline: none; border-color: #666; }
+    input:focus { outline: none; border-color: var(--accent-blue); }
 
     button {
         padding: 0.5rem 1rem;
@@ -227,7 +245,7 @@
         align-self: center;
     }
 
-    span { font-weight: bold; }
-    #success { color: greenyellow; }
-    #failed { color: red; white-space: pre-line; }
+    span { font-weight: bold; color: var(--text-primary); }
+    #success { color: var(--accent-green); }
+    #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>

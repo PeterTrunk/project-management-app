@@ -48,11 +48,11 @@
 
 <style>
     .column {
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 8px;
         padding: 1rem;
         width: 250px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
         height: calc(100% - 8px);
         display: flex;
         flex-direction: column;
@@ -61,7 +61,7 @@
     .column-title-btn {
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-secondary);
         font-size: 1.1rem;
         font-weight: bold;
         text-align: center;
@@ -70,26 +70,27 @@
         padding: 0;
         margin-bottom: 0.5rem;
         flex-shrink: 0;
-    }
-
-    .drag-handle {
-        font-size: 0.85rem;
-        color: #666;
-        text-align: center;
-        padding: 0.25rem;
-        border: 1px dashed #444;
-        border-radius: 4px;
-        margin-bottom: 0.5rem;
-        cursor: grab;
+        transition: color 0.15s;
     }
 
     .column-title-btn:hover:not(:disabled) {
-        color: white;
+        color: var(--text-primary);
     }
 
     .column-title-btn:disabled {
         cursor: default;
-        color: #ccc;
+        color: var(--text-secondary);
+    }
+
+    .drag-handle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 0.25rem;
+        border: 1px dashed var(--border-hover);
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+        cursor: grab;
     }
 
     .task-list {
@@ -99,7 +100,7 @@
     }
 
     .empty-column-placeholder {
-        color: #555;
+        color: var(--text-muted);
         text-align: center;
         padding: 1rem;
         font-size: 0.85rem;

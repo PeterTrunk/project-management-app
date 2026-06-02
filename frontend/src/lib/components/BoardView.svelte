@@ -30,6 +30,8 @@
     import UpdateBoardModal from './UpdateBoardModal.svelte';
     import ColumnDetailModal from './ColumnDetailModal.svelte';
 
+    import { ChevronDown, Plus, Columns2, Pencil, ArrowLeftRight, X, Search } from 'lucide-svelte';
+
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
     let isTaskDetailOpen = false;
@@ -516,12 +518,10 @@
 
 
 </script>
-
 <div class="board-toolbar">
-    <!-- Board választó ha több board van, + new board létrehozás -->
     <div class="dropdown">
         <button class="toolbar-btn" on:click={toggleDropdown}>
-            {activeBoard?.name ?? 'Válassz boardot'} ▼
+            {activeBoard?.name ?? 'Válassz boardot'} <ChevronDown size={14} />
         </button>
         {#if isDropdownOpen}
             <div class="dropdown-menu">
@@ -531,29 +531,37 @@
                     </button>
                 {/each}
                 <hr>
-                <button on:click={() => { isBoardCreationOpen = true; isDropdownOpen = false; }}>+ Új board</button>
+                <button on:click={() => { isBoardCreationOpen = true; isDropdownOpen = false; }}>
+                    <Plus size={14} /> Új board
+                </button>
             </div>
         {/if}
     </div>
-    <button class="toolbar-btn" on:click={() => isColumnCreationOpen = true}>+ Oszlop hozzáadása</button>
-    <button class="toolbar-btn" on:click={() => isTaskCreationOpen = true}>+ Task hozzáadása</button>
-    <button class="toolbar-btn" on:click={() => isUpdateBoardOpen = true}>Board módosítása</button>
-    <button 
-        class="toolbar-btn" 
-        class:active={isReordering}
-        on:click={() => isReordering = !isReordering}
-    > {isReordering ? 'Átrendezés aktív' : 'Átrendezés'} </button>
-    
+    <button class="toolbar-btn" on:click={() => isColumnCreationOpen = true}>
+        <Plus size={14} /> Oszlop hozzáadása
+    </button>
+    <button class="toolbar-btn" on:click={() => isTaskCreationOpen = true}>
+        <Plus size={14} /> Task hozzáadása
+    </button>
+    <button class="toolbar-btn" on:click={() => isUpdateBoardOpen = true}>
+        <Pencil size={14} /> Board módosítása
+    </button>
+    <button class="toolbar-btn" class:active={isReordering}
+        on:click={() => isReordering = !isReordering}>
+        <ArrowLeftRight size={14} /> {isReordering ? 'Átrendezés aktív' : 'Átrendezés'}
+    </button>
 </div>
 
-<!-- Szűrő toolbar -->
 <div class="filter-toolbar">
-    <input
-        type="text"
-        class="search-input"
-        placeholder="Keresés..."
-        bind:value={searchQuery}
-    />
+    <div class="search-wrapper">
+        <Search size={14} class="search-icon" />
+        <input
+            type="text"
+            class="search-input"
+            placeholder="Keresés..."
+            bind:value={searchQuery}
+        />
+    </div>
 
     <select class="filter-select" bind:value={filterAssigneeId}>
         <option value="">Összes assignee</option>
@@ -584,17 +592,18 @@
     </select>
 
     {#if hasActiveFilter}
-        <button class="clear-btn" on:click={clearFilters}>✕ Törlés</button>
+        <button class="clear-btn" on:click={clearFilters}>
+            <X size={13} /> Törlés
+        </button>
     {/if}
 </div>
 
 <div class="board-container">
     <h1>{activeBoard?.name}</h1>
-    <!-- Oszlopok -->
-    <div class="columns-container" 
-            use:dndzone={{
+    <div class="columns-container"
+        use:dndzone={{
             items: visibleColumns,
-            flipDurationMs: 200, 
+            flipDurationMs: 200,
             dragDisabled: !isReordering,
             dropTargetStyle: { outline: '2px dashed #555' }
         }}
@@ -613,7 +622,6 @@
             />
         {/each}
     </div>
-    
 </div>
 
 <!-- Modals -->
@@ -701,76 +709,92 @@
         padding-bottom: 1rem;
     }
 
-   .columns-container {
+    .columns-container {
         display: flex;
         gap: 1rem;
         align-items: flex-start;
-        height: calc(100vh - 165px);  /* kicsit több hely alul */
-        min-width: min-content;  /* width: max-content helyett */
+        height: calc(100vh - 165px);
+        min-width: min-content;
     }
 
     .board-toolbar {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 0.5rem;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #333;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         position: sticky;
         top: 0;
         z-index: 10;
         width: 100%;
+        flex-wrap: wrap;
     }
 
     .toolbar-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         cursor: pointer;
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: white;
-        font-size: 0.9rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
     }
 
     .toolbar-btn:hover {
-        background: #333;
+        background: var(--border-hover);
+        color: var(--text-primary);
     }
 
-    .dropdown {
-        position: relative;
-        
+    .toolbar-btn.active {
+        background: var(--accent-blue-bg);
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
     }
+
+    .dropdown { position: relative; }
 
     .dropdown-menu {
         position: absolute;
         top: 100%;
         left: 0;
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-card);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
         min-width: 180px;
         z-index: 100;
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        box-shadow: 0 4px 12px var(--shadow);
     }
 
     .dropdown-menu button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.5rem 1rem;
         text-align: left;
         background: transparent;
         border: none;
-        color: white;
+        color: var(--text-secondary);
         cursor: pointer;
         font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
     }
 
     .dropdown-menu button:hover {
-        background: #333;
+        background: var(--bg-hover);
+        color: var(--text-primary);
     }
 
     .dropdown-menu hr {
-        border-color: #444;
+        border-color: var(--border);
         margin: 0;
     }
 
@@ -779,31 +803,44 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.4rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-wrap: wrap;
     }
 
+    .search-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-wrapper :global(.search-icon) {
+        position: absolute;
+        left: 0.5rem;
+        color: var(--text-muted);
+        pointer-events: none;
+    }
+
     .search-input {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
-        padding: 0.3rem 0.6rem;
+        color: var(--text-primary);
+        padding: 0.3rem 0.6rem 0.3rem 1.75rem;
         font-size: 0.85rem;
         width: 180px;
     }
 
     .search-input:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
     .filter-select {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-secondary);
         padding: 0.3rem 0.5rem;
         font-size: 0.85rem;
         cursor: pointer;
@@ -811,24 +848,23 @@
 
     .filter-select:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
     .clear-btn {
-        background: #3a1a1a;
-        border: 1px solid #ff5555;
-        color: #ff5555;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: var(--accent-red-bg);
+        border: 1px solid var(--accent-red);
+        color: var(--accent-red);
         padding: 0.3rem 0.6rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.85rem;
         white-space: nowrap;
+        transition: background 0.15s;
     }
 
-    .clear-btn:hover { background: #4a2a2a; }
-    
-    h2{
-        margin: auto;
-    }
-
+    .clear-btn:hover { background: var(--accent-red); color: #fff; }
 </style>

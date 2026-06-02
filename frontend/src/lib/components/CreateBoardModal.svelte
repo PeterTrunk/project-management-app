@@ -99,7 +99,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -107,7 +107,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
@@ -128,19 +129,26 @@
         gap: 1rem;
     }
 
-    input, textarea {
-        background: #2a2a2a;
-        border: 1px solid #444;
+    input[type="text"],
+    textarea {
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 1rem;
         width: 100%;
     }
 
-    input:focus, textarea:focus {
+    input[type="text"]:focus,
+    textarea:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
+    }
+
+    span {
+        font-weight: bold;
+        color: var(--accent-blue);
     }
 
     button {
@@ -151,6 +159,6 @@
         align-self: center;
     }
 
-    #success { color: greenyellow; }
-    #failed { color: red; white-space: pre-line; }
+    #success { color: var(--accent-green); }
+    #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>

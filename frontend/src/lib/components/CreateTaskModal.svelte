@@ -10,6 +10,8 @@
     import { addLabelToTaskAsync } from '../api/labelApi';
     import { sprintStore } from '../stores/sprintStore';
 
+    import { X, Plus } from 'lucide-svelte';
+
     export let isTaskCreationOpen = false;
     export let isBacklogMode: boolean = false;
     export let projectId: string;
@@ -131,11 +133,15 @@
                     <div class="label-select-row">
                         <LabelCard {label} showDelete={false} small={true} />
                         {#if selectedLabelIds.includes(label.id)}
-                            <button type="button" class="label-remove-btn" 
-                                on:click={() => selectedLabelIds = selectedLabelIds.filter(id => id !== label.id)}>✕</button>
+                            <button type="button" class="label-remove-btn"
+                                on:click={() => selectedLabelIds = selectedLabelIds.filter(id => id !== label.id)}>
+                                <X size={12} />
+                            </button>
                         {:else}
-                            <button type="button" class="label-add-btn" 
-                                on:click={() => selectedLabelIds = [...selectedLabelIds, label.id]}>+</button>
+                            <button type="button" class="label-add-btn"
+                                on:click={() => selectedLabelIds = [...selectedLabelIds, label.id]}>
+                                <Plus size={12} />
+                            </button>
                         {/if}
                     </div>
                 {/each}
@@ -170,113 +176,138 @@
 </div>
 
 <style>
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--shadow);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
 
-.modal-content {
-    background: #1e1e1e;
-    padding: 2rem;
-    border-radius: 8px;
-    width: 500px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    position: relative;
-}
+    .modal-content {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        padding: 2rem;
+        border-radius: 8px;
+        width: 500px;
+        max-width: 95vw;
+        max-height: 90vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        position: relative;
+    }
 
-.modal-content h1 {
-    margin-bottom: 0.5rem;
-    font-size: 1.5rem;
-}
+    .modal-content h1 {
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+    }
 
-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
+    form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
 
-input, textarea {
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 6px;
-    color: white;
-    padding: 0.5rem;
-    font-size: 1rem;
-    width: 100%;
-}
+    input, textarea {
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
+        border-radius: 6px;
+        color: var(--text-primary);
+        padding: 0.5rem;
+        font-size: 1rem;
+        width: 100%;
+    }
 
-input:focus, textarea:focus {
-    outline: none;
-    border-color: #666;
-}
+    input:focus, textarea:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
 
-button {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    width: fit-content;
-    align-self: center;
-}
+    select {
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
+        border-radius: 6px;
+        color: var(--text-primary);
+        padding: 0.5rem;
+        font-size: 1rem;
+        width: 100%;
+    }
 
-#optional-fields {
-    background: #161616;
-    border-radius: 8px;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
-    border: 1px solid #2a2a2a;
-}
+    select:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
 
-#optional-fields h2 {
-    font-size: 1rem;
-    color: #aaa;
-    margin-bottom: 0.25rem;
-}
+    button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        width: fit-content;
+        align-self: center;
+    }
 
-.labels-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
+    #optional-fields {
+        background: var(--bg-primary);
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+        border: 1px solid var(--border);
+    }
 
-.label-select-row {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
+    #optional-fields h2 {
+        font-size: 1rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+    }
 
-.label-remove-btn {
-    background: transparent;
-    border: none;
-    color: #ff5555;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
+    .labels-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
 
-.label-add-btn {
-    background: transparent;
-    border: none;
-    color: #4caf50;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
+    .label-select-row {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
 
+    .label-remove-btn {
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--accent-red);
+        cursor: pointer;
+        padding: 0.15rem;
+        border-radius: 3px;
+    }
 
-#success { color: greenyellow; }
-#failed { color: red; white-space: pre-line; }
+    .label-remove-btn:hover { background: var(--accent-red-bg); }
+
+    .label-add-btn {
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--accent-green);
+        cursor: pointer;
+        padding: 0.15rem;
+        border-radius: 3px;
+    }
+
+    .label-add-btn:hover { background: var(--accent-green-bg); }
+
+    #success { color: var(--accent-green); }
+    #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>

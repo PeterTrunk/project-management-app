@@ -6,6 +6,8 @@
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
 
+    import { Check } from 'lucide-svelte';
+
     let allLabels: LabelResponse[] = [];
     projectStore.subscribe(state => {
         allLabels = state.labels;
@@ -81,25 +83,26 @@
         </span>
     {/if}
     {#if isCompleted}
-        <span class="completed-badge">✓ Kész</span>
+        <span class="completed-badge"><Check size={12} /> Kész</span>
     {/if}
 </div>
 
 <style>
     .task-card {
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         padding: 0.75rem;
         margin-bottom: 0.5rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
         cursor: pointer;
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        transition: border-color 0.15s;
     }
 
     .task-card:hover {
-        border-color: #555;
+        border-color: var(--border-hover);
     }
 
     .task-header {
@@ -110,18 +113,22 @@
 
     .task-key {
         font-size: 0.75rem;
-        color: #888;
+        color: var(--text-muted);
     }
 
     .task-title {
         font-size: 0.9rem;
+        color: var(--text-primary);
     }
 
     .due-date {
         font-size: 0.75rem;
-        color: #888;
+        color: var(--text-muted);
         font-weight: bold;
     }
+
+    .due-date.overdue  { color: var(--accent-red); }
+    .due-date.due-soon { color: var(--accent-yellow); }
 
     .priority {
         font-size: 0.75rem;
@@ -129,6 +136,12 @@
         border-radius: 4px;
         width: fit-content;
     }
+
+    .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
+    .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+    .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
+    .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
+    .priority-normal   { background: var(--bg-hover);         color: var(--text-muted); }
 
     .labels-row {
         display: flex;
@@ -145,50 +158,28 @@
     }
 
     .assignee-badge {
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
-        background: #1a2a3a;
-        color: #4a9eff;
+        background: var(--accent-blue-bg);
+        color: var(--accent-blue);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.9rem;
-        font-weight: bold;
-        title: attr(title);
-    }
-
-    .due-date.overdue {
-        color: #ff5555;
+        font-size: 0.75rem;
         font-weight: bold;
     }
 
-    .due-date.due-soon {
-        color: #f0a500;
-        font-weight: bold;
-    }
-
-    .task-card.overdue {
-        border-left: 3px solid #ff5555;
-    }
-
-    .task-card.due-soon {
-        border-left: 3px solid #f0a500;
-    }
-
-    .task-card.completed {
-        border-left: 3px solid #4caf50;
-    }
+    .task-card.overdue   { border-left: 3px solid var(--accent-red); }
+    .task-card.due-soon  { border-left: 3px solid var(--accent-yellow); }
+    .task-card.completed { border-left: 3px solid var(--accent-green); }
 
     .completed-badge {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
         font-size: 0.75rem;
-        color: #4caf50;
+        color: var(--accent-green);
         font-weight: bold;
     }
-
-    .priority-low { background: #1a3a1a; color: #4caf50; }
-    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
-    .priority-high { background: #3a1a1a; color: #ff5722; }
-    .priority-critical { background: #4a0000; color: #ff0000; }
-    .priority-normal { background: #2a2a2a; color: #aaa; }
 </style>
