@@ -10,6 +10,8 @@
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
 
+    import { GitBranch, GitCommit, GitPullRequest, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
+
     export let projectId: string;
 
     let unmatchedCommits: CommitLinkResponse[] = [];
@@ -114,13 +116,17 @@
                     <div class="integrations-list">
                         {#each integrations as integration (integration.id)}
                             <div class="integration-item">
-                                <span>{integration.provider === 'GitHub' ? '🐙' : '🦊'}</span>
+                                <span class="provider-icon"><GitBranch size={16} /></span>
                                 <span class="repo">{integration.repoFullName}</span>
                                 <span class="badge" class:enabled={integration.isEnabled} class:disabled={!integration.isEnabled}>
-                                    {integration.isEnabled ? '● Aktív' : '○ Inaktív'}
+                                    {#if integration.isEnabled}
+                                        <ToggleRight size={12} /> Aktív
+                                    {:else}
+                                        <ToggleLeft size={12} /> Inaktív
+                                    {/if}
                                 </span>
                                 {#if integration.isVerified}
-                                    <span class="badge verified">✓ Verified</span>
+                                    <span class="badge verified"><CircleCheck size={12} /> Verified</span>
                                 {/if}
                             </div>
                         {/each}
@@ -149,21 +155,21 @@
                                             {/each}
                                         </select>
                                         <button 
-                                            class="assign-btn"
+                                            class="assign-btn" 
                                             disabled={!selectedTaskId}
                                             on:click={() => handleAssignCommit(commit.id)}>
-                                            ✓ Hozzárendelés
+                                            <CircleCheck size={14} /> Hozzárendelés
                                         </button>
                                         <button 
                                             class="cancel-btn"
                                             on:click={() => { selectedCommitId = null; selectedTaskId = ''; }}>
-                                            Mégse
+                                            <X size={14} /> Mégse
                                         </button>
                                     {:else}
                                         <button 
                                             class="select-btn"
                                             on:click={() => { selectedCommitId = commit.id; selectedTaskId = ''; }}>
-                                            + Task hozzárendelése
+                                            <Plus size={14} /> Task hozzárendelése
                                         </button>
                                     {/if}
                                 </div>
@@ -193,22 +199,22 @@
                                                 </option>
                                             {/each}
                                         </select>
-                                        <button
+                                        <button 
                                             class="assign-btn"
                                             disabled={!selectedTaskId}
                                             on:click={() => handleAssignPr(pr.id)}>
-                                            ✓ Hozzárendelés
+                                            <CircleCheck size={14} /> Hozzárendelés
                                         </button>
-                                        <button
+                                        <button 
                                             class="cancel-btn"
                                             on:click={() => { selectedPrId = null; selectedTaskId = ''; }}>
-                                            Mégse
+                                            <X size={14} /> Mégse
                                         </button>
                                     {:else}
-                                        <button
+                                        <button 
                                             class="select-btn"
                                             on:click={() => { selectedPrId = pr.id; selectedTaskId = ''; }}>
-                                            + Task hozzárendelése
+                                            <Plus size={14} /> Task hozzárendelése
                                         </button>
                                     {/if}
                                 </div>
@@ -233,15 +239,15 @@
         display: flex;
         align-items: center;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
     }
 
     .git-toolbar h2 {
         font-size: 1rem;
         margin: 0;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .git-content {
@@ -255,11 +261,11 @@
 
     .section h3 {
         font-size: 0.85rem;
-        color: #aaa;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin: 0 0 0.75rem;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid var(--border);
         padding-bottom: 0.5rem;
     }
 
@@ -274,27 +280,36 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 6px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
+    }
+
+    .provider-icon {
+        display: flex;
+        align-items: center;
+        color: var(--text-muted);
     }
 
     .repo {
         flex: 1;
         font-size: 0.9rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .badge {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: bold;
     }
 
-    .enabled { background: #1a3a1a; color: #4caf50; }
-    .disabled { background: #2a2a2a; color: #666; }
-    .verified { background: #1a3a1a; color: #4caf50; }
+    .enabled  { background: var(--accent-green-bg); color: var(--accent-green); }
+    .disabled { background: var(--bg-hover);        color: var(--text-muted); }
+    .verified { background: var(--accent-green-bg); color: var(--accent-green); }
 
     .git-list {
         display: flex;
@@ -317,41 +332,55 @@
 
     select {
         flex: 1;
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.4rem 0.5rem;
         font-size: 0.85rem;
     }
 
+    select:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
     button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.35rem 0.75rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.85rem;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: #aaa;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         white-space: nowrap;
+        transition: background 0.15s, color 0.15s;
     }
 
-    .select-btn { color: #4a9eff; border-color: #4a9eff; }
-    .select-btn:hover { background: #1a2a3a; }
+    .select-btn { color: var(--accent-blue);  border-color: var(--accent-blue); }
+    .select-btn:hover { background: var(--accent-blue-bg); }
 
-    .assign-btn { color: #4caf50; border-color: #4caf50; }
-    .assign-btn:hover { background: #1a3a1a; }
+    .assign-btn { color: var(--accent-green); border-color: var(--accent-green); }
+    .assign-btn:hover { background: var(--accent-green-bg); }
     .assign-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .cancel-btn { color: #ff5555; border-color: #ff5555; }
-    .cancel-btn:hover { background: #3a1a1a; }
+    .cancel-btn { color: var(--accent-red); border-color: var(--accent-red); }
+    .cancel-btn:hover { background: var(--accent-red-bg); }
 
-    .loading, .empty, .error {
+    .loading, .empty {
         text-align: center;
         padding: 1rem;
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.9rem;
     }
 
-    .error { color: red; }
+    .error {
+        text-align: center;
+        padding: 1rem;
+        color: var(--accent-red);
+        font-size: 0.9rem;
+    }
 </style>
