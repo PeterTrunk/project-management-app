@@ -3,6 +3,16 @@
     import { getActivitiesAsync, type ActivityResponse } from '../api/activityApi';
     import { signalRService } from '../services/signalRService';
 
+    import { 
+        ClipboardList, Timer, MessageSquare, Pin, 
+        LayoutDashboard, User, Folder, GitCommit, 
+        GitPullRequest, Link, Circle,
+
+        Icon
+
+    } from 'lucide-svelte';
+    import type { Component } from 'svelte';
+
     export let projectId: string;
 
     let activities: ActivityResponse[] = [];
@@ -74,19 +84,19 @@
         return date.toLocaleDateString('hu-HU');
     }
 
-    function getEntityIcon(entityType: string): string {
+    function getEntityIcon(entityType: string): any {
         switch (entityType) {
-            case 'Task': return '📋';
-            case 'Sprint': return '🏃';
-            case 'Comment': return '💬';
-            case 'Board': return '📌';
-            case 'Column': return '📊';
-            case 'Member': return '👤';
-            case 'Project': return '📁';
-            case 'Commit': return '🔵';
-            case 'PullRequest': return '🟣';
-            case 'Integration': return '🔗';
-            default: return '•';
+            case 'Task':        return ClipboardList;
+            case 'Sprint':      return Timer;
+            case 'Comment':     return MessageSquare;
+            case 'Board':       return Pin;
+            case 'Column':      return LayoutDashboard;
+            case 'Member':      return User;
+            case 'Project':     return Folder;
+            case 'Commit':      return GitCommit;
+            case 'PullRequest': return GitPullRequest;
+            case 'Integration': return Link;
+            default:            return Circle;
         }
     }
 
@@ -110,7 +120,7 @@
             {#each activities as activity (activity.id)}
                 <div class="activity-item">
                     <span class="activity-icon">
-                        {getEntityIcon(activity.entityType)}
+                        <svelte:component this={getEntityIcon(activity.entityType)} size={16} />
                     </span>
                     <div class="activity-content">
                         <div class="activity-row">
@@ -155,18 +165,21 @@
         gap: 0.75rem;
         padding: 0.5rem 0.75rem;
         border-radius: 6px;
-        background: #1e1e1e;
-        border: 1px solid #2a2a2a;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
     }
 
     .activity-item:hover {
-        border-color: #444;
+        border-color: var(--border-hover);
     }
 
     .activity-icon {
-        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-primary);
         flex-shrink: 0;
-        margin-top: 0.1rem;
+        margin-top: 0.15rem;
     }
 
     .activity-content {
@@ -174,39 +187,6 @@
         flex-direction: column;
         gap: 0.2rem;
         flex: 1;
-    }
-
-    .activity-description {
-        font-size: 0.9rem;
-        margin: 0;
-        color: #ddd;
-    }
-
-    .activity-time {
-        font-size: 0.75rem;
-        color: #666;
-    }
-
-    .load-more-btn {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #aaa;
-        padding: 0.5rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 0.85rem;
-        width: 100%;
-        margin-top: 0.5rem;
-    }
-
-    .load-more-btn:hover { background: #333; }
-    .load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .loading, .empty, .error {
-        text-align: center;
-        padding: 1rem;
-        color: #555;
-        font-size: 0.9rem;
     }
 
     .activity-row {
@@ -219,25 +199,52 @@
     .activity-description {
         font-size: 0.9rem;
         margin: 0;
-        color: #ddd;
+        color: var(--text-secondary);
         text-align: left;
     }
 
     .activity-time {
         font-size: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
         white-space: nowrap;
         flex-shrink: 0;
     }
 
+    .load-more-btn {
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
+        padding: 0.5rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        width: 100%;
+        margin-top: 0.5rem;
+        transition: background 0.15s;
+    }
+
+    .load-more-btn:hover { background: var(--border-hover); }
+    .load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .loading, .empty {
+        text-align: center;
+        padding: 1rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .error {
+        text-align: center;
+        padding: 1rem;
+        color: var(--accent-red);
+        font-size: 0.9rem;
+    }
+
     :global(.actor-name) {
-        color: #ffffff;
+        color: var(--text-primary);
         font-weight: bold;
         padding: 0.1rem 0.4rem;
         border-radius: 4px;
         font-size: 0.8rem;
-        font-weight: bold;
     }
-
-    .error { color: red; }
 </style>

@@ -17,6 +17,8 @@
     import { setSprints } from '../stores/sprintStore';
     import { signalRService } from '../services/signalRService';
 
+    import { ClipboardList, CircleAlert, Timer, BarChart2 } from 'lucide-svelte';
+
     onMount(async () => {
         // Taskok és sprintek betöltése
         const [taskData, sprintData] = await Promise.all([
@@ -176,7 +178,7 @@
     <!-- Fejléc -->
     <div class="overview-header">
         <div>
-            <h1>Üdv, {displayName}! 👋</h1>
+            <h1>Üdv, {displayName}!</h1>
             <p class="project-status">
                 {project.name} —
                 <span class:archived={project.isArchived} class:active={!project.isArchived}>
@@ -194,14 +196,14 @@
     <!-- Stat kártyák -->
     <div class="stat-cards">
         <OverviewStatCard
-            icon="📋"
+            icon={ClipboardList}
             title="Összes task"
             value={totalTasks}
             subtitle="{completedTasks} kész / {inProgressTasks} folyamatban"
             color="blue"
         />
         <OverviewStatCard
-            icon="🔴"
+            icon={CircleAlert}
             title="Lejárt taskok"
             value={overdueTasks}
             subtitle={overdueTasks > 0 ? 'Figyelmet igényel!' : 'Minden rendben!'}
@@ -209,7 +211,7 @@
         />
         {#if activeSprint}
             <OverviewStatCard
-                icon="🏃"
+                icon={Timer}
                 title={activeSprint.name}
                 value="{sprintCompleted}/{sprintTasks.length}"
                 subtitle="{sprintProgress}% kész"
@@ -217,7 +219,7 @@
             />
         {:else}
             <OverviewStatCard
-                icon="🏃"
+                icon={Timer}
                 title="Aktív sprint"
                 value="Nincs"
                 subtitle="Hozz létre egy sprintet!"
@@ -229,7 +231,7 @@
     <div class="overview-content">
         <!-- Hozzám rendelt taskok -->
         <div class="section tasks-section">
-            <h3>📋 Hozzám rendelt taskok ({myTasks.length})</h3>
+            <h3><ClipboardList size={14} /> Hozzám rendelt taskok ({myTasks.length})</h3>
             {#if myTasks.length === 0}
                 <p class="empty">Nincs hozzád rendelt task!</p>
             {:else}
@@ -255,7 +257,7 @@
 
         <!-- Recent Activity -->
         <div class="section activity-section">
-            <h3>📊 Recent Activity</h3>
+            <h3><BarChart2 size={14} /> Recent Activity</h3>
             <div class="activity-scroll">
                 <ActivityFeed projectId={project.id} />
             </div>
@@ -299,13 +301,13 @@
     }
 
     .project-status {
-        color: #aaa;
+        color: var(--text-secondary);
         margin: 0.25rem 0 0;
         font-size: 0.95rem;
     }
 
-    .active { color: #4caf50; font-weight: bold; }
-    .archived { color: #f0a500; font-weight: bold; }
+    .active   { color: var(--accent-green); font-weight: bold; }
+    .archived { color: var(--accent-yellow); font-weight: bold; }
 
     .project-meta {
         display: flex;
@@ -316,8 +318,8 @@
 
     .meta-item {
         font-size: 0.85rem;
-        /*color: #888;*/
-        background: #2a2a2a;
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         padding: 0.3rem 0.6rem;
         border-radius: 6px;
     }
@@ -335,12 +337,15 @@
     }
 
     .section h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         font-size: 0.9rem;
-        color: #aaa;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin: 0 0 0.75rem;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid var(--border);
         padding-bottom: 0.5rem;
     }
 
@@ -375,7 +380,7 @@
     }
 
     .empty {
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.9rem;
         text-align: center;
         padding: 1rem;

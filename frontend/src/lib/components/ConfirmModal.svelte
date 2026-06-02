@@ -52,7 +52,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -60,7 +60,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         min-width: 350px;
@@ -76,6 +77,6 @@
     }
 
     .confirm {
-        color: red;
+        color: var(--accent-red);
     }
 </style>

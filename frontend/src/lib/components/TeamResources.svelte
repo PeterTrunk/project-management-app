@@ -118,12 +118,6 @@
 </div>
 
 <style>
-    .resources-content {
-        padding: 1rem;
-        overflow-y: auto;
-        flex: 1;
-    }
-    
     .team-resources-container {
         display: flex;
         flex-direction: column;
@@ -136,15 +130,35 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
     }
 
     .resources-toolbar h2 {
         font-size: 1rem;
         margin: 0;
-        color: #ccc;
+        color: var(--text-secondary);
+    }
+
+    .resources-content {
+        padding: 1rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .section {
+        margin-bottom: 1.5rem;
+    }
+
+    .section h3 {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 0.75rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
     }
 
     .attachments-list {
@@ -154,31 +168,18 @@
     }
 
     .upload-btn {
-        background: #1a3a1a;
-        border: 1px solid #4caf50;
-        color: #4caf50;
+        background: var(--accent-green-bg);
+        border: 1px solid var(--accent-green);
+        color: var(--accent-green);
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.9rem;
+        transition: background 0.15s;
     }
 
-    .upload-btn:hover { background: #2a4a2a; }
+    .upload-btn:hover { background: var(--accent-green); color: #fff; }
     .upload-btn.loading { opacity: 0.5; cursor: not-allowed; }
-
-    .section {
-        margin-bottom: 1.5rem;
-    }
-
-    .section h3 {
-        font-size: 0.85rem;
-        color: #aaa;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin: 0 0 0.75rem;
-        border-bottom: 1px solid #2a2a2a;
-        padding-bottom: 0.5rem;
-    }
 
     .task-group {
         margin-bottom: 1rem;
@@ -186,15 +187,15 @@
 
     .task-key {
         font-size: 0.85rem;
-        color: #888;
+        color: var(--text-muted);
         margin: 0 0 0.5rem;
     }
 
     .loading, .error {
         text-align: center;
         padding: 1rem;
-        color: #555;
+        color: var(--text-muted);
     }
 
-    .error { color: red; }
+    .error { color: var(--accent-red); }
 </style>

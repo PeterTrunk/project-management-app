@@ -1,5 +1,7 @@
 <script lang="ts">
-    export let icon: string;
+    import type { Icon } from 'lucide-svelte';
+
+    export let icon: typeof Icon;
     export let title: string;
     export let value: string | number;
     export let subtitle: string = '';
@@ -7,7 +9,9 @@
 </script>
 
 <div class="stat-card {color}">
-    <div class="stat-icon">{icon}</div>
+    <div class="stat-icon">
+        <svelte:component this={icon} size={24} />
+    </div>
     <div class="stat-content">
         <p class="stat-title">{title}</p>
         <p class="stat-value">{value}</p>
@@ -19,8 +23,8 @@
 
 <style>
     .stat-card {
-        background: #1e1e1e;
-        border: 1px solid #2a2a2a;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         border-radius: 8px;
         padding: 1rem;
         display: flex;
@@ -30,12 +34,23 @@
         min-width: 150px;
     }
 
-    .stat-card.red { border-left: 3px solid #ff5555; }
-    .stat-card.green { border-left: 3px solid #4caf50; }
-    .stat-card.yellow { border-left: 3px solid #f0a500; }
-    .stat-card.blue { border-left: 3px solid #4a9eff; }
+    .stat-card.red    { border-left: 3px solid var(--accent-red); }
+    .stat-card.green  { border-left: 3px solid var(--accent-green); }
+    .stat-card.yellow { border-left: 3px solid var(--accent-yellow); }
+    .stat-card.blue   { border-left: 3px solid var(--accent-blue); }
 
-    .stat-icon { font-size: 1.5rem; }
+    .stat-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+
+    .stat-card.red    .stat-icon { color: var(--accent-red); }
+    .stat-card.green  .stat-icon { color: var(--accent-green); }
+    .stat-card.yellow .stat-icon { color: var(--accent-yellow); }
+    .stat-card.blue   .stat-icon { color: var(--accent-blue); }
 
     .stat-content {
         display: flex;
@@ -45,7 +60,7 @@
 
     .stat-title {
         font-size: 0.75rem;
-        color: #888;
+        color: var(--text-muted);
         margin: 0;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -54,13 +69,13 @@
     .stat-value {
         font-size: 1.4rem;
         font-weight: bold;
-        color: #fff;
+        color: var(--text-primary);
         margin: 0;
     }
 
     .stat-subtitle {
         font-size: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
         margin: 0;
     }
 </style>

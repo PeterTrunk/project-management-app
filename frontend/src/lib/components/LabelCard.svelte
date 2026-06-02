@@ -2,6 +2,8 @@
     import type { LabelResponse } from '../api/labelApi';
     import ConfirmModal from './ConfirmModal.svelte';
 
+    import { Trash2 } from 'lucide-svelte';
+
     export let label: LabelResponse;
     export let onDelete: (labelId: string) => void = () => {};
     export let showDelete: boolean = true;
@@ -13,7 +15,9 @@
     <div class="label-color" style="background-color: {label.color}"></div>
     <span class="label-name">{label.name}</span>
     {#if showDelete}
-        <button class="delete-btn" on:click={() => onDelete(label.id)}>🗑</button>
+        <button class="delete-btn" on:click={() => onDelete(label.id)}>
+            <Trash2 size={14} />
+        </button>
     {/if}
 </div>
 
@@ -22,10 +26,10 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         padding: 0.5rem 0.75rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
     }
 
     .label-color {
@@ -48,18 +52,22 @@
     .label-name {
         flex: 1;
         font-size: 0.9rem;
+        color: var(--text-primary);
     }
 
     .delete-btn {
+        display: flex;
+        align-items: center;
         background: transparent;
         border: none;
-        color: #aaa;
+        color: var(--text-secondary);
         cursor: pointer;
-        padding: 0;
-        font-size: 0.9rem;
+        padding: 0.15rem;
+        border-radius: 3px;
     }
 
     .delete-btn:hover {
-        color: #ff5555;
+        color: var(--accent-red);
+        background: var(--accent-red-bg);
     }
 </style>
