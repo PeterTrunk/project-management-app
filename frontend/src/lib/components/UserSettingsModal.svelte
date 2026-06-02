@@ -3,6 +3,8 @@
     import { changePasswordAsync, updateProfileAsync } from '../api/authApi';
     import { validateDisplayName, validatePassword } from '../validators';
 
+    import { X, User, KeyRound, Pencil } from 'lucide-svelte';
+
     export let isUserSettingsOpen = false;
 
     let error = '';
@@ -78,13 +80,21 @@
 
 <div class="modal-overlay">
     <div class="modal-content">
-        <button class="close-btn" on:click={() => isUserSettingsOpen = false}>✕</button>
+        <button class="close-btn" on:click={() => isUserSettingsOpen = false}>
+            <X size={16} />
+        </button>
         <aside class="sidebar">
             <div class="sidebar-options">
                 <h2>{displayName}</h2>
-                <button on:click={() => switchView('profile')}>Profil</button>
-                <button on:click={() => switchView('changeprofile')}>Profil szerkesztése</button>
-                <button on:click={() => switchView('password')}>Jelszó változtatás</button>
+                <button class:active={activeView === 'profile'} on:click={() => switchView('profile')}>
+                    <User size={15} /> Profil
+                </button>
+                <button class:active={activeView === 'changeprofile'} on:click={() => switchView('changeprofile')}>
+                    <Pencil size={15} /> Profil szerkesztése
+                </button>
+                <button class:active={activeView === 'password'} on:click={() => switchView('password')}>
+                    <KeyRound size={15} /> Jelszó változtatás
+                </button>
             </div>
         </aside>
         <div class="main">
@@ -168,7 +178,7 @@
     }
 
     .sidebar {
-        width: 200px;
+        width: 220px;
         min-width: 200px;
         background: #161616;
         padding: 1.5rem 1rem;

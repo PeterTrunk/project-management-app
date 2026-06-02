@@ -14,6 +14,10 @@
     import IntegrationCard from './IntegrationCard.svelte';
     import CreateIntegrationModal from './CreateIntegrationModal.svelte';
 
+    import { Settings2, Tag, GitBranch, Plus } from 'lucide-svelte';
+
+    let activeTab: 'general' | 'labels' | 'git' = 'general';
+
     export let project: ProjectResponse;
     let labels: LabelResponse[] = [];
     let isCreateLabelOpen = false;
@@ -146,96 +150,157 @@
 
 </script>
 
-<div>
+<div class="settings-container">
     <h1>{project.name}</h1>
-    <div class="divider">
-        <form>
-            <p>
-                Projekt neve:
-                <input bind:value={name} placeholder="Max 120 karakter">
-            </p>
-            <p>
-                Leírás: 
-                <textarea bind:value={description} placeholder="Max 1000 karakter" id="desc"></textarea>
-            </p>
-            <p>Projekt tulajdonosa: <span>{project.ownerName}</span> (Nem állítható)</p>
-            <p>Projekthez tartozó kulcs: <span>{project.projKey}</span> (Nem állítható)</p>
-            <p>
-            {#if project.isArchived}
-                A Projekt <span>Arhivált</span> állapotú
-                <button type="button" on:click={() => openConfirm(
-                    'Projekt dearchiválása',
-                    'Biztosan dearchiválni szeretnéd a projektet?',
-                    handleUnarchive
-                )}>Projekt dearchiválása</button>
-            {:else}
-                A Projekt <span>Aktív</span> állapotú.
-                <button type="button" on:click={() => openConfirm(
-                    'Projekt archiválása',
-                    'Biztosan archiválni szeretnéd a projektet?',
-                    handleArchive
-                )}>Projekt archiválása</button>
-            {/if}
-            </p>
-            <p>Létrehozás ideje: <span>{new Date(project.createdAt).toLocaleDateString('hu-HU')}</span></p>
-            <p>Adatok legutóbbi változásának ideje: <span>{new Date(project.updatedAt).toLocaleDateString('hu-HU')}</span></p>
-            {#if error}
-                <p id="failed">{error}</p>
-            {/if}
-            {#if success}
-                <p id="success">{success}</p>
-            {/if}
-            <button type="button" on:click={() => openConfirm(
-                'Módosítások mentése',
-                'Biztosan menteni szeretnéd a változtatásokat?',
-                handleUpdate
-            )}>Módosítások mentése</button>
-        </form>
+
+    <div class="tabs">
+        <button
+            class="tab-btn"
+            class:active={activeTab === 'general'}
+            on:click={() => activeTab = 'general'}
+        >
+            <Settings2 size={15} />
+            Általános
+        </button>
+        <button
+            class="tab-btn"
+            class:active={activeTab === 'labels'}
+            on:click={() => activeTab = 'labels'}
+        >
+            <Tag size={15} />
+            Labelek
+        </button>
+        <button
+            class="tab-btn"
+            class:active={activeTab === 'git'}
+            on:click={() => activeTab = 'git'}
+        >
+            <GitBranch size={15} />
+            Git
+        </button>
     </div>
-    <div class="divider">
-    <button id="delete" on:click={() => openConfirm('Projekt Törlése'
-        ,'Biztosan törlöd véglegesen a projektet? (arhiválás funkció: megtekintésre elérhető marad a projekt, nincs adattörlés, projekt újra aktiválható, felhasználói akciók letiltva lesznek)'
-        , handleDelete
-        )}>Projekt Törlése</button>
-    </div>
-    <div class="divider">
-        <h2>Labelek</h2>
-        <div class="labels-list">
-            {#if labels.length > 0}
-                {#each labels as label}
-                    <LabelCard {label} onDelete={requestDeleteLabel} />
-                {/each}
-            {:else}
-                <p class="empty">Nincs még label</p>
-            {/if}
-        </div>
-        <button on:click={() => isCreateLabelOpen = true}>+ Új label</button>
-    </div>
-    <div class="divider">
-        <h2>Git Integráció</h2>
-        {#if integrations.length > 0}
-            <div class="integrations-list">
-                {#each integrations as integration (integration.id)}
-                    <IntegrationCard
-                        {integration}
-                        projectId={project.id}
-                    />
-                {/each}
+
+    <div class="tab-content">
+
+        {#if activeTab === 'general'}
+            <form>
+                <div class="field">
+                    <label>Projekt neve<input bind:value={name} placeholder="Max 120 karakter"></label>
+                </div>
+                <div class="field">
+                    <label>Leírás<textarea bind:value={description} placeholder="Max 1000 karakter"></textarea></label>
+                </div>
+                <div class="meta">
+                    <p>Tulajdonos: <span>{project.ownerName}</span></p>
+                    <p>Projekt kulcs: <span>{project.projKey}</span></p>
+                    <p>Létrehozva: <span>{new Date(project.createdAt).toLocaleDateString('hu-HU')}</span></p>
+                    <p>Módosítva: <span>{new Date(project.updatedAt).toLocaleDateString('hu-HU')}</span></p>
+                </div>
+                {#if error}<p class="msg error">{error}</p>{/if}
+                {#if success}<p class="msg success">{success}</p>{/if}
+                <button type="button" class="btn-primary" on:click={() => openConfirm(
+                    'Módosítások mentése',
+                    'Biztosan menteni szeretnéd a változtatásokat?',
+                    handleUpdate
+                )}>Módosítások mentése</button>
+            </form>
+
+            <div class="danger-zone">
+                <h3>Veszélyzóna</h3>
+                <div class="danger-actions">
+                    {#if project.isArchived}
+                        <div class="danger-row">
+                            <div>
+                                <p class="danger-title">Projekt dearchiválása</p>
+                                <p class="danger-desc">A projekt újra aktív lesz.</p>
+                            </div>
+                            <button class="btn-warning" type="button" on:click={() => openConfirm(
+                                'Projekt dearchiválása',
+                                'Biztosan dearchiválni szeretnéd a projektet?',
+                                handleUnarchive
+                            )}>Dearchiválás</button>
+                        </div>
+                    {:else}
+                        <div class="danger-row">
+                            <div>
+                                <p class="danger-title">Projekt archiválása</p>
+                                <p class="danger-desc">A projekt csak olvasható módba kerül.</p>
+                            </div>
+                            <button class="btn-warning" type="button" on:click={() => openConfirm(
+                                'Projekt archiválása',
+                                'Biztosan archiválni szeretnéd a projektet?',
+                                handleArchive
+                            )}>Archiválás</button>
+                        </div>
+                    {/if}
+                    <div class="danger-row">
+                        <div>
+                            <p class="danger-title">Projekt törlése</p>
+                            <p class="danger-desc">Végleges törlés, visszavonhatatlan művelet.</p>
+                        </div>
+                        <button class="btn-danger" on:click={() => openConfirm(
+                            'Projekt Törlése',
+                            'Biztosan törlöd véglegesen a projektet?',
+                            handleDelete
+                        )}>Törlés</button>
+                    </div>
+                </div>
             </div>
-        {:else}
-            <p class="empty">Még nincs git integráció hozzáadva</p>
         {/if}
-        <button on:click={() => isCreateIntegrationOpen = true}>+ Git integráció hozzáadása</button>
+
+        {#if activeTab === 'labels'}
+            <div class="tab-section">
+                <div class="section-header">
+                    <h2>Labelek</h2>
+                    <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
+                        <Plus size={15} />
+                        Új label
+                    </button>
+                </div>
+                <div class="labels-list">
+                    {#if labels.length > 0}
+                        {#each labels as label}
+                            <LabelCard {label} onDelete={requestDeleteLabel} />
+                        {/each}
+                    {:else}
+                        <p class="empty">Nincs még label</p>
+                    {/if}
+                </div>
+            </div>
+        {/if}
+
+        {#if activeTab === 'git'}
+            <div class="tab-section">
+                <div class="section-header">
+                    <h2>Git Integráció</h2>
+                    <button class="btn-add" on:click={() => isCreateIntegrationOpen = true}>
+                        <Plus size={15} />
+                        Integráció hozzáadása
+                    </button>
+                </div>
+                {#if integrations.length > 0}
+                    <div class="integrations-list">
+                        {#each integrations as integration (integration.id)}
+                            <IntegrationCard {integration} projectId={project.id} />
+                        {/each}
+                    </div>
+                {:else}
+                    <p class="empty">Még nincs git integráció hozzáadva</p>
+                {/if}
+            </div>
+        {/if}
+
     </div>
 </div>
-<!--Modal-->
+
+<!--Modálok – változatlan-->
 {#if isConfirmOpen}
-<ConfirmModal
-    bind:isOpen={isConfirmOpen}
-    title={confirmTitle}
-    message={confirmMessage}
-    confirmText="Megerősítés"
-    onConfirm={confirmAction}
+    <ConfirmModal
+        bind:isOpen={isConfirmOpen}
+        title={confirmTitle}
+        message={confirmMessage}
+        confirmText="Megerősítés"
+        onConfirm={confirmAction}
     />
 {/if}
 {#if isCreateLabelOpen}
@@ -257,82 +322,270 @@
 {/if}
 
 <style>
-    div {
-        max-width: 600px;
+    .settings-container {
+        width: 100%;
+        margin: 0;
         padding: 2rem;
         display: flex;
         flex-direction: column;
-        gap: 1rem;
-        margin: 0 auto;
+        gap: 1.5rem;
     }
 
     h1 {
-        margin-bottom: 0.5rem;
         font-size: 1.8rem;
     }
 
+    h2 {
+        font-size: 1.1rem;
+        color: var(--text-primary);
+    }
+
+    h3 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 0.75rem;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+        display: flex;
+        gap: 0.25rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0;
+    }
+
+    .tab-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        border: none;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+        margin-bottom: -1px;
+        transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+
+    .tab-btn.active {
+        color: var(--accent-blue);
+        border-bottom-color: var(--accent-blue);
+        background: transparent;
+    }
+
+    /* ── Tab content ── */
+    .tab-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .tab-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    /* ── Form ── */
     form {
         display: flex;
         flex-direction: column;
         gap: 1rem;
     }
 
-    p {
+    .field {
         display: flex;
         flex-direction: column;
-        gap: 0.3rem;
+        gap: 0.35rem;
+    }
+
+    label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
     }
 
     input, textarea {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
-        padding: 0.5rem;
+        color: var(--text-primary);
+        padding: 0.5rem 0.75rem;
         font-size: 1rem;
         width: 100%;
     }
 
     textarea {
         resize: vertical;
-        min-height: 180px;
-        width: 100%;
+        min-height: 120px;
     }
 
     input:focus, textarea:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
-    span {
-        font-weight: bold;
+    .meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        font-size: 0.9rem;
+        color: var(--text-secondary);
     }
 
-    button {
-        padding: 0.5rem 1rem;
+    .meta span {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+        background: var(--accent-blue-bg);
+        border: 1px solid var(--accent-blue);
+        color: var(--accent-blue);
+        padding: 0.5rem 1.25rem;
         border-radius: 6px;
         cursor: pointer;
-        width: fit-content;
-        align-self: center;
+        font-size: 0.9rem;
+        align-self: flex-start;
+        transition: background 0.15s;
     }
 
-    .divider {
-        width: 100%;
-        border-top: 1px solid #333;
-        padding-top: 1rem;
-        left: unset;
-        transform: unset;
+    .btn-primary:hover {
+        background: var(--accent-blue);
+        color: #fff;
     }
 
-    #success { 
-        color: greenyellow; 
+    .btn-add {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: color 0.15s, background 0.15s;
     }
-    #failed { 
-        color: red; white-space: 
-        pre-line; 
+
+    .btn-add:hover {
+        color: var(--text-primary);
+        background: var(--border-hover);
     }
-    #delete { 
-        color: red; 
-        margin-top: 0.5rem; 
+
+    /* ── Danger zone ── */
+    .danger-zone {
+        border: 1px solid var(--accent-red-bg);
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-top: 0.5rem;
+    }
+
+    .danger-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .danger-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 0;
+        border-top: 1px solid var(--border);
+    }
+
+    .danger-row:first-child {
+        border-top: none;
+        padding-top: 0;
+    }
+
+    .danger-title {
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .danger-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+    }
+
+    .btn-warning {
+        background: var(--accent-yellow-bg);
+        border: 1px solid var(--accent-yellow);
+        color: var(--accent-yellow);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+    }
+
+    .btn-warning:hover {
+        background: var(--accent-yellow);
+        color: #000;
+    }
+
+    .btn-danger {
+        background: var(--accent-red-bg);
+        border: 1px solid var(--accent-red);
+        color: var(--accent-red);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+    }
+
+    .btn-danger:hover {
+        background: var(--accent-red);
+        color: #fff;
+    }
+
+    /* ── Misc ── */
+    .msg {
+        font-size: 0.9rem;
+        padding: 0.5rem 0;
+    }
+
+    .msg.success { color: var(--accent-green); }
+    .msg.error { color: var(--accent-red); white-space: pre-line; }
+
+    .empty {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        padding: 1rem 0;
+    }
+
+    .labels-list, .integrations-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
     }
 </style>

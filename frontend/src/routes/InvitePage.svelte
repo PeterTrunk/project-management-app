@@ -6,6 +6,8 @@
     import { getProjectsAsync } from '../lib/api/projectApi';
     import { setProjects, setActiveProject } from '../lib/stores/projectStore';
 
+    import { CircleCheckBig, CircleX, Loader } from 'lucide-svelte';
+
     export let params: { token: string };
 
     let loading = true;
@@ -56,18 +58,18 @@
 
         {#if loading}
             <div class="status">
-                <div class="spinner"></div>
+                <Loader size={40} color="var(--accent-green)" style="animation: spin 0.8s linear infinite;" />
                 <p>Csatlakozás folyamatban...</p>
             </div>
         {:else if success}
             <div class="status success">
-                <span class="icon">✓</span>
+                <CircleCheckBig size={40} color="var(--accent-green)" />
                 <p>Sikeresen csatlakoztál a projekthez!</p>
                 <p class="hint">Átirányítás folyamatban...</p>
             </div>
         {:else if error}
             <div class="status error">
-                <span class="icon">✕</span>
+                <CircleX size={40} color="var(--accent-red)" />
                 <p>{error}</p>
                 <button on:click={() => push('/')}>Vissza a főoldalra</button>
             </div>
@@ -81,11 +83,11 @@
         justify-content: center;
         align-items: center;
         min-height: 100vh;
-        background: #121212;
+        background: var(--bg-primary);
     }
 
     .invite-card {
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 12px;
         padding: 2.5rem;
         width: 400px;
@@ -93,7 +95,7 @@
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
         text-align: center;
     }
 
@@ -110,40 +112,24 @@
         padding: 1rem;
     }
 
-    .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid #333;
-        border-top-color: #4caf50;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
 
-    .icon {
-        font-size: 2.5rem;
-    }
-
-    .status.success .icon { color: #4caf50; }
-    .status.error .icon { color: #ff5555; }
-
     .hint {
-        color: #666;
+        color: var(--text-muted);
         font-size: 0.85rem;
     }
 
     button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: white;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-primary);
         padding: 0.5rem 1rem;
         border-radius: 6px;
         cursor: pointer;
         margin-top: 0.5rem;
     }
 
-    button:hover { background: #333; }
+    button:hover { background: var(--border-hover); }
 </style>

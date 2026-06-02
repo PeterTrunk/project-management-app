@@ -4,6 +4,8 @@
     import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
     import { validateCommentBody } from '../validators';
 
+    import { Trash2 } from 'lucide-svelte';
+
     export let projectId: string;
     export let taskId: string;
     export let currentUserId: string;
@@ -91,7 +93,9 @@
                     <span class="comment-author">{comment.userName}</span>
                     <span class="comment-date">{formatDate(comment.createdAt)}</span>
                     {#if comment.userId === currentUserId}
-                        <button class="delete-btn" on:click={() => handleDeleteComment(comment.id)}>🗑</button>
+                        <button class="delete-btn" on:click={() => handleDeleteComment(comment.id)}>
+                            <Trash2 size={14} />
+                        </button>
                     {/if}
                 </div>
                 <p>{comment.body}</p>
@@ -114,16 +118,16 @@
     .section h3 {
         font-size: 1rem;
         margin-bottom: 0.5rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .comment {
         text-align: left;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         padding: 0.75rem;
         margin-bottom: 0.5rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
     }
 
     .comment p {
@@ -141,11 +145,12 @@
     .comment-author {
         font-weight: bold;
         font-size: 0.9rem;
+        color: var(--text-primary);
     }
 
     .comment-date {
         font-size: 0.75rem;
-        color: #888;
+        color: var(--text-muted);
     }
 
     .delete-btn {
@@ -153,11 +158,16 @@
         background: transparent;
         border: none;
         cursor: pointer;
-        color: #aaa;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        padding: 0.15rem;
+        border-radius: 3px;
     }
 
     .delete-btn:hover {
-        color: #ff5555;
+        color: var(--accent-red);
+        background: var(--accent-red-bg);
     }
 
     .comment-input {
@@ -168,15 +178,20 @@
     }
 
     .comment-input textarea {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 0.9rem;
         resize: vertical;
         min-height: 80px;
         width: 100%;
+    }
+
+    .comment-input textarea:focus {
+        outline: none;
+        border-color: var(--accent-blue);
     }
 
     .comment-input button {
@@ -187,12 +202,12 @@
     }
 
     .empty {
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.85rem;
     }
 
     #failed {
-        color: red;
+        color: var(--accent-red);
         white-space: pre-line;
         font-size: 0.85rem;
     }

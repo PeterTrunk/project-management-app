@@ -63,18 +63,18 @@
         align-items: center;
         min-height: 100vh;
         width: 100vw;
-        background: #121212;
+        background: var(--bg-primary);
     }
 
     .auth-card {
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 12px;
         padding: 2.5rem;
         width: 400px;
         display: flex;
         flex-direction: column;
         gap: 1rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
     }
 
     h1 {
@@ -90,10 +90,10 @@
     }
 
     input {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.75rem;
         font-size: 1rem;
         width: 100%;
@@ -101,13 +101,13 @@
 
     input:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--text-muted);
     }
 
     button[type="submit"] {
-        background: #3a3a3a;
-        border: 1px solid #555;
-        color: white;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-primary);
         padding: 0.75rem;
         border-radius: 6px;
         cursor: pointer;
@@ -117,14 +117,14 @@
     }
 
     button[type="submit"]:hover {
-        background: #444;
+        background: var(--border-hover);
     }
 
     .divider {
         display: flex;
         align-items: center;
         gap: 1rem;
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.85rem;
     }
 
@@ -132,13 +132,13 @@
     .divider::after {
         content: '';
         flex: 1;
-        border-top: 1px solid #333;
+        border-top: 1px solid var(--border-subtle);
     }
 
     .secondary-btn {
         background: transparent;
-        border: 1px solid #444;
-        color: #aaa;
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
         padding: 0.75rem;
         border-radius: 6px;
         cursor: pointer;
@@ -148,9 +148,9 @@
     }
 
     .secondary-btn:hover {
-        border-color: #666;
-        color: white;
+        border-color: var(--text-muted);
+        color: var(--text-primary);
     }
 
-    #failed { color: red; white-space: pre-line; }
+    #failed { color: var(--accent-red); white-space: pre-line; }
 </style>
