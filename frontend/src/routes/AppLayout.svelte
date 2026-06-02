@@ -38,6 +38,15 @@
         FolderOpen, GitBranch, Settings, LogOut, ChevronLeft, 
         ChevronRight, Plus, FileText, User
     } from 'lucide-svelte';
+
+    //Ideiglenes Theme Váltó Toggle
+    import { themeStore } from '../lib/stores/themeStore';
+    import { toggleTheme } from '../lib/stores/themeStore';
+    import { Sun, Moon } from 'lucide-svelte';
+
+    let currentTheme = 'dark';
+    themeStore.subscribe(t => currentTheme = t);
+
     
     let sidebarCollapsed = false;
 
@@ -337,6 +346,20 @@
                 <LogOut size={18} />
                 {#if !sidebarCollapsed}
                     <span>Kijelentkezés</span>
+                {/if}
+            </button>
+            <!-- sidebar-user részbe: -->
+            <button class="icon-btn" on:click={toggleTheme} title="Téma váltás">
+                {#if currentTheme === 'dark'}
+                    <Sun size={18} />
+                    {#if !sidebarCollapsed}
+                        <span>Light mód</span>
+                    {/if}
+                {:else}
+                    <Moon size={18} />
+                    {#if !sidebarCollapsed}
+                        <span>Dark mód</span>
+                    {/if}
                 {/if}
             </button>
         </div>
