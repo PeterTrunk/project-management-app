@@ -1,6 +1,8 @@
 <script lang="ts">
     import type { CommitLinkResponse } from '../api/taskApi';
 
+    import { GitCommitHorizontal } from 'lucide-svelte';
+
     export let commit: CommitLinkResponse;
 
     function shortenSha(sha: string): string {
@@ -13,7 +15,9 @@
 </script>
 
 <div class="commit-card">
-    <span class="commit-icon">🔵</span>
+    <span class="commit-icon">
+        <GitCommitHorizontal size={15} />
+    </span>
     <div class="commit-info">
         <div class="commit-main">
             {#if commit.commitUrl}
@@ -41,17 +45,20 @@
         align-items: flex-start;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
+        transition: border-color 0.15s;
     }
 
     .commit-card:hover {
-        border-color: #555;
+        border-color: var(--border-hover);
     }
 
     .commit-icon {
-        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        color: var(--accent-blue);
         flex-shrink: 0;
         margin-top: 0.1rem;
     }
@@ -74,7 +81,7 @@
     .commit-sha {
         font-family: monospace;
         font-size: 0.85rem;
-        color: #4a9eff;
+        color: var(--accent-blue);
         text-decoration: none;
         flex-shrink: 0;
     }
@@ -83,7 +90,7 @@
 
     .commit-message {
         font-size: 0.9rem;
-        color: #ddd;
+        color: var(--text-primary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -95,6 +102,6 @@
         display: flex;
         gap: 0.4rem;
         font-size: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
     }
 </style>

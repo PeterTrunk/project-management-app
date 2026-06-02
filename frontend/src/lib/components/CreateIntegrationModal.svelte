@@ -3,6 +3,8 @@
     import { createIntegrationAsync } from '../api/integrationApi';
     import { addIntegration } from '../stores/integrationStore';
 
+    import { GitBranch, Plus, TriangleAlert } from 'lucide-svelte';
+
     export let isOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
@@ -61,14 +63,14 @@
     tabindex="-1"
 >
     <div class="modal-content">
-        <h1>Git Integráció Hozzáadása</h1>
+        <h1><GitBranch size={18} /> Git Integráció Hozzáadása</h1>
 
         <form on:submit|preventDefault={handleCreate}>
             <div class="form-group">
                 <label for="provider">Provider</label>
                 <select id="provider" bind:value={provider}>
-                    <option value="GitHub">🐙 GitHub</option>
-                    <option value="GitLab">🦊 GitLab</option>
+                    <option value="GitHub">GitHub</option>
+                    <option value="GitLab">GitLab</option>
                 </select>
             </div>
 
@@ -91,8 +93,9 @@
                     placeholder="Minimum 16 karakter"
                     bind:value={webhookSecret}
                 />
-                <span class="hint">
-                    ⚠️ Ezt a secretet add meg a {provider} webhook beállításánál is!
+                <span class="hint warning">
+                    <TriangleAlert size={18} />
+                    Ezt a secretet add meg a {provider} webhook beállításánál is!
                     Tárold biztonságos helyen — később nem lesz megjeleníthető!
                 </span>
             </div>
@@ -117,11 +120,15 @@
 
             <div class="buttons">
                 <button type="button" on:click={closeModal}>Mégse</button>
-                <button 
-                    type="submit" 
-                    class="create-btn" 
+                <button
+                    type="submit"
+                    class="create-btn"
                     disabled={loading || !repoFullName || !webhookSecret}>
-                    {loading ? 'Létrehozás...' : '+ Hozzáadás'}
+                    {#if loading}
+                        Létrehozás...
+                    {:else}
+                        <Plus size={15} /> Hozzáadás
+                    {/if}
                 </button>
             </div>
         </form>
@@ -131,11 +138,9 @@
 <style>
     .modal-overlay {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -143,7 +148,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         width: 480px;
@@ -153,7 +159,14 @@
         gap: 1.5rem;
     }
 
-    h1 { font-size: 1.3rem; margin: 0; }
+    h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1.3rem;
+        margin: 0;
+        color: var(--text-primary);
+    }
 
     form {
         display: flex;
@@ -167,19 +180,22 @@
         gap: 0.4rem;
     }
 
-    label { font-size: 0.9rem; color: #ccc; }
+    label {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
 
     .optional {
         font-size: 0.8rem;
-        color: #666;
+        color: var(--text-muted);
         margin-left: 0.5rem;
     }
 
     select, input {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 0.95rem;
         width: 100%;
@@ -187,12 +203,19 @@
 
     select:focus, input:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
     .hint {
         font-size: 0.75rem;
-        color: #555;
+        color: var(--text-muted);
+    }
+
+    .hint.warning {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.35rem;
+        color: var(--accent-yellow);
     }
 
     .buttons {
@@ -203,25 +226,29 @@
     }
 
     button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.5rem 1rem;
         border-radius: 6px;
         cursor: pointer;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: white;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
     }
 
-    button:hover { background: #333; }
+    button:hover { background: var(--border-hover); color: var(--text-primary); }
 
     .create-btn {
-        background: #1a3a1a;
-        border-color: #4caf50;
-        color: #4caf50;
+        background: var(--accent-green-bg);
+        border-color: var(--accent-green);
+        color: var(--accent-green);
     }
 
-    .create-btn:hover { background: #2a4a2a; }
+    .create-btn:hover { background: var(--accent-green); color: #fff; }
     .create-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .error { color: red; font-size: 0.85rem; }
+    .error { color: var(--accent-red); font-size: 0.85rem; }
 </style>

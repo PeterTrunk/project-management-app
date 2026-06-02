@@ -4,6 +4,11 @@
     import { removeIntegration, updateIntegration } from '../stores/integrationStore';
     import ConfirmModal from './ConfirmModal.svelte';
 
+    import { 
+        GitBranch, Copy, Check, RefreshCw, KeyRound, Trash2, 
+        BookOpen, ToggleLeft, ToggleRight, CircleCheck, Clock 
+    } from 'lucide-svelte';
+
     export let integration: IntegrationResponse;
     export let projectId: string;
 
@@ -94,60 +99,66 @@
         setTimeout(() => copiedUrl = false, 2000);
     }
 
-    function getProviderIcon(provider: string): string {
-        switch (provider) {
-            case 'GitHub': return '🐙';
-            case 'GitLab': return '🦊';
-            default: return '🔗';
-        }
+    function getProviderIcon(provider: string): any {
+        return GitBranch;
     }
 </script>
 
 <div class="integration-card">
     <div class="card-header">
         <div class="card-title">
-            <span class="provider-icon">{getProviderIcon(integration.provider)}</span>
+            <span class="provider-icon">
+                <svelte:component this={getProviderIcon(integration.provider)} size={18} />
+            </span>
             <span class="provider">{integration.provider}</span>
             <span class="repo">{integration.repoFullName}</span>
         </div>
         <div class="card-badges">
             {#if integration.isVerified}
-                <span class="badge verified">✓ Verified</span>
+                <span class="badge verified"><CircleCheck size={12} /> Verified</span>
             {:else}
-                <span class="badge unverified">⏳ Nem ellenőrzött</span>
+                <span class="badge unverified"><Clock size={12} /> Nem ellenőrzött</span>
             {/if}
             <span class="badge" class:enabled={integration.isEnabled} class:disabled={!integration.isEnabled}>
-                {integration.isEnabled ? '● Aktív' : '○ Inaktív'}
+                {#if integration.isEnabled}
+                    <ToggleRight size={12} /> Aktív
+                {:else}
+                    <ToggleLeft size={12} /> Inaktív
+                {/if}
             </span>
         </div>
     </div>
 
     <div class="webhook-info">
         <div class="info-row">
-            <label>Webhook URL:</label>
-            <div class="copy-row">
-                <input type="text" readonly value={integration.webhookUrl} />
-                <button class="copy-btn" on:click={copyUrl}>
-                    {copiedUrl ? '✓ Másolva!' : '📋'}
-                </button>
-            </div>
+            <label>Webhook URL:
+                <div class="copy-row">
+                    <input type="text" readonly value={integration.webhookUrl} />
+                    <button class="copy-btn" on:click={copyUrl}>
+                        {#if copiedUrl}
+                            <Check size={14} /> Másolva!
+                        {:else}
+                            <Copy size={14} />
+                        {/if}
+                    </button>
+                </div>
+            </label>
         </div>
     </div>
 
-    <!-- Beállítási útmutató -->
     <button class="guide-toggle" on:click={() => showGuide = !showGuide}>
-        📖 {showGuide ? 'Útmutató elrejtése' : 'Beállítási útmutató'}
+        <BookOpen size={14} /> {showGuide ? 'Útmutató elrejtése' : 'Beállítási útmutató'}
     </button>
 
     {#if showGuide}
         <div class="guide">
             {#if integration.provider === 'GitHub'}
                 <ol>
-                    <li>Menj a repo <strong>Settings → Webhooks → Add webhook</strong></li>
+                    <li>Menj a repo <strong>Settings/Webhooks/Add webhook</strong> menüjébe</li>
                     <li>Payload URL: <code>{integration.webhookUrl}</code></li>
                     <li>Content type: <code>application/json</code></li>
                     <li>Secret: <strong>a létrehozáskor megadott webhook secret</strong></li>
-                    <li>Events: ✓ <strong>Pushes</strong> ✓ <strong>Pull requests</strong></li>
+                    <li>Events: <strong>Pushes</strong> és <strong>Pull requests</strong></li>
                     <li>Kattints az <strong>Add webhook</strong> gombra</li>
                 </ol>
             {:else if integration.provider === 'GitLab'}
@@ -155,14 +166,13 @@
                     <li>Menj a repo <strong>Settings → Webhooks</strong></li>
                     <li>URL: <code>{integration.webhookUrl}</code></li>
                     <li>Secret token: <strong>a létrehozáskor megadott webhook secret</strong></li>
-                    <li>Triggers: ✓ <strong>Push events</strong> ✓ <strong>Merge request events</strong></li>
+                    <li>Triggers: <strong>Push events</strong> és <strong>Merge request events</strong></li>
                     <li>Kattints az <strong>Add webhook</strong> gombra</li>
                 </ol>
             {/if}
         </div>
     {/if}
 
-    <!-- Secret reset form -->
     {#if isResetSecretOpen}
         <div class="reset-secret-form">
             <label for="newSecret">Új Webhook Secret</label>
@@ -180,7 +190,11 @@
                     Mégse
                 </button>
                 <button class="confirm-reset-btn" on:click={handleResetSecret} disabled={resetLoading}>
-                    {resetLoading ? 'Mentés...' : '✓ Secret frissítése'}
+                    {#if resetLoading}
+                        Mentés...
+                    {:else}
+                        <Check size={14} /> Secret frissítése
+                    {/if}
                 </button>
             </div>
         </div>
@@ -188,16 +202,20 @@
 
     <div class="card-actions">
         <button class="toggle-btn" on:click={handleToggle}>
-            {integration.isEnabled ? '○ Letiltás' : '● Engedélyezés'}
+            {#if integration.isEnabled}
+                <ToggleLeft size={15} /> Letiltás
+            {:else}
+                <ToggleRight size={15} /> Engedélyezés
+            {/if}
         </button>
         <button class="regenerate-btn" on:click={handleRegenerate}>
-            🔄 Token regenerálás
+            <RefreshCw size={15} /> Token regenerálás
         </button>
         <button class="reset-btn" on:click={() => isResetSecretOpen = !isResetSecretOpen}>
-            🔑 Secret reset
+            <KeyRound size={15} /> Secret reset
         </button>
         <button class="delete-btn" on:click={handleDelete}>
-            🗑 Törlés
+            <Trash2 size={15} /> Törlés
         </button>
     </div>
 
@@ -218,8 +236,8 @@
 
 <style>
     .integration-card {
-        background: #1e1e1e;
-        border: 1px solid #333;
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
         border-radius: 8px;
         padding: 1rem;
         display: flex;
@@ -241,9 +259,14 @@
         gap: 0.5rem;
     }
 
-    .provider-icon { font-size: 1.2rem; }
-    .provider { font-weight: bold; font-size: 0.95rem; }
-    .repo { color: #888; font-size: 0.9rem; }
+    .provider-icon {
+        display: flex;
+        align-items: center;
+        color: var(--text-secondary);
+    }
+
+    .provider { font-weight: bold; font-size: 0.95rem; color: var(--text-primary); }
+    .repo { color: var(--text-muted); font-size: 0.9rem; }
 
     .card-badges {
         display: flex;
@@ -251,16 +274,19 @@
     }
 
     .badge {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: bold;
     }
 
-    .verified { background: #1a3a1a; color: #4caf50; }
-    .unverified { background: #2a2a1a; color: #f0a500; }
-    .enabled { background: #1a3a1a; color: #4caf50; }
-    .disabled { background: #2a2a2a; color: #666; }
+    .verified   { background: var(--accent-green-bg);  color: var(--accent-green); }
+    .unverified { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+    .enabled    { background: var(--accent-green-bg);  color: var(--accent-green); }
+    .disabled   { background: var(--bg-hover);         color: var(--text-muted); }
 
     .webhook-info {
         display: flex;
@@ -268,15 +294,12 @@
         gap: 0.5rem;
     }
 
-    .info-row {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
     .info-row label {
         font-size: 0.8rem;
-        color: #888;
+        color: var(--text-muted);
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
     }
 
     .copy-row {
@@ -286,18 +309,21 @@
 
     .copy-row input {
         flex: 1;
-        background: #2a2a2a;
-        border: 1px solid #333;
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
         border-radius: 6px;
-        color: #aaa;
+        color: var(--text-secondary);
         padding: 0.4rem 0.6rem;
         font-size: 0.8rem;
     }
 
     .copy-btn {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #aaa;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
         padding: 0.4rem 0.6rem;
         border-radius: 6px;
         cursor: pointer;
@@ -305,12 +331,15 @@
         font-size: 0.8rem;
     }
 
-    .copy-btn:hover { background: #333; }
+    .copy-btn:hover { background: var(--border-hover); color: var(--text-primary); }
 
     .guide-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         background: transparent;
         border: none;
-        color: #4a9eff;
+        color: var(--accent-blue);
         cursor: pointer;
         font-size: 0.85rem;
         text-align: left;
@@ -320,11 +349,11 @@
     .guide-toggle:hover { text-decoration: underline; }
 
     .guide {
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         padding: 0.75rem 1rem;
         font-size: 0.85rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
 
     .guide ol {
@@ -336,15 +365,15 @@
     }
 
     .guide code {
-        background: #1a1a1a;
+        background: var(--bg-primary);
         padding: 0.1rem 0.3rem;
         border-radius: 3px;
         font-size: 0.8rem;
-        color: #4a9eff;
+        color: var(--accent-blue);
     }
 
     .reset-secret-form {
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         padding: 0.75rem;
         display: flex;
@@ -354,14 +383,14 @@
 
     .reset-secret-form label {
         font-size: 0.85rem;
-        color: #aaa;
+        color: var(--text-secondary);
     }
 
     .reset-secret-form input {
-        background: #1e1e1e;
-        border: 1px solid #444;
+        background: var(--bg-card);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 0.9rem;
         width: 100%;
@@ -374,12 +403,15 @@
     }
 
     .confirm-reset-btn {
-        background: #1a3a1a;
-        border-color: #4caf50;
-        color: #4caf50;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--accent-green-bg);
+        border-color: var(--accent-green);
+        color: var(--accent-green);
     }
 
-    .confirm-reset-btn:hover { background: #2a4a2a; }
+    .confirm-reset-btn:hover { background: var(--accent-green); color: #fff; }
     .confirm-reset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .card-actions {
@@ -389,28 +421,32 @@
     }
 
     button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         cursor: pointer;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: #aaa;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         font-size: 0.85rem;
+        transition: background 0.15s, color 0.15s;
     }
 
-    button:hover { background: #333; }
+    button:hover { background: var(--border-hover); color: var(--text-primary); }
 
-    .toggle-btn { color: #f0a500; border-color: #f0a500; }
-    .toggle-btn:hover { background: #3a2a00; }
+    .toggle-btn     { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+    .toggle-btn:hover { background: var(--accent-yellow-bg); }
 
-    .regenerate-btn { color: #4a9eff; border-color: #4a9eff; }
-    .regenerate-btn:hover { background: #1a2a3a; }
+    .regenerate-btn { color: var(--accent-blue); border-color: var(--accent-blue); }
+    .regenerate-btn:hover { background: var(--accent-blue-bg); }
 
-    .reset-btn { color: #b39ddb; border-color: #b39ddb; }
-    .reset-btn:hover { background: #2a1a3a; }
+    .reset-btn      { color: var(--accent-purple); border-color: var(--accent-purple); }
+    .reset-btn:hover { background: var(--accent-purple-bg); }
 
-    .delete-btn { color: #ff5555; border-color: #ff5555; }
-    .delete-btn:hover { background: #3a1a1a; }
+    .delete-btn     { color: var(--accent-red); border-color: var(--accent-red); }
+    .delete-btn:hover { background: var(--accent-red-bg); }
 
-    .error { color: red; font-size: 0.85rem; }
+    .error { color: var(--accent-red); font-size: 0.85rem; }
 </style>

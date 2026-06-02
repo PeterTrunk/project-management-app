@@ -1,6 +1,8 @@
 <script lang="ts">
     import type { PrLinkResponse } from '../api/taskApi';
 
+    import { CircleDot, GitMerge, CircleX, Circle } from 'lucide-svelte';
+
     export let pr: PrLinkResponse;
 
     function getPrStateClass(state: string): string {
@@ -12,12 +14,12 @@
         }
     }
 
-    function getPrStateIcon(state: string): string {
+    function getPrStateIcon(state: string): any {
         switch (state) {
-            case 'open': return '🟡';
-            case 'merged': return '🟣';
-            case 'closed': return '🔴';
-            default: return '⚪';
+            case 'open':   return CircleDot;
+            case 'merged': return GitMerge;
+            case 'closed': return CircleX;
+            default:       return Circle;
         }
     }
 
@@ -27,7 +29,9 @@
 </script>
 
 <div class="pr-card">
-    <span class="pr-icon">{getPrStateIcon(pr.state)}</span>
+    <span class="pr-icon">
+        <svelte:component this={getPrStateIcon(pr.state)} size={15} />
+    </span>
     <div class="pr-info">
         <div class="pr-main">
             {#if pr.prUrl}
@@ -59,19 +63,22 @@
         align-items: flex-start;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
+        transition: border-color 0.15s;
     }
 
     .pr-card:hover {
-        border-color: #555;
+        border-color: var(--border-hover);
     }
 
     .pr-icon {
-        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
         flex-shrink: 0;
         margin-top: 0.1rem;
+        color: var(--text-muted);
     }
 
     .pr-info {
@@ -92,7 +99,7 @@
     .pr-number {
         font-family: monospace;
         font-size: 0.85rem;
-        color: #4a9eff;
+        color: var(--accent-blue);
         text-decoration: none;
         flex-shrink: 0;
     }
@@ -101,7 +108,7 @@
 
     .pr-title {
         font-size: 0.9rem;
-        color: #ddd;
+        color: var(--text-primary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -117,14 +124,14 @@
         flex-shrink: 0;
     }
 
-    .pr-open { background: #3a3a1a; color: #f0a500; }
-    .pr-merged { background: #2a1a3a; color: #b39ddb; }
-    .pr-closed { background: #3a1a1a; color: #ff5555; }
+    .pr-open   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+    .pr-merged { background: var(--accent-purple-bg); color: var(--accent-purple); }
+    .pr-closed { background: var(--accent-red-bg);    color: var(--accent-red); }
 
     .pr-meta {
         display: flex;
         gap: 0.4rem;
         font-size: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
     }
 </style>

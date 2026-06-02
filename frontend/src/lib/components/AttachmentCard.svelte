@@ -2,18 +2,20 @@
     import type { AttachmentResponse } from '../api/attachmentApi';
     import { downloadAttachmentAsync, deleteTaskAttachmentAsync, downloadProjectAttachmentAsync, deleteProjectAttachmentAsync } from '../api/attachmentApi';
 
+    import { Image, FileText, Sheet, FileEdit, Paperclip, Download, Trash2 } from 'lucide-svelte';
+
     export let attachment: AttachmentResponse;
     export let projectId: string;
     export let taskId: string | null = null;
     export let onDelete: (attachmentId: string) => void = () => {};
 
-    function getAttachmentIcon(attachmentType: string): string {
+    function getAttachmentIcon(attachmentType: string): any {
         switch (attachmentType) {
-            case 'image': return '🖼';
-            case 'pdf': return '📄';
-            case 'spreadsheet': return '📊';
-            case 'document': return '📝';
-            default: return '📎';
+            case 'image':       return Image;
+            case 'pdf':         return FileText;
+            case 'spreadsheet': return Sheet;
+            case 'document':    return FileEdit;
+            default:            return Paperclip;
         }
     }
 
@@ -51,7 +53,7 @@
 
 <div class="attachment-card">
     <span class="attachment-icon">
-        {getAttachmentIcon(attachment.attachmentType)}
+        <svelte:component this={getAttachmentIcon(attachment.attachmentType)} size={18} />
     </span>
     <div class="attachment-info">
         <span class="attachment-name">{attachment.fileName}</span>
@@ -61,10 +63,10 @@
     </div>
     <div class="attachment-actions">
         <button class="download-btn" on:click={handleDownload} title="Letöltés">
-            ⬇
+            <Download size={15} />
         </button>
         <button class="delete-btn" on:click={handleDelete} title="Törlés">
-            🗑
+            <Trash2 size={15} />
         </button>
     </div>
 </div>
@@ -75,17 +77,20 @@
         align-items: center;
         gap: 0.75rem;
         padding: 0.5rem 0.75rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
+        transition: border-color 0.15s;
     }
 
     .attachment-card:hover {
-        border-color: #555;
+        border-color: var(--border-hover);
     }
 
     .attachment-icon {
-        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        color: var(--text-muted);
         flex-shrink: 0;
     }
 
@@ -98,12 +103,12 @@
 
     .attachment-name {
         font-size: 0.9rem;
-        color: #ddd;
+        color: var(--text-primary);
     }
 
     .attachment-meta {
         font-size: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
     }
 
     .attachment-actions {
@@ -112,14 +117,17 @@
     }
 
     .download-btn, .delete-btn {
+        display: flex;
+        align-items: center;
         background: transparent;
         border: none;
         cursor: pointer;
-        font-size: 1rem;
         padding: 0.25rem;
         border-radius: 4px;
+        color: var(--text-secondary);
+        transition: background 0.15s, color 0.15s;
     }
 
-    .download-btn:hover { background: #1a3a1a; }
-    .delete-btn:hover { background: #3a1a1a; }
+    .download-btn:hover { background: var(--accent-green-bg); color: var(--accent-green); }
+    .delete-btn:hover   { background: var(--accent-red-bg);   color: var(--accent-red); }
 </style>
