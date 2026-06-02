@@ -9,6 +9,8 @@
     import { getTasksAsync } from '../api/taskApi';
     import { setActiveTask, setTasks, taskStore } from '../stores/taskStore';
 
+    import { ChevronRight, ChevronDown, Plus } from 'lucide-svelte';
+
     export let projectId: string;
     export let tasks: TaskResponse[] = [];
     export let sprints: SprintResponse[] = [];
@@ -28,9 +30,16 @@
 <div class="backlog-container">
     <div class="backlog-header">
         <button class="section-toggle" on:click={() => isCollapsed = !isCollapsed}>
-            {isCollapsed ? '▶' : '▼'} Projekt Backlog ({backlogTasks.length})
+            {#if isCollapsed}
+                <ChevronRight size={14} />
+            {:else}
+                <ChevronDown size={14} />
+            {/if}
+            Projekt Backlog ({backlogTasks.length})
         </button>
-        <button class="create-btn" on:click={() => isCreateTaskOpen = true}>+ Új task</button>
+        <button class="create-btn" on:click={() => isCreateTaskOpen = true}>
+            <Plus size={14} /> Új task
+        </button>
     </div>
 
     {#if !isCollapsed}
@@ -85,9 +94,9 @@
 
 <style>
     .backlog-container {
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 8px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
         overflow: visible;
     }
 
@@ -96,33 +105,42 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.75rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #333;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+        border-radius: 8px 8px 0 0;
     }
 
     .section-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-secondary);
         cursor: pointer;
         font-size: 0.95rem;
         font-weight: bold;
         padding: 0;
+        transition: color 0.15s;
     }
 
-    .section-toggle:hover { color: white; }
+    .section-toggle:hover { color: var(--text-primary); }
 
     .create-btn {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: white;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
         padding: 0.3rem 0.75rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.85rem;
+        transition: background 0.15s, color 0.15s;
     }
 
-    .create-btn:hover { background: #333; }
+    .create-btn:hover { background: var(--border-hover); color: var(--text-primary); }
 
     .backlog-tasks {
         padding: 0.75rem;
@@ -134,7 +152,7 @@
 
     .empty {
         font-size: 0.85rem;
-        color: #555;
+        color: var(--text-muted);
         padding: 0.5rem;
         text-align: center;
     }

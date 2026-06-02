@@ -5,6 +5,8 @@
     import { setSprints } from '../stores/sprintStore';
     import { setTasks } from '../stores/taskStore';
 
+    import { TriangleAlert, CircleCheck } from 'lucide-svelte';
+
     export let isCompleteSprintOpen = false;
     export let projectId: string;
     export let sprint: SprintResponse;
@@ -62,7 +64,7 @@
 
         {#if unfinishedTasks.length > 0}
             <div class="warning">
-                ⚠ {unfinishedTasks.length} befejezetlen task van a sprintben!
+                <TriangleAlert size={16} /> {unfinishedTasks.length} befejezetlen task van a sprintben!
             </div>
 
             <div class="unfinished-list">
@@ -97,7 +99,7 @@
                 </select>
             {/if}
         {:else}
-            <p class="all-done">✓ Minden task elkészült! A sprint lezárható.</p>
+            <p class="all-done"><CircleCheck size={16} /> Minden task elkészült! A sprint lezárható.</p>
         {/if}
 
         {#if error}
@@ -106,7 +108,9 @@
 
         <div class="buttons">
             <button type="button" on:click={closeModal}>Mégse</button>
-            <button class="complete-btn" on:click={handleComplete}>✓ Sprint Lezárása</button>
+            <button class="complete-btn" on:click={handleComplete}>
+                <CircleCheck size={15} /> Sprint Lezárása
+            </button>
         </div>
     </div>
 </div>
@@ -118,7 +122,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -126,7 +130,8 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
         width: 550px;
@@ -140,16 +145,19 @@
 
     h1 {
         font-size: 1.3rem;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--border);
         padding-bottom: 0.75rem;
     }
 
     .warning {
-        background: #3a2a00;
-        border: 1px solid #f0a500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--accent-yellow-bg);
+        border: 1px solid var(--accent-yellow);
         border-radius: 6px;
         padding: 0.75rem;
-        color: #f0a500;
+        color: var(--accent-yellow);
         font-size: 0.9rem;
     }
 
@@ -164,13 +172,17 @@
     .unfinished-task {
         display: flex;
         gap: 0.5rem;
+        align-items: center;
         padding: 0.4rem 0.75rem;
-        background: #2a2a2a;
+        background: var(--bg-hover);
         border-radius: 6px;
         font-size: 0.9rem;
     }
 
-    .task-key { color: #888; min-width: 60px; }
+    .task-key {
+        color: var(--text-muted);
+        min-width: 60px;
+    }
 
     .options {
         display: flex;
@@ -184,19 +196,28 @@
         gap: 0.5rem;
         cursor: pointer;
         font-size: 0.9rem;
+        color: var(--text-secondary);
     }
 
     select {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         width: 100%;
     }
 
+    select:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
     .all-done {
-        color: #4caf50;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--accent-green);
         font-size: 0.95rem;
     }
 
@@ -208,16 +229,22 @@
     }
 
     button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.5rem 1rem;
         border-radius: 6px;
         cursor: pointer;
     }
 
     .complete-btn {
-        background: #1a3a1a;
-        border: 1px solid #4caf50;
-        color: #4caf50;
+        background: var(--accent-green-bg);
+        border: 1px solid var(--accent-green);
+        color: var(--accent-green);
+        transition: background 0.15s;
     }
+
+    .complete-btn:hover { background: var(--accent-green); color: #fff; }
 
     .priority {
         font-size: 0.75rem;
@@ -225,13 +252,11 @@
         border-radius: 4px;
     }
 
-    .priority-low { background: #1a3a1a; color: #4caf50; }
-    .priority-medium { background: #3a3a1a; color: #ffeb3b; }
-    .priority-high { background: #3a1a1a; color: #ff5722; }
-    .priority-critical { background: #4a0000; color: #ff0000; }
-    .priority-normal { background: #2a2a2a; color: #aaa; }
+    .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
+    .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+    .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
+    .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
+    .priority-normal   { background: var(--bg-hover);         color: var(--text-muted); }
 
-    .complete-btn:hover { background: #2a4a2a; }
-
-    #failed { color: red; white-space: pre-line; }
+    #failed { color: var(--accent-red); white-space: pre-line; }
 </style>

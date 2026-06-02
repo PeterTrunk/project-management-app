@@ -6,6 +6,8 @@
     import TaskDetailModal from './TaskDetailModal.svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
 
+    import { Pencil, Undo2, CircleCheck, Play, Trash2, Star } from 'lucide-svelte';
+
     export let sprint: SprintResponse;
     export let tasks: TaskResponse[] = [];
     export let boards: BoardResponse[] = [];
@@ -75,13 +77,25 @@
         </div>
         <div class="sprint-actions">
             {#if sprint.state === 'Active'}
-                <button on:click={() => onEdit(sprint)}>✏ Szerkesztés</button>
-                <button on:click={() => onPlan(sprint.id)}>↩ Visszatervezés</button>
-                <button class="complete-btn" on:click={() => onComplete(sprint)}>✓ Lezárás</button>
+                <button on:click={() => onEdit(sprint)}>
+                    <Pencil size={14} /> Szerkesztés
+                </button>
+                <button on:click={() => onPlan(sprint.id)}>
+                    <Undo2 size={14} /> Visszatervezés
+                </button>
+                <button class="complete-btn" on:click={() => onComplete(sprint)}>
+                    <CircleCheck size={14} /> Lezárás
+                </button>
             {:else if sprint.state === 'Planning'}
-                <button on:click|stopPropagation={() => onEdit(sprint)}>✏ Szerkesztés</button>
-                <button class="activate-btn" on:click={() => onActivate(sprint.id)}>▶ Aktiválás</button>
-                <button class="danger-btn" on:click|stopPropagation={() => onDelete(sprint.id)}>🗑 Törlés</button>
+                <button on:click|stopPropagation={() => onEdit(sprint)}>
+                    <Pencil size={14} /> Szerkesztés
+                </button>
+                <button class="activate-btn" on:click={() => onActivate(sprint.id)}>
+                    <Play size={14} /> Aktiválás
+                </button>
+                <button class="danger-btn" on:click|stopPropagation={() => onDelete(sprint.id)}>
+                    <Trash2 size={14} /> Törlés
+                </button>
             {/if}
         </div>
     </div>
@@ -93,7 +107,7 @@
             <h4>
                 {boardName}
                 {#if boards.find(b => b.name === boardName)?.isDefault}
-                    <span class="default-badge">★</span>
+                    <span class="default-badge"><Star size={12} /></span>
                 {/if}
             </h4>
             <div class="task-list">
@@ -142,16 +156,16 @@
 
 <style>
     .sprint-card {
-        background: #1e1e1e;
+        background: var(--bg-card);
         border-radius: 8px;
         padding: 1rem;
-        border: 1px solid #333;
+        border: 1px solid var(--border-subtle);
         margin-bottom: 0.75rem;
     }
 
     .sprint-card.active {
-        border-color: #f0a500;
-        background: #1e1a0e;
+        border-color: var(--accent-yellow);
+        background: var(--accent-yellow-bg);
     }
 
     .sprint-card.completed {
@@ -176,61 +190,80 @@
     .sprint-title h2 {
         font-size: 1rem;
         margin: 0;
+        color: var(--text-primary);
     }
 
     .active-badge {
-        color: #f0a500;
+        color: var(--accent-yellow);
         font-size: 0.85rem;
         font-weight: bold;
     }
 
     .sprint-dates {
         font-size: 0.85rem;
-        color: #888;
+        color: var(--text-muted);
     }
 
     .sprint-actions {
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .sprint-actions button {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
         padding: 0.3rem 0.6rem;
         border-radius: 6px;
-        border: 1px solid #444;
-        background: #2a2a2a;
-        color: white;
+        border: 1px solid var(--border-hover);
+        background: var(--bg-hover);
+        color: var(--text-secondary);
         cursor: pointer;
         font-size: 0.85rem;
+        transition: background 0.15s, color 0.15s;
     }
 
-    .activate-btn { border-color: #4caf50; color: #4caf50; }
-    .complete-btn { border-color: #2196f3; color: #2196f3; }
-    .danger-btn { border-color: #ff5555; color: #ff5555; }
+    .sprint-actions button:hover {
+        background: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .activate-btn { border-color: var(--accent-green) !important; color: var(--accent-green) !important; }
+    .activate-btn:hover { background: var(--accent-green-bg) !important; }
+
+    .complete-btn { border-color: var(--accent-blue) !important; color: var(--accent-blue) !important; }
+    .complete-btn:hover { background: var(--accent-blue-bg) !important; }
+
+    .danger-btn { border-color: var(--accent-red) !important; color: var(--accent-red) !important; }
+    .danger-btn:hover { background: var(--accent-red-bg) !important; }
 
     .sprint-goal {
         font-size: 0.85rem;
-        color: #aaa;
+        color: var(--text-secondary);
         margin-bottom: 0.75rem;
         font-style: italic;
     }
 
     .board-group h4 {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
         font-size: 0.8rem;
-        color: #888;
+        color: var(--text-muted);
         margin: 0.5rem 0 0.25rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
 
     .default-badge {
-        color: #f0a500;
-        font-size: 0.75rem;
-        margin-left: 0.25rem;
+        display: flex;
+        align-items: center;
+        color: var(--accent-yellow);
     }
-    
+
     .empty {
-        color: #555;
+        color: var(--text-muted);
         font-size: 0.8rem;
         margin: 0;
     }

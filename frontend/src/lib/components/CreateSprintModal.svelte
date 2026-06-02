@@ -104,68 +104,68 @@
 </div>
 
 <style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--shadow);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
 
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
+    .modal-content {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        padding: 2rem;
+        border-radius: 8px;
+        width: 500px;
+        max-width: 95vw;
+        max-height: 90vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        position: relative;
+    }
 
-.modal-content {
-    background: #1e1e1e;
-    padding: 2rem;
-    border-radius: 8px;
-    width: 500px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    position: relative;
-}
+    .modal-content h1 {
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+    }
 
-.modal-content h1 {
-    margin-bottom: 0.5rem;
-    font-size: 1.5rem;
-}
+    form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
 
-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
+    input {
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
+        border-radius: 6px;
+        color: var(--text-primary);
+        padding: 0.5rem;
+        font-size: 1rem;
+        width: 100%;
+    }
 
-input {
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 6px;
-    color: white;
-    padding: 0.5rem;
-    font-size: 1rem;
-    width: 100%;
-}
+    input:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
 
-input:focus {
-    outline: none;
-    border-color: #666;
-}
+    button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        width: fit-content;
+        align-self: center;
+    }
 
-button {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    width: fit-content;
-    align-self: center;
-}
-
-#success { color: greenyellow; }
-#failed { color: red; white-space: pre-line; }
+    #success { color: var(--accent-green); }
+    #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>

@@ -17,6 +17,8 @@
     import CompleteSprintModal from './CompleteSprintModal.svelte';
     import ConfirmModal from './ConfirmModal.svelte';
 
+    import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
+
     export let projectId: string;
 
     let isCreateSprintOpen = false;
@@ -242,13 +244,20 @@
 <div class="sprints-container">
     <!-- Toolbar -->
     <div class="sprints-toolbar">
-        <button class="toolbar-btn" on:click={() => isCreateSprintOpen = true}>+ Új sprint</button>
+        <button class="toolbar-btn" on:click={() => isCreateSprintOpen = true}>
+            <Plus size={15} /> Új sprint
+        </button>
     </div>
 
     <div class="sprints-content">
         <!-- Completed sprintek -->
         <button class="section-toggle" on:click={() => completedCollapsed = !completedCollapsed}>
-            {completedCollapsed ? '▶' : '▼'} Befejezett sprintek ({sprints.filter(s => s.state === 'Completed').length})
+            {#if completedCollapsed}
+                <ChevronRight size={14} />
+            {:else}
+                <ChevronDown size={14} />
+            {/if}
+            Befejezett sprintek ({sprints.filter(s => s.state === 'Completed').length})
         </button>
         {#if !completedCollapsed}
             {#each sprints.filter(s => s.state === 'Completed') as sprint}
@@ -292,7 +301,12 @@
 
         <!-- Planning sprintek -->
         <button class="section-toggle" on:click={() => planningCollapsed = !planningCollapsed}>
-        {planningCollapsed ? '▶' : '▼'} Tervezett sprintek ({sprints.filter(s => s.state === 'Planning').length})
+            {#if planningCollapsed}
+                <ChevronRight size={14} />
+            {:else}
+                <ChevronDown size={14} />
+            {/if}
+            Tervezett sprintek ({sprints.filter(s => s.state === 'Planning').length})
         </button>
         {#if !planningCollapsed}
             {#each sprints.filter(s => s.state === 'Planning') as sprint}
@@ -390,31 +404,38 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 1rem;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
     }
 
     .toolbar-btn {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: white;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
     }
 
     .toolbar-btn:hover {
-        background: #333;
-        border-color: #666;
+        background: var(--border-hover);
+        color: var(--text-primary);
     }
 
     .section-toggle {
-        background: #1a1a1a;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--bg-secondary);
         border: none;
-        border-bottom: 1px solid #2a2a2a;
-        color: #aaa;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-secondary);
         cursor: pointer;
         font-size: 0.85rem;
         font-weight: bold;
@@ -423,11 +444,12 @@
         width: 100%;
         letter-spacing: 0.03em;
         text-transform: uppercase;
+        transition: color 0.15s, background 0.15s;
     }
 
     .section-toggle:hover {
-        color: white;
-        background: #222;
+        color: var(--text-primary);
+        background: var(--bg-hover);
     }
 
     .sprints-content {
@@ -441,7 +463,7 @@
 
     .completed-divider {
         border: none;
-        border-top: 1px solid #333;
+        border-top: 1px solid var(--border);
         margin: 0.25rem 0;
     }
 </style>
