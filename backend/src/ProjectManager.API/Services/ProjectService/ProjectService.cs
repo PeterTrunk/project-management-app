@@ -89,9 +89,6 @@ namespace ProjectManager.API.Services.ProjectService
 
         public async Task<ProjectResponseDto> CreateProjectAsync(CreateProjectDto dto)
         {
-            if (await _context.Projects.AnyAsync(p => p.ProjKey == dto.ProjKey))
-                throw new Exception("Projekt Key már létezik!");
-
             var ownerId = _currentUserService.UserId;
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == ownerId);
             if (owner == null)

@@ -190,8 +190,7 @@ public class AppDbContext : DbContext
                   .IsRequired();
 
             //Indexes
-            entity.HasIndex(p => p.ProjKey)
-                  .IsUnique();
+            entity.HasIndex(p => p.ProjKey);
 
             entity.HasIndex(p => p.OwnerId);
 
