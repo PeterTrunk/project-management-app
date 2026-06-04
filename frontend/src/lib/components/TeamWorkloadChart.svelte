@@ -3,6 +3,13 @@
     import * as echarts from 'echarts';
     import type { WorkloadDataPoint } from '../api/statisticsApi';
 
+    import { getChartColors } from '../cssVars';
+    import { themeStore } from '../stores/themeStore';
+
+    $: if (chart && data && $themeStore) {
+        renderChart();
+    }
+    
     export let data: WorkloadDataPoint[] = [];
 
     let chartContainer: HTMLDivElement;
@@ -22,19 +29,16 @@
         chart?.dispose();
     });
 
-    $: if (chart && data) {
-        renderChart();
-    }
-
     function renderChart() {
         if (!chart) return;
+        const c = getChartColors();
 
         chart.setOption({
             backgroundColor: 'transparent',
             title: {
                 text: 'Team Workload',
                 left: 'center',
-                textStyle: { color: '#ccc', fontSize: 14 }
+                textStyle: { color: c.textColor, fontSize: 14 }
             },
             tooltip: {
                 trigger: 'axis',
@@ -50,12 +54,12 @@
             xAxis: {
                 type: 'category',
                 data: data.map(d => d.userName),
-                axisLabel: { color: '#aaa', rotate: 30 }
+                axisLabel: { color: c.mutedColor, rotate: 30 }
             },
             yAxis: {
                 type: 'value',
-                axisLabel: { color: '#aaa' },
-                splitLine: { lineStyle: { color: '#2a2a2a' } },
+                axisLabel: { color: c.mutedColor },
+                splitLine: { lineStyle: { color: c.splitLine } },
                 minInterval: 1
             },
             series: [{
@@ -64,8 +68,8 @@
                     value: d.taskCount,
                     itemStyle: {
                         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                            { offset: 0, color: '#4a9eff' },
-                            { offset: 1, color: '#1a2a3a' }
+                            { offset: 0, color: c.blue },
+                            { offset: 1, color: `${c.blue}33` }
                         ])
                     }
                 })),
@@ -73,7 +77,7 @@
                 label: {
                     show: true,
                     position: 'top',
-                    color: '#aaa',
+                    color: c.mutedColor,
                     formatter: '{c}'
                 }
             }]

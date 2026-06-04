@@ -3,6 +3,9 @@
     import * as echarts from 'echarts';
     import type { VelocityDataPoint } from '../api/statisticsApi';
 
+    import { getChartColors } from '../cssVars';
+    import { themeStore } from '../stores/themeStore';
+
     export let data: VelocityDataPoint[] = [];
 
     let chartContainer: HTMLDivElement;
@@ -22,12 +25,13 @@
         chart?.dispose();
     });
 
-    $: if (chart && data) {
+    $: if (chart && data && $themeStore) {
         renderChart();
     }
 
     function renderChart() {
         if (!chart) return;
+        const c = getChartColors();
 
         const avgVelocity = data.length > 0
             ? Math.round(data.reduce((sum, d) => sum + d.completedTasks, 0) / data.length)
@@ -38,7 +42,7 @@
             title: {
                 text: 'Sprint Velocity',
                 left: 'center',
-                textStyle: { color: '#ccc', fontSize: 14 }
+                textStyle: { color: c.textColor, fontSize: 14 }
             },
             tooltip: {
                 trigger: 'axis',
@@ -47,7 +51,7 @@
             },
             legend: {
                 bottom: 0,
-                textStyle: { color: '#aaa' }
+                textStyle: { color: c.mutedColor }
             },
             grid: {
                 left: '3%',
@@ -58,25 +62,25 @@
             xAxis: {
                 type: 'category',
                 data: data.map(d => d.sprintName),
-                axisLabel: { color: '#aaa', rotate: 30 }
+                axisLabel: { color: c.mutedColor, rotate: 30 }
             },
             yAxis: {
                 type: 'value',
-                axisLabel: { color: '#aaa' },
-                splitLine: { lineStyle: { color: '#2a2a2a' } },
+                axisLabel: { color: c.mutedColor },
+                splitLine: { lineStyle: { color: c.splitLine } },
                 minInterval: 1
             },
             series: [
                 {
                     name: 'Befejezett taskok',
                     type: 'bar',
-                    color: '#4caf50',
+                    color: c.green,
                     data: data.map(d => ({
                         value: d.completedTasks,
                         itemStyle: {
                             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                { offset: 0, color: '#4caf50' },
-                                { offset: 1, color: '#1a3a1a' }
+                                { offset: 0, color: c.green },
+                                { offset: 1, color: `${c.green}33` }
                             ])
                         }
                     })),
@@ -84,7 +88,7 @@
                     label: {
                         show: true,
                         position: 'top',
-                        color: '#aaa',
+                        color: c.mutedColor,
                         formatter: '{c}'
                     }
                 },
@@ -92,8 +96,8 @@
                     name: 'Átlag velocity',
                     type: 'line',
                     data: data.map(() => avgVelocity),
-                    lineStyle: { type: 'dashed', color: '#f0a500' },
-                    itemStyle: { color: '#f0a500' },
+                    lineStyle: { type: 'dashed', color: c.yellow },
+                    itemStyle: { color: c.yellow },
                     symbol: 'none'
                 }
             ]

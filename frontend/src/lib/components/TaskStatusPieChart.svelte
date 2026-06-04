@@ -3,6 +3,13 @@
     import * as echarts from 'echarts';
     import type { TaskStatusDistribution } from '../api/statisticsApi';
 
+    import { getChartColors } from '../cssVars';
+    import { themeStore } from '../stores/themeStore';
+
+        $: if (chart && data && $themeStore) {
+        renderChart();
+    }
+
     export let data: TaskStatusDistribution[] = [];
 
     let chartContainer: HTMLDivElement;
@@ -44,19 +51,16 @@
         chart?.dispose();
     });
 
-    $: if (chart && data) {
-        renderChart();
-    }
-    
     function renderChart() {
         if (!chart) return;
+        const c = getChartColors();
 
         chart.setOption({
             backgroundColor: 'transparent',
             title: {
                 text: 'Task Státusz Eloszlás',
                 left: 'center',
-                textStyle: { color: '#ccc', fontSize: 14 }
+                textStyle: { color: c.textColor, fontSize: 14 }
             },
             tooltip: {
                 trigger: 'item',
@@ -66,7 +70,7 @@
                 orient: 'vertical',
                 right: '5%',
                 top: 'middle',
-                textStyle: { color: '#aaa' },
+                textStyle: { color: c.mutedColor },
                 type: 'scroll',
             },
             series: [{
@@ -77,7 +81,7 @@
                 label: {
                     show: true,
                     formatter: '{b}: {c}',
-                    color: '#ccc'
+                    color: c.textColor
                 },
                 emphasis: {
                     itemStyle: {

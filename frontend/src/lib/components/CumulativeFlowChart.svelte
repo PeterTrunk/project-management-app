@@ -3,6 +3,13 @@
     import * as echarts from 'echarts';
     import type { CumulativeFlowDataPoint } from '../api/statisticsApi';
 
+    import { getChartColors } from '../cssVars';
+    import { themeStore } from '../stores/themeStore';
+
+    $: if (chart && data && $themeStore) {
+        renderChart();
+    }
+
     export let data: CumulativeFlowDataPoint[] = [];
 
     let chartContainer: HTMLDivElement;
@@ -30,10 +37,6 @@
         chart?.dispose();
     });
 
-    $: if (chart && data) {
-        renderChart();
-    }
-
     function getStatusColor(status: string): string {
         const knownColors: Record<string, string> = {
             'Backlog': '#555555',
@@ -54,9 +57,9 @@
         return `hsl(${hue}, 60%, 50%)`;
     }
 
-
     function renderChart() {
         if (!chart || data.length === 0) return;
+        const c = getChartColors();
 
         const dates = data.map(d => new Date(d.date).toLocaleDateString('hu-HU'));
         const statuses = data[0].statusCounts.map(s => s.status);
@@ -83,7 +86,7 @@
             title: {
                 text: 'Cumulative Flow Diagram',
                 left: 'center',
-                textStyle: { color: '#ccc', fontSize: 14 }
+                textStyle: { color: c.textColor, fontSize: 14 }
             },
             tooltip: {
                 trigger: 'axis',
@@ -91,7 +94,7 @@
             },
             legend: {
                 bottom: 0,
-                textStyle: { color: '#aaa' }
+                textStyle: { color: c.mutedColor }
             },
             grid: {
                 left: '3%',
@@ -103,12 +106,12 @@
                 type: 'category',
                 boundaryGap: false,
                 data: dates,
-                axisLabel: { color: '#aaa', rotate: 45 }
+                axisLabel: { color: c.mutedColor, rotate: 45 }
             },
             yAxis: {
                 type: 'value',
-                axisLabel: { color: '#aaa' },
-                splitLine: { lineStyle: { color: '#2a2a2a' } },
+                axisLabel: { color: c.mutedColor },
+                splitLine: { lineStyle: { color: c.splitLine } },
                 minInterval: 1
             },
             series
