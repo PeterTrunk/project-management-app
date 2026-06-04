@@ -130,19 +130,6 @@
     .due-date.overdue  { color: var(--accent-red); }
     .due-date.due-soon { color: var(--accent-yellow); }
 
-    .priority {
-        font-size: 0.75rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        width: fit-content;
-    }
-
-    .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
-    .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
-    .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
-    .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
-    .priority-normal   { background: var(--bg-hover);         color: var(--text-muted); }
-
     .labels-row {
         display: flex;
         flex-wrap: wrap;

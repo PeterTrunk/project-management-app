@@ -191,11 +191,9 @@
         margin: 0 0 0.5rem;
     }
 
-    .loading, .error {
+    .loading {
         text-align: center;
         padding: 1rem;
         color: var(--text-muted);
     }
-
-    .error { color: var(--accent-red); }
 </style>
