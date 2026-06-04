@@ -1,8 +1,9 @@
-﻿using ProjectManager.API.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Activity;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.CurrentUserService;
-using Microsoft.EntityFrameworkCore;
 
 namespace ProjectManager.API.Services.ActivityService
 {
@@ -51,11 +52,38 @@ namespace ProjectManager.API.Services.ActivityService
             };
         }
 
-        public async Task<List<ActivityResponseDto>> GetActivitiesAsync(Guid projectId, int page = 1, int pageSize = 20)
+        public async Task<List<ActivityResponseDto>> GetActivitiesAsync(
+            Guid projectId, 
+            int page = 1, 
+            int pageSize = 20,
+            string? entityType = null,
+            string? actorName = null,
+            DateTime? dateFrom = null,
+            DateTime? dateTo = null)
         {
-            var activities = await _context.Activities
+            var query = _context.Activities
                 .Where(a => a.ProjectId == projectId)
                 .Include(a => a.Actor)
+                .AsQueryable();
+
+            // EntityType szűrés
+            if (!string.IsNullOrEmpty(entityType))
+                query = query.Where(a => a.EntityType == entityType);
+
+            // ActorName szűrés
+            if (!string.IsNullOrEmpty(actorName))
+                query = query.Where(a =>
+                    a.Actor != null &&
+                    a.Actor.DisplayName.ToLower().Contains(actorName.ToLower()));
+
+            // Dátum szűrés
+            if (dateFrom.HasValue)
+                query = query.Where(a => a.CreatedAt >= DateTime.SpecifyKind(dateFrom.Value, DateTimeKind.Utc));
+
+            if (dateTo.HasValue)
+                query = query.Where(a => a.CreatedAt <= DateTime.SpecifyKind(dateTo.Value, DateTimeKind.Utc).AddDays(1));
+
+            var activities = await query
                 .OrderByDescending(a => a.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
