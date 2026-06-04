@@ -1129,6 +1129,118 @@ Ha az oszlop üres, a metódus azonnal visszatér `SaveChanges` és SignalR hív
 ## Search/Filter, UI Polish & Responsive Design
 Task search and filtering on the board (by assignee, priority, keyword, label). Activity log view with filtering by user and event type. Responsive UI refinements for desktop and notebook resolutions. Consistent spacing, color scheme, and typography across all views. Dark/light mode toggle in profile settings. Overview dashboard with personal task summary, overdue items, and recent activity.
 
+### Elvégzett munkák
+
+#### Backend
+
+**Activity Log szűrés:**
+- `GetActivitiesAsync` kiegészítve opcionális szűrő paraméterekkel: `entityType`, `actorName`, `dateFrom`, `dateTo`
+- `IActivityService` interfész frissítve
+- `ActivityController` frissítve query paraméterekkel
+- DateTime UTC konverzió a dátum szűrőknél
+
+---
+
+#### Frontend
+
+**Task Search & Filter (BoardView):**
+- Kulcsszó keresés (title + taskKey alapján, real-time)
+- Assignee szűrő (teamStore alapján)
+- Prioritás szűrő (low/medium/high/critical)
+- Label szűrő (projectStore.labels alapján)
+- Határidő szűrő (lejárt / hamarosan lejár)
+- Szűrők törlése gomb (csak aktív szűrő esetén látszik)
+- Frontend only — nincs új backend endpoint
+- Reaktív `filteredTasks` számítás AND logikával
+- `distributeTasks(filteredTasks)` reaktív blokk
+
+**Overdue / Due Soon / Completed vizuális jelzés:**
+- `isOverdue` — piros border-left
+- `isDueSoon` — sárga border-left
+- `isCompleted` — zöld border-left + ikon
+- Implementálva: `TaskCard.svelte`, `BacklogTaskCard.svelte`
+- Dátum megjelenítés: dátum + óra:perc formátum
+
+**Activity Log szűrés (ActivityFeed.svelte):**
+- Felhasználó szűrő (actorName alapján)
+- Entitás típus szűrő (Task/Sprint/Comment/Board/Column/Member/Project/Commit/PullRequest/Integration)
+- Dátum intervallum szűrő (dateFrom/dateTo)
+- Mai nap szűrő gomb toggle-lel
+- Szűrők törlése gomb (isTodayFilter reset)
+- Relatív időmegjelenítés pontos idővel (pl. "2 órája (14:35)")
+- Régi bejegyzéseknél teljes dátum + idő
+
+**Overview Dashboard (ProjectOverview.svelte):**
+- Üdvözlő fejléc (displayName, projekt státusz, meta infók)
+- Összefoglaló statisztika kártyák (OverviewStatCard.svelte):
+  - Összes/kész/folyamatban taskok száma
+  - Lejárt taskok száma
+  - Aktív sprint progress
+- Hozzám rendelt taskok lista (BacklogTaskCard showMenu=false)
+  - Rendezés: overdue -> due-soon -> normal -> kész -> ABC
+  - Scrollolható szekció
+- Recent Activity szekció (ActivityFeed komponens újrafelhasználás)
+  - Scrollolható szekció
+- SignalR: TaskMoved, TaskCreated, TaskUpdated, TaskDeleted, SprintUpdated events
+- Frontend only — meglévő store-ok alapján
+
+**UI Strukturális változások:**
+- `ProjectSettings.svelte` — füles navigáció: Általános / Labelek / Git, veszélyzóna szekció
+- `TaskDetailModal.svelte` — füles navigáció: Részletek / Csatolmányok / Git / Kommentek, scrollolható szerkesztő mód, min-height az összeugrás ellen
+- `UserSettingsModal.svelte` — témaváltó gomb sidebar aljára, aktív nézet kiemelése
+- `SprintsView.svelte` / `ProjectBacklog.svelte` — összecsukható szekciók ChevronDown/ChevronRight ikonnal
+
+**AppLayout megújítás:**
+- Lucide ikonok a sidebar és topbar navigációban
+- Összecsukható sidebar collapse gombbal
+- Aktív nézet és aktív projekt kiemelése
+- Téma toggle gomb (Sun/Moon) a sidebarban
+- CSS variables használata hardcoded színek helyett
+- Reszponzív sidebar: 220px -> 180px (1366px) -> 60px (768px)
+
+**Theme System:**
+- `themeStore.ts` — dark/light toggle, localStorage mentés
+- `global.css` — CSS variables dark/light témához
+- `App.svelte` — theme class alkalmazása `<html>` tagre
+- `UserSettingsModal` — Megjelenés szekció dark/light toggle gombokkal
+- `cssVars.ts` — utility helper ECharts CSS variable olvasáshoz
+- ECharts komponensek: `getChartColors()` + `themeStore` reaktivitás témaváltáskor
+
+**Responsive Design alapozás:**
+- CSS variables breakpointonként (1366px, 768px, 480px):
+  - `--sidebar-width`, `--topbar-height`, `--content-padding`
+  - `--font-size-base`, `--font-size-sm`, `--font-size-xs`
+  - `--modal-width`, `--modal-width-lg`
+  - `--gap-sm`, `--gap-md`, `--gap-lg`
+- Helper classok: `hide-mobile`, `show-mobile-only`, `hide-tablet`, `stack-mobile`, `full-width-mobile`
+
+**UI Polish alapozás (global.css):**
+- Egységes focus state-ek (`outline: 2px solid var(--accent-blue)`)
+- Input/select/textarea focus box-shadow
+- Smooth transitions buttonokon és form elemekon
+- `.empty-state` és `.loading-state` helper classok
+- Scrollbar stílus
+- Alap tipográfia (h1-h4)
+
+**Technikai döntések:**
+- Szűrések frontend only ahol lehetséges (BoardView) — nincs extra backend load
+- Reaktív `distributeTasks` blokk: `$: distributeTasks(filteredTasks)`
+- `cssVars.ts`: ECharts nem fér hozzá CSS variable-okhoz direkten (mert az echarts options-ön keresztüli stílust használ) -> DOM API-n keresztül olvassuk
+- Reszponzív CSS variables: csak `global.css` módosítás szükséges, később a teljes reszponzív designhoz
+- Fokozatos UI megújítás: `global.css`-jelenleg mindenhol, de a responzibilitást megvalósítás még nincs kész.
+
+### Jövőbeli fejlesztések
+
+**UI Polish (következő iteráció):**
+- `.empty-state` és `.loading-state` classok alkalmazása az összes komponensben
+- Tablet/mobile layout finomítás (csak alapozás van)
+- Focus state-ek tesztelése accessibility szempontból
+- Transition animációk finomítása
+
+**Funkcionális fejlesztések:**
+- Activity Log: lapozás helyett infinite scroll
+- BoardView: keresési eredmények számlálója
+
 ## Testing, Bug Fixes & Final Integration
 Unit tests for API endpoints and service layer (xUnit). Integration tests for database operations. End-to-end testing of critical user flows (task creation, board interaction, sprint management). Bug fixing and edge case handling. Full system integration testing across all components (frontend, backend, SignalR, MinIO, PostgreSQL). Performance review and query optimization where needed.
 
