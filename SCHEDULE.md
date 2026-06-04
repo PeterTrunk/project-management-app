@@ -1242,7 +1242,133 @@ Task search and filtering on the board (by assignee, priority, keyword, label). 
 - BoardView: keresési eredmények számlálója
 
 ## Testing, Bug Fixes & Final Integration
-Unit tests for API endpoints and service layer (xUnit). Integration tests for database operations. End-to-end testing of critical user flows (task creation, board interaction, sprint management). Bug fixing and edge case handling. Full system integration testing across all components (frontend, backend, SignalR, MinIO, PostgreSQL). Performance review and query optimization where needed.
+(Régi leírás:)
+Unit tests for relevant API endpoints and service layers (xUnit). Integration tests for database operations. End-to-end testing of critical user flows (task creation, board interaction, sprint management). Bug fixing and edge case handling. Full system integration testing across all components (frontend, backend, SignalR, MinIO, PostgreSQL). Performance review and query optimization where needed.
+(Új átgondolt leírás:)
+Unit tests for critical service layer components (xUnit). Bug fixes for known issues. Documentation of known limitations and planned improvements. Manual integration testing of critical user flows.
+
+### Tervezett implementáció
+
+#### Unit Tesztek (xUnit)
+
+**LexorankService tesztek — KRITIKUS:**
+Tesztelendő metódusok:
+
+- GetMiddle: bucket öröklés prevPosition-ből
+- GetMiddle: bucket öröklés nextPosition-ből
+- GetMiddle: null prev és next esetén
+- GetMiddle: csak prev esetén (increment)
+- GetMiddle: csak next esetén (getbefore)
+- GetBetween: pozíció közé kerülés
+- GetBetween: hossz növelés ha nincs hely
+- GetBetween: InvalidOperationException ha kimerül
+- GetInitialPosition: bucket öröklés lastPosition-ből
+- GetInitialPosition: null lastPosition esetén
+- RebalancePositions: egyenletes elosztás
+- RebalancePositions: helyes bucket használat
+- NeedsRebalancing: hosszú pozíció esetén true
+- HasCollision: egyező pozíciók esetén true
+
+
+**Validátor tesztek:**
+CreateTaskDtoValidator:
+
+- Title: üres, túl hosszú
+- Priority: érvényes/érvénytelen értékek
+- EstimateInMinutes: negatív érték
+
+CreateProjectDtoValidator:
+
+- Name: üres, túl hosszú
+- ProjKey: kisbetű, speciális karakter, túl rövid/hosszú
+
+CreateIntegrationDtoValidator:
+
+- Provider: érvénytelen provider
+- RepoFullName: helytelen formátum
+- WebhookSecret: túl rövid
+
+
+#### Ismert Bugfixek (Észlelt és javított)
+
+**1. LexorankService BigInteger refactor:**
+- long -> BigInteger alapú számítás
+- GetMiddle és GetInitialPosition bucket öröklés fix
+- MoveTaskAsync try/catch InvalidOperationException fallback
+
+**2. ProjKey uniqueness fix:**
+- Unique constraint eltávolítva
+- CreateProjectAsync service szintű check eltávolítva
+
+**3. TaskMoved completedAt fix:**
+- completedAt hozzáadva board és projekt szintű broadcasthoz
+- BoardView és SprintsView handler frissítve
+
+#### Ismert Limitációk & Tervezett Fejlesztések
+
+##### SignalR Centralizálás (post-deployment):
+Jelenlegi probléma:
+
+Komponensenkénti SignalR regisztráció:
+onDestroy leiratkozás -> nézetek közötti race condition
+Teljes getTasksAsync() újratöltés sok eventnél
+-> Felesleges DB lekérdezések és hálózati forgalom
+
+Tervezett megoldás:
+
+Centralizált event kezelés AppLayout szinten
+Store-alapú kommunikáció komponensekkel
+Event payload közvetlen feldolgozása store-ban
+-> Csak a változott adat frissül
+-> Jelentősen kevesebb hálózati forgalom
+
+
+##### File Feltöltés Optimalizálás (post-deployment):
+Jelenlegi problémák:
+
+Fájl méret limit (ASP.NET Core alapból 30MB)
+Content-Type validáció hiányosságok
+Nagyobb fájloknál timeout lehetséges
+
+Tervezett megoldás:
+
+Méret limit konfiguráció .env-ből
+Engedélyezett content-type-ok explicit listája
+Chunked upload vagy presigned URL megközelítés
+
+
+##### Egyéb tervezett fejlesztések:
+
+- TOTP 2FA (bejelentkezés + kritikus műveletek)
+- AES-256 WebhookSecret titkosítás
+- HashiCorp Vault (production skálán)
+- Redis backplane SignalR horizontális skálázáshoz
+- TaskStatusHistory: kezdeti bejegyzés task létrehozáskor
+- PR body alapú task matching (pull_request.body mező)
+- Invitation management TeamView-ban
+- Git View sprint nézet:
+  - Sprintenként csoportosított taskok megjelenítése
+  - Taskokhoz rendelt commitok és PR-ok listája (CommitCard, PrCard)
+  - Commit/PR átrendelés másik taskhoz ha hibásan lett hozzárendelve
+  - Sprint szűrő selector a Git View-ban
+  - Megvalósítható a meglévő TaskResponse.commitLinks/prLinks alapján
+  - Új backend endpoint nem szükséges
+- GitLab webhook teljes támogatás és tesztelés
+- Git provider absztrakció refactor:
+  - IGitProvider interface
+  - GitHubProvider, GitLabProvider implementációk
+  - Könnyen bővíthető új providerekkel (Bitbucket, Gitea stb.)
+
+
+#### Manuális Tesztelési Területek
+Kritikus user flow-k:
+
+Task létrehozás -> board hozzárendelés -> sprint hozzárendelés -> mozgatás -> lezárás
+Sprint lifecycle: Planning -> Active -> Completed
+Git webhook: push -> commit matching -> PR -> merge
+File feltöltés: task és projekt szintű
+Team management: meghívó -> csatlakozás -> role változtatás
+Statisztikák: burndown, velocity, CFD adatok helyessége
 
 ## Deployment, Documentation & Presentation Preparation
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
