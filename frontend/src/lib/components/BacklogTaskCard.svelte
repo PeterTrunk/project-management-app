@@ -102,17 +102,23 @@
                         <TextAlignJustify size={15} />
                     </button>
                     {#if isMenuOpen}
-                        <div class="dropdown-menu">
+                        <div 
+                            class="dropdown-menu" 
+                            on:click|stopPropagation 
+                            on:keydown|stopPropagation
+                            role="menu"
+                            tabindex="-1"
+                            >
                             <div class="menu-section">
                                 <p class="menu-label">Board hozzárendelés:</p>
-                                <select bind:value={selectedBoardId} on:change={handleAssignToBoard}>
+                                <select bind:value={selectedBoardId} on:change={handleAssignToBoard} on:click|stopPropagation>
                                     <option value="">Nincs Board</option>
                                     {#each boards as board}
                                         <option value={board.id}>{board.name}</option>
                                     {/each}
                                 </select>
                                 <p class="menu-label">Sprint hozzárendelés:</p>
-                                <select bind:value={selectedSprintId} on:change={handleSprintAssign}>
+                                <select bind:value={selectedSprintId} on:change={handleSprintAssign} on:click|stopPropagation>
                                     <option value="">Projekt Backlog</option>
                                     {#each sprints as sprint}
                                         <option value={sprint.id}>{sprint.name}</option>
