@@ -1372,3 +1372,142 @@ Statisztikák: burndown, velocity, CFD adatok helyessége
 
 ## Deployment, Documentation & Presentation Preparation
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
+
+## Git Intelligence – Branches & Insights
+
+Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads — no access token required.
+
+### Tervezett implementáció
+
+#### Branches
+
+**Cél:**
+Átlátható képet adni arról melyik branch-en folyik munka és az melyik taskhoz tartozik — anélkül hogy a GitHubon vagy GitLaben kellene keresgélni.
+
+**Új modell: Branch**
+Id, ProjectId, IntegrationId, Name, TaskId (null = unmatched), LastPushedBy, LastPushedAt, CreatedAt
+
+**Stale detektálás:**
+Lekérdezéskor számított — nem tárolt State mező (Nem a pontos statisztika a lényeg, a PM tudja hogy miért nem volt Kód feltöltve a csapata által, egy figyelem felhívó metrika)
+Threshold: LastPushedAt + X nap (projekt szinten konfigurálható)
+Alapértelmezett: 5 nap
+Stale + task Done státusz -> külön kiemelés ("branch cleanup szükséges")
+
+**Webhook feldolgozás bővítések:**
+
+Push event:
+A payload ref mezője alapján branch név kinyerése (refs/heads/ prefix levágása)
+TaskKey matching a branch névben (pl. feature/GTP-1-login-fix)
+Branch record létrehozás vagy LastPushedAt frissítés
+
+Delete event (új):
+ref_type == "branch" -> Branch record soft delete / Deleted state
+ref_type == "tag" -> ignorálva
+Merged state meghatározása: volt-e merge-elt PR ehhez a branch-hez?
+
+**UI — Git View Branches tab:**
+
+Branch lista: név, kapcsolódó task, utolsó push, fejlesztő
+Stale branchek kiemelve (sárga jelzés)
+Stale + Done task -> piros jelzés ("cleanup szükséges")
+Manuális task-branch összerendelés unmatched brancheknél
+Info üzenet: "Csak az integráció bekapcsolása után érkezett push-ok láthatók"
+TaskDetailModal: kapcsolódó branchek megjelenítése
+
+**Provider absztrakció (Factory Pattern):**
+IGitProvider interface:
+
+ValidateSignature(payload, headers)
+GetBranchName(payload)
+GetEventType(headers)
+ProcessPushEvent(payload)
+ProcessPullRequestEvent(payload)
+ProcessDeleteEvent(payload)
+
+GitHubProvider : IGitProvider
+GitLabProvider : IGitProvider
+GitProviderFactory -> provider alapján helyes implementáció
+Könnyen bővíthető: Bitbucket, Gitea stb.
+
+---
+
+#### Insights
+
+**Cél:**
+Objektív, git aktivitáson alapuló sprint analitika — automatikus, nem manipulálható manuálisan.
+
+**Nincs új modell szükséges:**
+CommitLink: TaskId, AuthorName, CommittedAt -> fejlesztői aktivitás
+PrLink: TaskId, AuthorName, CreatedAt, MergedAt, State -> PR analitika
+Sprint + Task kapcsolat -> sprint szintű szűrés
+
+**InsightsService metódusok:**
+GetSprintGitActivityAsync(projectId, sprintId):
+-> Hány taskhoz érkezett legalább egy commit
+-> Hány task van nulla git aktivitással (stale taskok)
+-> Git aktivitás nélküli taskok listája
+GetDeveloperActivityAsync(projectId, sprintId):
+-> Fejlesztőnként commit szám
+-> Fejlesztőnként érintett taskok száma
+-> Fejlesztőnként PR szám
+GetPrAnalyticsAsync(projectId, sprintId):
+-> Merged PR-ok átlagos cycle time (CreatedAt -> MergedAt)
+-> Closed PR-ok száma és aránya (visszautasítási arány)
+-> Nyitott PR-ok száma
+GetSprintSummaryAsync(projectId, sprintId):
+-> Összes commit a sprintben
+-> Merged PR-ek száma
+-> Closed (visszautasított) PR-ek száma
+-> Legtöbbet commitoló fejlesztő
+-> Legtöbb aktivitást kapott task
+-> Stale taskok száma (nyitva + nulla git aktivitás)
+-> Átlagos PR cycle time
+GetMostActiveTasksAsync(projectId, sprintId):
+-> Legtöbb commitot kapott taskok
+-> Segít a jövőbeli sprint planning becslésekben
+
+**Sprint összehasonlítás (később — min. 3-4 sprint adat szükséges):**
+-> PR cycle time trend sprintről sprintre
+-> Stale task arány változása
+-> Csapat git aktivitás változása
+-> Csak akkor jelenik meg ha elegendő historikus adat áll rendelkezésre
+
+**UI — Git View Insights tab:**
+Sprint szűrő selector
+Fejlesztői szűrő (adott fejlesztő aktivitása)
+Megjelenítés:
+
+Sprint Git Activity kártya (committal rendelkező vs stale taskok)
+Fejlesztői aktivitás táblázat (commit szám, érintett taskok, PR-ok)
+PR Analytics kártya (cycle time, merged/closed arány)
+Sprint Summary blokk (exportálható/megosztható)
+Stale taskok listája (nyitva + nulla git aktivitás)
+Legtöbb aktivitást kapott taskok listája
+---
+
+### Közös technikai megjegyzések
+
+- Minden adat kizárólag webhook payloadokból — access token nem szükséges
+- Branch-task matching: TaskKey a branch névben (pl. feature/GTP-1-login)
+- "Fejlesztő" azonosítása: commit/PR author mező alapján Opcionálisan összeköthető a saját user rendszerrel
+- Insights adatok nem real-time: webhook feldolgozáskor frissülnek
+- Stale branch threshold: projekt szinten konfigurálható (alapértelmezett: 5 nap)
+- PR cycle time: csak merged PR-oknál számított átlag
+- Closed PR-ok visszautasítási arányként külön mutatva
+- Sprint összehasonlítás: minimum 3-4 sprint után érhető el
+
+### Implementációs sorrend
+
+- Branch modell + migration
+- GitProviderFactory + IGitProvider interface
+- GitHubProvider + GitLabProvider implementációk
+- Push event bővítés: branch tracking
+- Delete event kezelés
+- IBranchService + BranchService
+- BranchController endpointok
+- IInsightsService + InsightsService
+- InsightsController endpointok
+- Git View Branches tab frontend
+- Git View Insights tab frontend
+- TaskDetailModal: kapcsolódó branchek
+- Sprint összehasonlítás (ha elegendő adat)
