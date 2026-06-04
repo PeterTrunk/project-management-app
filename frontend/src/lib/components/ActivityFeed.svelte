@@ -6,12 +6,8 @@
     import { 
         ClipboardList, Timer, MessageSquare, Pin, 
         LayoutDashboard, User, Folder, GitCommit, 
-        GitPullRequest, Link, Circle,
-
-        Icon
-
+        GitPullRequest, Link, Circle, X
     } from 'lucide-svelte';
-    import type { Component } from 'svelte';
 
     export let projectId: string;
 
@@ -22,6 +18,18 @@
     let page = 1;
     let hasMore = true;
     const PAGE_SIZE = 20;
+    
+
+    // Szűrő state-ek
+    let filterEntityType = '';
+    let filterActorName = '';
+    let filterDateFrom = '';
+    let filterDateTo = '';
+    let hasActiveFilter = false;
+    let isTodayFilter = false;
+
+    $: hasActiveFilter = filterEntityType !== '' || filterActorName !== '' || 
+        filterDateFrom !== '' || filterDateTo !== '';
 
     onMount(async () => {
         await loadActivities();
@@ -29,11 +37,22 @@
     });
 
     async function loadActivities() {
+        console.log('loadActivities fut:', { filterEntityType, filterActorName, filterDateFrom, filterDateTo });
         loading = true;
+        activities = [];
         error = '';
         try {
-            const data = await getActivitiesAsync(projectId, 1, PAGE_SIZE);
-            activities = data;
+            const data = await getActivitiesAsync(projectId, {
+                page: 1,
+                pageSize: PAGE_SIZE,
+                entityType: filterEntityType || undefined,
+                actorName: filterActorName || undefined,
+                dateFrom: filterDateFrom || undefined,
+                dateTo: filterDateTo || undefined,
+            });
+            console.log('API válasz:', data);
+            console.log('API válasz hossza:', data.length);
+            activities = [...data];
             hasMore = data.length === PAGE_SIZE;
             page = 1;
         } catch (e: any) {
@@ -43,11 +62,19 @@
         }
     }
 
+
     async function loadMore() {
         loadingMore = true;
         try {
             const nextPage = page + 1;
-            const data = await getActivitiesAsync(projectId, nextPage, PAGE_SIZE);
+            const data = await getActivitiesAsync(projectId, {
+                page: nextPage,
+                pageSize: PAGE_SIZE,
+                entityType: filterEntityType || undefined,
+                actorName: filterActorName || undefined,
+                dateFrom: filterDateFrom || undefined,
+                dateTo: filterDateTo || undefined,
+            });
             activities = [...activities, ...data];
             hasMore = data.length === PAGE_SIZE;
             page = nextPage;
@@ -56,6 +83,28 @@
         } finally {
             loadingMore = false;
         }
+    }
+
+    function toggleTodayFilter() {
+        isTodayFilter = !isTodayFilter;
+        if (isTodayFilter) {
+            const today = new Date().toISOString().split('T')[0];
+            filterDateFrom = today;
+            filterDateTo = today;
+        } else {
+            filterDateFrom = '';
+            filterDateTo = '';
+        }
+        loadActivities();
+    }
+
+    function clearFilters() {
+        filterEntityType = '';
+        filterActorName = '';
+        filterDateFrom = '';
+        filterDateTo = '';
+        isTodayFilter = false;
+        loadActivities();
     }
 
     function registerSignalREvents() {
@@ -77,12 +126,15 @@
         const diffHours = Math.floor(diffMinutes / 60);
         const diffDays = Math.floor(diffHours / 24);
 
+        const timeStr = date.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
+
         if (diffMinutes < 1) return 'most';
-        if (diffMinutes < 60) return `${diffMinutes} perce`;
-        if (diffHours < 24) return `${diffHours} órája`;
-        if (diffDays === 1) return 'tegnap';
-        return date.toLocaleDateString('hu-HU');
+        if (diffMinutes < 60) return `${diffMinutes} perce (${timeStr})`;
+        if (diffHours < 24) return `${diffHours} órája (${timeStr})`;
+        if (diffDays === 1) return `tegnap ${timeStr}`;
+        return `${date.toLocaleDateString('hu-HU')} ${timeStr}`;
     }
+
 
     function getEntityIcon(entityType: string): any {
         switch (entityType) {
@@ -107,6 +159,56 @@
     );
 }
 </script>
+
+<div class="filter-toolbar">
+    <input
+        type="text"
+        placeholder="Felhasználó..."
+        bind:value={filterActorName}
+        on:change={loadActivities}
+    />
+
+    <select bind:value={filterEntityType} on:change={loadActivities}>
+        <option value="">Minden típus</option>
+        <option value="Task">Task</option>
+        <option value="Sprint">Sprint</option>
+        <option value="Comment">Komment</option>
+        <option value="Board">Board</option>
+        <option value="Column">Oszlop</option>
+        <option value="Member">Tag</option>
+        <option value="Project">Projekt</option>
+        <option value="Commit">Commit</option>
+        <option value="PullRequest">Pull Request</option>
+        <option value="Integration">Integráció</option>
+    </select>
+    <label>
+        <input 
+            type="date"
+            bind:value={filterDateFrom}
+            on:change={loadActivities}
+        />
+        -tól 
+    </label>
+    <label>
+        <input
+            type="date"
+            bind:value={filterDateTo}
+            on:change={loadActivities}
+        />
+        -ig 
+    </label>
+
+    <button 
+        class="today-btn"
+        class:active={isTodayFilter}
+        on:click={toggleTodayFilter}>
+        Csak ma történt
+    </button>
+
+    {#if hasActiveFilter}
+        <button class="clear-btn" on:click={clearFilters}><X size={13} /></button>
+    {/if}
+</div>
 
 <div class="activity-feed">
     {#if loading}
@@ -247,4 +349,70 @@
         border-radius: 4px;
         font-size: 0.8rem;
     }
+
+    .today-btn {
+        padding: 0.3rem 0.6rem;
+        border-radius: 6px;
+        border: 1px solid var(--border-hover);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .today-btn.active {
+        background: var(--accent-blue-bg);
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+    }
+
+    .filter-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+    }
+
+    .filter-toolbar input[type="text"],
+    .filter-toolbar select,
+    .filter-toolbar input[type="date"] {
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
+        border-radius: 6px;
+        color: var(--text-primary);
+        padding: 0.3rem 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    .filter-toolbar input[type="text"]:focus,
+    .filter-toolbar select:focus,
+    .filter-toolbar input[type="date"]:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
+    .filter-toolbar label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    .clear-btn {
+        display: flex;
+        align-items: center;
+        background: var(--accent-red-bg);
+        border: 1px solid var(--accent-red);
+        color: var(--accent-red);
+        padding: 0.3rem 0.6rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: background 0.15s;
+    }
+
+    .clear-btn:hover { background: var(--accent-red); color: #fff; }
 </style>
