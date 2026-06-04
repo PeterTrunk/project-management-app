@@ -3,7 +3,11 @@
     import { changePasswordAsync, updateProfileAsync } from '../api/authApi';
     import { validateDisplayName, validatePassword } from '../validators';
 
-    import { X, User, KeyRound, Pencil } from 'lucide-svelte';
+    import { themeStore, toggleTheme } from '../stores/themeStore';
+    import { X, User, KeyRound, Pencil, Sun, Moon } from 'lucide-svelte';
+
+    let currentTheme = 'dark';
+    themeStore.subscribe(t => currentTheme = t);
 
     export let isUserSettingsOpen = false;
 
@@ -95,6 +99,15 @@
                 <button class:active={activeView === 'password'} on:click={() => switchView('password')}>
                     <KeyRound size={15} /> Jelszó változtatás
                 </button>
+                <button class="icon-btn" on:click={toggleTheme} title="Téma váltás">
+                    {#if currentTheme === 'dark'}
+                        <Sun size={18} />
+                        <span>Light mód</span>
+                    {:else}
+                        <Moon size={18} />
+                        <span>Dark mód</span>
+                    {/if}
+                </button>
             </div>
         </aside>
         <div class="main">
@@ -144,7 +157,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: var(--shadow);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -153,7 +166,8 @@
 
     .modal-content {
         position: relative;
-        background: #1e1e1e;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
         border-radius: 8px;
         width: 700px;
         height: 450px;
@@ -167,54 +181,79 @@
         right: 0.75rem;
         background: transparent;
         border: none;
-        color: #aaa;
-        font-size: 1.2rem;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
         z-index: 10;
+        padding: 0.25rem;
+        border-radius: 4px;
     }
 
     .close-btn:hover {
-        color: white;
+        color: var(--text-primary);
+        background: var(--bg-hover);
     }
 
     .sidebar {
         width: 220px;
         min-width: 200px;
-        background: #161616;
+        background: var(--bg-primary);
         padding: 1.5rem 1rem;
         display: flex;
         flex-direction: column;
-        border-right: 1px solid #333;
+        border-right: 1px solid var(--border);
     }
 
     .sidebar-options {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.25rem;
     }
 
     .sidebar-options h2 {
         font-size: 1rem;
-        color: #aaa;
+        color: var(--text-secondary);
         margin-bottom: 0.5rem;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--border);
     }
 
     .sidebar-options button {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-secondary);
         text-align: left;
         padding: 0.5rem 0.75rem;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
     }
 
     .sidebar-options button:hover {
-        background: #2a2a2a;
-        color: white;
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .sidebar-options button.active {
+        background: var(--accent-blue-bg);
+        color: var(--accent-blue);
+    }
+
+    .icon-btn {
+        margin-top: 0.5rem;
+        border-top: 1px solid var(--border) !important;
+        padding-top: 0.75rem !important;
+        color: var(--text-secondary) !important;
+    }
+
+    .icon-btn:hover {
+        color: var(--text-primary) !important;
     }
 
     .main {
@@ -239,10 +278,10 @@
 
     input[type="text"],
     input[type="password"] {
-        background: #2a2a2a;
-        border: 1px solid #444;
+        background: var(--bg-input);
+        border: 1px solid var(--border-hover);
         border-radius: 6px;
-        color: white;
+        color: var(--text-primary);
         padding: 0.5rem;
         font-size: 1rem;
         width: 100%;
@@ -250,7 +289,7 @@
 
     input:focus {
         outline: none;
-        border-color: #666;
+        border-color: var(--accent-blue);
     }
 
     form {
@@ -267,6 +306,6 @@
         margin-top: 0.5rem;
     }
 
-    #success { color: greenyellow; }
-    #failed { color: red; white-space: pre-line; }
+    #success { color: var(--accent-green); }
+    #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>
