@@ -539,6 +539,17 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 task.ColumnId = null;
                 task.Position = string.Empty;
                 task.CompletedAt = null;
+
+                //History a statisztikának
+                _context.TaskStatusHistories.Add(new TaskStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = task.Id,
+                    ColumnId = null,
+                    Status = "Backlog",
+                    CreatedAt = DateTime.UtcNow
+                });
+
                 await _context.SaveChangesAsync();
             }
             else
@@ -573,6 +584,16 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
                         task.ColumnId = firstColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                        //History a statisztikának
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = firstColumn.Id,
+                            Status = firstColumn.MapsToStatus,
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                     else
                     {
@@ -584,6 +605,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         
                         task.ColumnId = backlogColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = backlogColumn.Id,
+                            Status = backlogColumn.MapsToStatus,
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
                 else

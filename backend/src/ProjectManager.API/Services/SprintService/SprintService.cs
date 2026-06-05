@@ -68,6 +68,15 @@ namespace ProjectManager.API.Services.SprintService
 
                         task.ColumnId = firstColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = firstColumn.Id,
+                            Status = firstColumn.MapsToStatus,
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
             }
@@ -137,6 +146,15 @@ namespace ProjectManager.API.Services.SprintService
                         task.BoardId = null;
                         task.ColumnId = null;
                         task.SprintId = null;
+
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = null,
+                            Status = "Backlog",
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
                 else
@@ -145,6 +163,8 @@ namespace ProjectManager.API.Services.SprintService
                     foreach (var task in unfinishedTasks)
                     {
                         task.SprintId = targetSprintId;
+                        //Itt nem kell taskhistory, a sprint független a task elvégzésétől ezért bár új sprintbe lépünk,
+                        //de feladat progressionje marad. (ha in-progress volt akkor nem tesszük vissza to-do -ba stb)
                     }
                 }
             }
@@ -157,6 +177,7 @@ namespace ProjectManager.API.Services.SprintService
             foreach (var task in completedTasks)
             {
                 task.ClosedAt = DateTime.UtcNow;
+                //Kész task már historyzálva van, itt csak a lezárás van kezelve.
             }
 
             sprint.State = "Completed";
@@ -391,6 +412,15 @@ namespace ProjectManager.API.Services.SprintService
 
                         task.ColumnId = backlogColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = backlogColumn.Id,
+                            Status = backlogColumn.MapsToStatus,
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
                 // Ha nincs BoardId, már Projekt Backlogban van, nem kell mozgatni
@@ -527,6 +557,15 @@ namespace ProjectManager.API.Services.SprintService
 
                             task.ColumnId = firstColumn.Id;
                             task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                            _context.TaskStatusHistories.Add(new TaskStatusHistory
+                            {
+                                Id = Guid.NewGuid(),
+                                TaskId = task.Id,
+                                ColumnId = firstColumn.Id,
+                                Status = firstColumn.MapsToStatus,
+                                CreatedAt = DateTime.UtcNow
+                            });
                         }
                     }
                 }
@@ -548,9 +587,30 @@ namespace ProjectManager.API.Services.SprintService
 
                         task.ColumnId = backlogColumn.Id;
                         task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                        _context.TaskStatusHistories.Add(new TaskStatusHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            TaskId = task.Id,
+                            ColumnId = backlogColumn.Id,
+                            Status = backlogColumn.MapsToStatus,
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
                 task.CompletedAt = null;
+                //TaskStatusHistory hozzáadása ha nincs board
+                if (!task.BoardId.HasValue)
+                {
+                    _context.TaskStatusHistories.Add(new TaskStatusHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = task.Id,
+                        ColumnId = null,
+                        Status = "Backlog",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
             }
             // null = vissza Backlogba
             task.SprintId = sprintId;
