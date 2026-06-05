@@ -19,6 +19,10 @@
 
     let modalRef: HTMLElement;
 
+    $: if (isTaskCreationOpen && columns.length > 0) {
+        columnId = columns.filter(c => c.position > 0)[0]?.id ?? '';
+    }
+
     onMount(() => {
         modalRef?.focus();
     });
