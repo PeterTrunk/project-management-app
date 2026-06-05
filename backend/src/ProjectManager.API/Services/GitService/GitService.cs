@@ -25,51 +25,39 @@ namespace ProjectManager.API.Services.GitService
 
         public async Task<List<CommitLinkResponseDto>> GetUnmatchedCommitsAsync(Guid projectId)
         {
-            var integrationIds = await _context.Integrations
-                .Where(i => i.ProjectId == projectId)
-                .Select(i => i.Id)
-                .ToListAsync();
-            
-            var commits = await _context.CommitLinks
-                .Where(cl => integrationIds.Contains(cl.IntegrationId) && cl.TaskId == null)
+            return await _context.CommitLinks
+                .Where(cl => cl.Integration.ProjectId == projectId && cl.TaskId == null)
                 .OrderByDescending(cl => cl.CommittedAt)
+                .Select(cl => new CommitLinkResponseDto
+                {
+                    Id = cl.Id,
+                    CommitSha = cl.CommitSha,
+                    CommitUrl = cl.CommitUrl,
+                    Message = cl.Message,
+                    AuthorName = cl.AuthorName,
+                    AuthorEmail = cl.AuthorEmail,
+                    CommittedAt = cl.CommittedAt
+                })
                 .ToListAsync();
-
-            return commits.Select(cl => new CommitLinkResponseDto
-            {
-                Id = cl.Id,
-                CommitSha = cl.CommitSha,
-                CommitUrl = cl.CommitUrl,
-                Message = cl.Message,
-                AuthorName = cl.AuthorName,
-                AuthorEmail = cl.AuthorEmail,
-                CommittedAt = cl.CommittedAt
-            }).ToList();
         }
 
         public async Task<List<PrLinkResponseDto>> GetUnmatchedPrsAsync(Guid projectId)
         {
-            var integrationIds = await _context.Integrations
-                .Where(i => i.ProjectId == projectId)
-                .Select(i => i.Id)
-                .ToListAsync();
-
-            var prs = await _context.PrLinks
-                .Where(pl => integrationIds.Contains(pl.IntegrationId) && pl.TaskId == null)
+            return await _context.PrLinks
+                .Where(pl => pl.Integration.ProjectId == projectId && pl.TaskId == null)
                 .OrderByDescending(pl => pl.CreatedAt)
+                .Select(pl => new PrLinkResponseDto
+                {
+                    Id = pl.Id,
+                    PrNumber = pl.PrNumber,
+                    PrUrl = pl.PrUrl,
+                    Title = pl.Title,
+                    State = pl.State,
+                    AuthorName = pl.AuthorName,
+                    CreatedAt = pl.CreatedAt,
+                    MergedAt = pl.MergedAt
+                })
                 .ToListAsync();
-
-            return prs.Select(pl => new PrLinkResponseDto
-            {
-                Id = pl.Id,
-                PrNumber = pl.PrNumber,
-                PrUrl = pl.PrUrl,
-                Title = pl.Title,
-                State = pl.State,
-                AuthorName = pl.AuthorName,
-                CreatedAt = pl.CreatedAt,
-                MergedAt = pl.MergedAt
-            }).ToList();
         }
 
         public async Task AssignCommitToTaskAsync(Guid projectId, Guid commitId, Guid taskId)
