@@ -45,7 +45,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (dto.ColumnId.HasValue)
             {
                 column = await _context.ColumnDefinitions
-                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
                 if (column == null)
                     throw new Exception("Oszlop nem található!");
             }
@@ -268,7 +268,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (dto.ColumnId.HasValue)
             {
                 column = await _context.ColumnDefinitions
-                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !c.IsDeleted);
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
                 if (column == null)
                     throw new Exception("Oszlop nem található");
             }
@@ -377,7 +377,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task.BoardId.HasValue)
             {
                 var lastColumn = await _context.ColumnDefinitions
-                    .Where(c => c.BoardId == task.BoardId)
+                    .Where(c => c.BoardId == task.BoardId && !c.IsDeleted)
                     .OrderByDescending(c => c.Position)
                     .FirstOrDefaultAsync();
 
@@ -579,7 +579,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         .FirstOrDefaultAsync(s => s.Id == task.SprintId);
 
                     var firstColumn = await _context.ColumnDefinitions
-                            .Where(c => c.BoardId == dto.BoardId && c.Position > 0)
+                            .Where(c => c.BoardId == dto.BoardId && c.Position > 0 && !c.IsDeleted)
                             .OrderBy(c => c.Position)
                             .FirstOrDefaultAsync();
                     
@@ -690,7 +690,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         private async Task RebalanceColumnAsync(Guid columnId, string position)
         {
             var column = await _context.ColumnDefinitions
-                .FirstOrDefaultAsync(c => c.Id == columnId);
+                .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
 
             var bucket = _lexorankService.GetBucket(position);
             var nextBucket = _lexorankService.GetNextBucket(bucket);
