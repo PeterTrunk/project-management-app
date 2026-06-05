@@ -123,27 +123,16 @@ namespace ProjectManager.API.Services.StatisticsService
 
         public async Task<List<VelocityDataPointDto>> GetVelocityAsync(Guid projectId)
         {
-            var completedSprints = await _context.Sprints
+            return await _context.Sprints
                 .Where(s => s.ProjectId == projectId && s.State == "Completed")
                 .OrderBy(s => s.EndDate)
-                .ToListAsync();
-
-            var result = new List<VelocityDataPointDto>();
-
-            foreach (var sprint in completedSprints)
-            {
-                var completedTasks = await _context.ProjectTasks
-                    .CountAsync(t => t.SprintId == sprint.Id && t.CompletedAt != null);
-
-                result.Add(new VelocityDataPointDto
+                .Select(s => new VelocityDataPointDto
                 {
-                    SprintName = sprint.Name,
-                    CompletedTasks = completedTasks,
-                    SprintEndDate = sprint.EndDate
-                });
-            }
-
-            return result;
+                    SprintName = s.Name,
+                    SprintEndDate = s.EndDate,
+                    CompletedTasks = s.ProjectTasks.Count(t => t.CompletedAt != null)
+                })
+                .ToListAsync();
         }
 
         public async Task<List<WorkloadDataPointDto>> GetWorkloadAsync(Guid projectId, Guid? sprintId = null)
