@@ -54,48 +54,55 @@ namespace ProjectManager.API.Services.StatisticsService
             dateFrom = DateTime.SpecifyKind(dateFrom, DateTimeKind.Utc);
             dateTo = DateTime.SpecifyKind(dateTo, DateTimeKind.Utc).AddDays(1).AddSeconds(-1);
 
-            // Projekt összes oszlopának lekérése
-            var columns = await _context.ColumnDefinitions
+            //Csak MapsToStatus kell
+            var statuses = await _context.ColumnDefinitions
                 .Where(c => c.Board.ProjectId == projectId && c.Position > 0)
-                .Include(c => c.Board)
-                .ToListAsync();
-
-            var statuses = columns
                 .Select(c => c.MapsToStatus)
                 .Distinct()
-                .ToList();
+                .ToListAsync();
             statuses.Add("Backlog");
 
-            // TaskStatusHistory lekérése a dátum intervallumra
+            //Csak TaskId, CreatedAt, MapsToStatus kell
             var histories = await _context.TaskStatusHistories
                 .Where(h => h.Task.ProjectId == projectId)
                 .Where(h => h.CreatedAt >= dateFrom && h.CreatedAt <= dateTo)
-                .Include(h => h.Column)
+                .Select(h => new
+                {
+                    h.TaskId,
+                    h.CreatedAt,
+                    Status = h.Column != null ? h.Column.MapsToStatus : "Backlog"
+                })
                 .OrderBy(h => h.CreatedAt)
                 .ToListAsync();
+
+            //A cikluson kívül csoportosítunk egyszer: O(histories)
+            var taskHistories = histories
+                .GroupBy(h => h.TaskId)
+                .Select(g => g.OrderBy(h => h.CreatedAt).ToList())
+                .ToList();
 
             var result = new List<CumulativeFlowDataPointDto>();
 
             for (var date = dateFrom.Date; date <= dateTo.Date; date = date.AddDays(1))
             {
-                // Minden taskra az adott napon érvényes utolsó státusz
-                var taskStatuses = histories
-                    .Where(h => h.CreatedAt.Date <= date)
-                    .GroupBy(h => h.TaskId)
-                    .Select(g => g.OrderByDescending(h => h.CreatedAt).First())
-                    .ToList();
+                // Dictionary alapú számlálás – O(tasks) naponta, nem O(histories)
+                var statusCounts = statuses.ToDictionary(s => s, s => 0);
 
-                var statusCounts = statuses.Select(status => new StatusCountDto
+                foreach (var taskHistory in taskHistories)
                 {
-                    Status = status,
-                    Count = taskStatuses.Count(h =>
-                        (h.Column?.MapsToStatus ?? "Backlog") == status)
-                }).ToList();
+                    var lastEntry = taskHistory.LastOrDefault(h => h.CreatedAt.Date <= date);
+                    if (lastEntry != null && statusCounts.ContainsKey(lastEntry.Status))
+                        statusCounts[lastEntry.Status]++;
+                }
 
                 result.Add(new CumulativeFlowDataPointDto
                 {
                     Date = date,
-                    StatusCounts = statusCounts
+                    StatusCounts = statuses.Select(s => new StatusCountDto
+                    {
+                        Status = s,
+                        Count = statusCounts[s]
+                    }).ToList()
                 });
             }
 
@@ -104,21 +111,16 @@ namespace ProjectManager.API.Services.StatisticsService
 
         public async Task<List<TaskStatusDistributionDto>> GetTaskStatusDistributionAsync(Guid projectId, Guid? sprintId = null)
         {
-            var query = _context.ProjectTasks
+            return await _context.ProjectTasks
                 .Where(t => t.ProjectId == projectId)
                 .Where(t => sprintId == null || t.SprintId == sprintId)
-                .Include(t => t.ColumnDefinition);
-
-            var tasks = await query.ToListAsync();
-
-            return tasks
-                .GroupBy(t => t.ColumnDefinition?.MapsToStatus ?? "Backlog")
+                .GroupBy(t => t.ColumnDefinition != null ? t.ColumnDefinition.MapsToStatus : "Backlog")
                 .Select(g => new TaskStatusDistributionDto
                 {
                     Status = g.Key,
                     Count = g.Count()
                 })
-                .ToList();
+                .ToListAsync();
         }
 
         public async Task<List<VelocityDataPointDto>> GetVelocityAsync(Guid projectId)
