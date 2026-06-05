@@ -1269,25 +1269,49 @@ Tesztelendő metódusok:
 - NeedsRebalancing: hosszú pozíció esetén true
 - HasCollision: egyező pozíciók esetén true
 
+Elkészült (28 teszt):
+- GetInitialPosition: null input, increment, bucket öröklés
+- GetMiddle: null prev/next, két pozíció közé kerülés, bucket öröklés, közeli pozíciók hossznövelése
+- GetBetween: legrosszabb eset (mindig ugyanoda szúr be 50-szer), soha nem dob kivételt
+- NeedsRebalancing: rövid pozíció false, hosszú pozíció true, határesetek (50/51 karakter)
+- HasCollision: egyező és különböző pozíciók
+- RebalancePositions: helyes darabszám, rendezettség, helyes bucket, 100 task egyediség
+- GetBucket / GetNextBucket: helyes értékek, wrap around
 
 **Validátor tesztek:**
-CreateTaskDtoValidator:
+**CreateTaskDtoValidator:**
 
 - Title: üres, túl hosszú
 - Priority: érvényes/érvénytelen értékek
 - EstimateInMinutes: negatív érték
 
-CreateProjectDtoValidator:
+**CreateProjectDtoValidator:**
 
 - Name: üres, túl hosszú
 - ProjKey: kisbetű, speciális karakter, túl rövid/hosszú
 
-CreateIntegrationDtoValidator:
+**CreateIntegrationDtoValidator:**
 
 - Provider: érvénytelen provider
 - RepoFullName: helytelen formátum
 - WebhookSecret: túl rövid
 
+Elkészült:
+**CreateProjectDtoValidator tesztek:**
+- Name: üres, túl hosszú, valid, pontosan 120 karakter
+- ProjKey: üres, túl rövid/hosszú, kisbetű, speciális karakter, szóköz, valid esetek
+- Description: túl hosszú, null, pontosan 1000 karakter
+
+**CreateIntegrationDtoValidator tesztek:**
+- Provider: üres, érvénytelen, GitHub, GitLab
+- RepoFullName: üres, slash nélkül, csak slash, valid, kötőjel és pont
+- WebhookSecret: üres, túl rövid, pontosan 15/16 karakter határeset, valid
+
+**CreateSprintDtoValidator tesztek:**
+- Name: üres, túl hosszú, valid
+- Dátum logika: EndDate < StartDate, EndDate == StartDate, EndDate > StartDate
+- Null dátumok kezelése
+- Goal: túl hosszú, null, pontosan 500 karakter
 
 #### Ismert Bugfixek (Észlelt és javított)
 
@@ -1295,6 +1319,7 @@ CreateIntegrationDtoValidator:
 - long -> BigInteger alapú számítás
 - GetMiddle és GetInitialPosition bucket öröklés fix
 - MoveTaskAsync try/catch InvalidOperationException fallback
+- RebalanceColumnAsync Count == 0 early return
 
 **2. ProjKey uniqueness fix:**
 - Unique constraint eltávolítva
@@ -1302,7 +1327,40 @@ CreateIntegrationDtoValidator:
 
 **3. TaskMoved completedAt fix:**
 - completedAt hozzáadva board és projekt szintű broadcasthoz
+- BoardView TaskMoved handler: null completedAt helyesen törli az értéket
 - BoardView és SprintsView handler frissítve
+
+**4. CreateTaskModal alapértelmezett oszlop fix:**
+- Hiányzó alapértelmezett érték beállítva reaktív blokkal
+- Első oszlop automatikusan kiválasztva modal megnyitáskor
+
+#### Optimalizálások
+
+**N+1 query javítások:**
+- GetVelocityAsync: foreach → egyetlen LINQ projekció
+- GetTaskStatusDistributionAsync: in-memory GroupBy → DB szintű GroupBy
+- GetCumulativeFlowAsync: Include → Select projekció, előre csoportosított history
+- GetUnmatchedCommitsAsync / GetUnmatchedPrsAsync: két lekérdezés → JOIN
+
+**ColumnDefinition Soft Delete:**
+- IsDeleted és DeletedAt mezők hozzáadva
+- DeleteColumnAsync: hard delete → soft delete
+- Minden ColumnDefinition lekérdezés szűri a törölt oszlopokat
+- TaskStatusHistory megőrzi a törölt oszlopok adatait a CFD-hez
+
+**TaskStatusHistory pótlások:**
+- CreateTaskAsync: kezdeti bejegyzés task létrehozáskor
+- AssignTaskToBoardAsync: bejegyzés minden oszlopváltozáskor
+- AssignTaskToSprintAsync: bejegyzés oszlopváltozáskor
+- ActivateSprintAsync: bejegyzés minden sprint task mozgatásakor
+- PlanSprintAsync: bejegyzés backlogba visszarakáskor
+- CompleteSprintAsync: bejegyzés befejezetlen taskok backlogba kerülésekor
+
+**TaskStatusHistory refactor:**
+- Status mező eltávolítva — Column navigation property alapján számított
+- Konzisztens adatok oszlop státusz változásakor
+- Törölt oszlopok adatai megmaradnak a CFD-ben
+
 
 #### Ismert Limitációk & Tervezett Fejlesztések
 
@@ -1343,7 +1401,6 @@ Chunked upload vagy presigned URL megközelítés
 - AES-256 WebhookSecret titkosítás
 - HashiCorp Vault (production skálán)
 - Redis backplane SignalR horizontális skálázáshoz
-- TaskStatusHistory: kezdeti bejegyzés task létrehozáskor
 - PR body alapú task matching (pull_request.body mező)
 - Invitation management TeamView-ban
 - Git View sprint nézet:
@@ -1358,6 +1415,8 @@ Chunked upload vagy presigned URL megközelítés
   - IGitProvider interface
   - GitHubProvider, GitLabProvider implementációk
   - Könnyen bővíthető új providerekkel (Bitbucket, Gitea stb.)
+
+- TaskStatusHistory: kezdeti bejegyzés task létrehozáskor (kész + CFD bug javítása (oszlop státusz update setében hibás megjelenítés)) 
 
 
 #### Manuális Tesztelési Területek
