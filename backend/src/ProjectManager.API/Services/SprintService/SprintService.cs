@@ -55,7 +55,7 @@ namespace ProjectManager.API.Services.SprintService
                 if (task.BoardId.HasValue)
                 {
                     var firstColumn = await _context.ColumnDefinitions
-                        .Where(c => c.BoardId == task.BoardId && c.Position > 0)
+                        .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)
                         .OrderBy(c => c.Position)
                         .FirstOrDefaultAsync();
 
@@ -541,7 +541,7 @@ namespace ProjectManager.API.Services.SprintService
                     if (sprint?.State == "Active")
                     {
                         var firstColumn = await _context.ColumnDefinitions
-                            .Where(c => c.BoardId == task.BoardId && c.Position > 0)
+                            .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)
                             .OrderBy(c => c.Position)
                             .FirstOrDefaultAsync();
 
