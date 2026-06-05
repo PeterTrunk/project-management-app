@@ -80,7 +80,17 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 DueDate = dto.DueDate,
             };
             await _context.ProjectTasks.AddAsync(task);
+            _context.TaskStatusHistories.Add(new TaskStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                ColumnId = task.ColumnId,
+                CreatedAt = DateTime.UtcNow
+            });
+
             await _context.SaveChangesAsync();
+            
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("TaskCreated", new
@@ -258,7 +268,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (dto.ColumnId.HasValue)
             {
                 column = await _context.ColumnDefinitions
-                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId);
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !c.IsDeleted);
                 if (column == null)
                     throw new Exception("Oszlop nem található");
             }
@@ -359,7 +369,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Id = Guid.NewGuid(),
                 TaskId = task.Id,
                 ColumnId = task.ColumnId,
-                Status = column?.MapsToStatus ?? "Backlog",
                 CreatedAt = DateTime.UtcNow
             });
 
@@ -546,7 +555,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     Id = Guid.NewGuid(),
                     TaskId = task.Id,
                     ColumnId = null,
-                    Status = "Backlog",
                     CreatedAt = DateTime.UtcNow
                 });
 
@@ -591,7 +599,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = firstColumn.Id,
-                            Status = firstColumn.MapsToStatus,
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -611,7 +618,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = backlogColumn.Id,
-                            Status = backlogColumn.MapsToStatus,
                             CreatedAt = DateTime.UtcNow
                         });
                     }

@@ -56,7 +56,7 @@ namespace ProjectManager.API.Services.StatisticsService
 
             //Csak MapsToStatus kell
             var statuses = await _context.ColumnDefinitions
-                .Where(c => c.Board.ProjectId == projectId && c.Position > 0)
+                .Where(c => c.Board.ProjectId == projectId && c.Position > 0 && !c.IsDeleted)
                 .Select(c => c.MapsToStatus)
                 .Distinct()
                 .ToListAsync();

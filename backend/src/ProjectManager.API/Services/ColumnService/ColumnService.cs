@@ -92,7 +92,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (board == null)
                 throw new Exception("Board nem található");
 
-            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(c => c.Id == columnId);
+            var column = await _context.ColumnDefinitions
+                .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
             if (column == null)
                 throw new Exception("Oszlop nem található");
             if (column.Position == 0)
@@ -102,7 +103,10 @@ namespace ProjectManager.API.Services.ColumnService
             if (hasTask)
                 throw new Exception("Az oszlop nem törölhető, mert taskok találhatóak benne!");
 
-            _context.ColumnDefinitions.Remove(column);
+            //Soft delete
+            column.IsDeleted = true;
+            column.DeletedAt = DateTime.UtcNow;
+            
             await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"board-{boardId}")
@@ -135,7 +139,7 @@ namespace ProjectManager.API.Services.ColumnService
                 throw new Exception("Board nem található");
 
             var columns = await _context.ColumnDefinitions
-                .Where(c => c.BoardId == boardId)
+                .Where(c => c.BoardId == boardId && !c.IsDeleted)
                 .ToListAsync();
 
             return columns.Select(c => new ColumnResponseDto
@@ -163,7 +167,7 @@ namespace ProjectManager.API.Services.ColumnService
                 .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == boardId);
             var columnIds = order.Select(o => o.Id).ToList();
             var columns = await _context.ColumnDefinitions
-                .Where(c => columnIds.Contains(c.Id))
+                .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
                 .ToListAsync();
 
             if (columns.Count != order.Count)
@@ -212,7 +216,7 @@ namespace ProjectManager.API.Services.ColumnService
             if (board == null)
                 throw new Exception("Board nem található");
 
-            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(c => c.Id == columnId);
+            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
             if (column == null)
                 throw new Exception("Oszlop nem található");
 

@@ -721,10 +721,6 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<TaskStatusHistory>(entity =>
         {
-            entity.Property(h => h.Status)
-                  .HasMaxLength(32)
-                  .IsRequired();
-
             entity.Property(h => h.CreatedAt)
                   .IsRequired();
 

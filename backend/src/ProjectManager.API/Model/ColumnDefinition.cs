@@ -8,6 +8,8 @@
         public string MapsToStatus {  get; set; } = string.Empty;
         public int? WipLimit { get; set; }
         public int Position {  get; set; }
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
 
         public Board Board { get; set; } = null!;
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();

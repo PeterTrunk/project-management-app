@@ -74,7 +74,6 @@ namespace ProjectManager.API.Services.SprintService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = firstColumn.Id,
-                            Status = firstColumn.MapsToStatus,
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -152,7 +151,6 @@ namespace ProjectManager.API.Services.SprintService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = null,
-                            Status = "Backlog",
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -418,7 +416,6 @@ namespace ProjectManager.API.Services.SprintService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = backlogColumn.Id,
-                            Status = backlogColumn.MapsToStatus,
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -563,7 +560,6 @@ namespace ProjectManager.API.Services.SprintService
                                 Id = Guid.NewGuid(),
                                 TaskId = task.Id,
                                 ColumnId = firstColumn.Id,
-                                Status = firstColumn.MapsToStatus,
                                 CreatedAt = DateTime.UtcNow
                             });
                         }
@@ -593,7 +589,6 @@ namespace ProjectManager.API.Services.SprintService
                             Id = Guid.NewGuid(),
                             TaskId = task.Id,
                             ColumnId = backlogColumn.Id,
-                            Status = backlogColumn.MapsToStatus,
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -607,7 +602,6 @@ namespace ProjectManager.API.Services.SprintService
                         Id = Guid.NewGuid(),
                         TaskId = task.Id,
                         ColumnId = null,
-                        Status = "Backlog",
                         CreatedAt = DateTime.UtcNow
                     });
                 }
