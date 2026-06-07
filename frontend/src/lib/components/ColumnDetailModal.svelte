@@ -245,6 +245,22 @@
         align-self: center;
     }
 
+    button[type="submit"] {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--accent-blue-bg);
+        border: 1px solid var(--accent-blue);
+        color: var(--accent-blue);
+        font-size: 0.9rem;
+        transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover {
+        background: var(--accent-blue);
+        color: #fff;
+    }
+
     span { font-weight: bold; color: var(--text-primary); }
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; }

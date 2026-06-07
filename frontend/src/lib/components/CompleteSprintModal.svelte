@@ -5,7 +5,7 @@
     import { setSprints } from '../stores/sprintStore';
     import { setTasks } from '../stores/taskStore';
 
-    import { TriangleAlert, CircleCheck } from 'lucide-svelte';
+    import { TriangleAlert, CircleCheck, X } from 'lucide-svelte';
 
     export let isCompleteSprintOpen = false;
     export let projectId: string;
@@ -60,8 +60,11 @@
     tabindex="-1"
 >
     <div class="modal-content">
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
         <h1>Sprint Lezárása — {sprint.name}</h1>
-
+        
         {#if unfinishedTasks.length > 0}
             <div class="warning">
                 <TriangleAlert size={16} /> {unfinishedTasks.length} befejezetlen task van a sprintben!
@@ -130,6 +133,7 @@
     }
 
     .modal-content {
+        position: relative;
         background: var(--bg-card);
         border: 1px solid var(--border);
         padding: 2rem;
@@ -235,6 +239,25 @@
         padding: 0.5rem 1rem;
         border-radius: 6px;
         cursor: pointer;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
     }
 
     .complete-btn {

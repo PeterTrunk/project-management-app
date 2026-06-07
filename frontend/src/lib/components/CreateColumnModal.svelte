@@ -5,6 +5,8 @@
     import { validateColumnStatus, validateColumnName } from '../validators';
     import type { ColumnResponse } from '../../lib/api/columnApi';
 
+    import { X } from 'lucide-svelte';
+
     export let isColumnCreationOpen = false;
     export let projectId: string;
     export let boardId: string;
@@ -103,6 +105,9 @@
     tabindex="-1"
     >
     <div class="modal-content">
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
         <form on:submit|preventDefault={handleCreateColumn}>
             <h1>Oszlop létrehozása {activeBoardName}-hoz</h1>
             Új oszlop neve
@@ -131,7 +136,6 @@
                 <p id="success">{success}</p>
             {/if}
             <button type="submit" id="create">Létrehozás</button>
-            <button on:click={closeModal}>Bezárás</button>
         </form>
     </div>
 </div>
@@ -211,6 +215,47 @@
         cursor: pointer;
         width: fit-content;
         align-self: center;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+
+    .modal-content h1 {
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+    }
+
+    button[type="submit"] {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--accent-blue-bg);
+        border: 1px solid var(--accent-blue);
+        color: var(--accent-blue);
+        font-size: 0.9rem;
+        transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover {
+        background: var(--accent-blue);
+        color: #fff;
     }
 
     #success { color: var(--accent-green); }

@@ -5,9 +5,16 @@
     import { validateBoardName, validateBoardDescription } from '../validators';
     import type { BoardResponse } from '../api/boardApi';
 
+    import { deleteBoardAsync } from '../api/boardApi';
+    import ConfirmModal from './ConfirmModal.svelte';
+
+    import { X, Trash2 } from 'lucide-svelte';
+
     export let isUpdateBoardOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
+
+    let isConfirmOpen = false;
 
     let modalRef: HTMLElement;
 
@@ -67,8 +74,24 @@
             error = 'Hiba történt a board módosítása során!';
         }
     }
-</script>
 
+    async function handleDeleteBoard() {
+        try {
+            await deleteBoardAsync(projectId, activeBoard!.id);
+            const boards = await getBoardsAsync(projectId);
+            setBoards(boards);
+            if (boards.length > 0) {
+                setActiveBoard(boards[0]);
+            } else {
+                setActiveBoard(null);
+            }
+            closeModal();
+        } catch (e: any) {
+            error = e.response?.data ?? 'Hiba történt a board törlése során!';
+        }
+    }
+
+</script>
 <div class="modal-overlay" on:click|self={closeModal}
     bind:this={modalRef}
     on:keydown={(e) => e.key === 'Escape' && closeModal()}
@@ -77,6 +100,15 @@
     tabindex="-1"
 >
     <div class="modal-content">
+        <div class="header-actions">
+            <button class="delete-btn" type="button" on:click={() => isConfirmOpen = true}>
+                <Trash2 size={15} /> Törlés
+            </button>
+        </div>
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
+
         <form on:submit|preventDefault={handleUpdateBoard}>
             <h1>Board módosítása</h1>
             Board neve:
@@ -92,11 +124,20 @@
             {#if success}
                 <p id="success">{success}</p>
             {/if}
-            <button type="submit">Módosítás</button>
-            <button type="button" on:click={closeModal}>Bezárás</button>
+            <button type="submit">Módosítások mentése</button>
         </form>
     </div>
 </div>
+
+{#if isConfirmOpen}
+    <ConfirmModal
+        bind:isOpen={isConfirmOpen}
+        title="Board törlése"
+        message="Biztosan törölni szeretnéd a {activeBoard?.name} boardot? Az összes oszlop és task elvész!"
+        confirmText="Törlés"
+        onConfirm={handleDeleteBoard}
+    />
+{/if}
 
 <style>
     .modal-overlay {
@@ -122,6 +163,54 @@
         flex-direction: column;
         gap: 1rem;
         position: relative;
+    }
+
+    .header-actions {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+    }
+
+    .delete-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0.3rem 0.6rem;
+        border-radius: 5px;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .delete-btn:hover {
+        background: var(--accent-red-bg);
+        color: var(--accent-red);
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+
+    form h1 {
+        margin-top: 2rem;
     }
 
     form {
@@ -153,6 +242,22 @@
     span {
         font-weight: bold;
         color: var(--accent-blue);
+    }
+
+    button[type="submit"] {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--accent-blue-bg);
+        border: 1px solid var(--accent-blue);
+        color: var(--accent-blue);
+        font-size: 0.9rem;
+        transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover {
+        background: var(--accent-blue);
+        color: #fff;
     }
 
     button {
