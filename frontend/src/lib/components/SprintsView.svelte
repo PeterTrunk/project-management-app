@@ -350,7 +350,6 @@
         onClose={async () => {
             const data = await getSprintsAsync(projectId);
             setSprints(data);
-            isCreateSprintOpen = false;
         }}
     />
 {/if}
