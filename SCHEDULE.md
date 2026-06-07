@@ -1334,6 +1334,29 @@ Elkészült:
 - Hiányzó alapértelmezett érték beállítva reaktív blokkal
 - Első oszlop automatikusan kiválasztva modal megnyitáskor
 
+**5. Login redirect bug:**
+- Duplicate push('/app') eltávolítva
+- Pending invite token kezelés try blokkba helyezve
+- Sikertelen bejelentkezés nem irányít át
+
+**6. TeamView végtelen loop fix:**
+- lastRefreshTrigger változó hozzáadva
+- loadMembers csak refreshTrigger értékváltozáskor fut
+- Recursive loop megszüntetve: loadMembers → setMembers → subscribe → loadMembers
+
+**7. CompletedAt beállítás task létrehozáskor:**
+- Ha task közvetlenül az utolsó oszlopba kerül létrehozáskor
+- CompletedAt = DateTime.UtcNow beállítva
+- Konzisztens MoveTaskAsync viselkedéssel
+
+**8. Archivált projekt jelzés:**
+- Sárga banner megjelenítése archivált projektnél a topbar alatt
+- Egyértelmű visszajelzés hogy csak olvasható hozzáférés
+
+**9. Projekt váltáskor automatikus Overview megnyitás:**
+- activeView = 'overview' beállítva projekt váltáskor
+- Overview automatikusan betölti az adott projekt adatait
+
 #### Optimalizálások
 
 **N+1 query javítások:**
@@ -1361,6 +1384,11 @@ Elkészült:
 - Konzisztens adatok oszlop státusz változásakor
 - Törölt oszlopok adatai megmaradnak a CFD-ben
 
+**CFD Board szűrő:**
+- Opcionális boardId paraméter hozzáadva GetCumulativeFlowAsync-hoz
+- Statuses és histories egyaránt szűrve boardId alapján
+- History bejegyzések a Column boardja alapján szűrődnek (nem task jelenlegi boardja)
+- Board selector hozzáadva a StatisticsView CFD szekciójában
 
 #### Ismert Limitációk & Tervezett Fejlesztések
 
@@ -1403,6 +1431,10 @@ Chunked upload vagy presigned URL megközelítés
 - Redis backplane SignalR horizontális skálázáshoz
 - PR body alapú task matching (pull_request.body mező)
 - Invitation management TeamView-ban
+- Team Workload szétválasztás:
+  - Aktív load: aktív sprintben + boardon lévő taskok (ténylegesen folyamatban)
+  - Tervezett load: sprinthez rendelt de még nem aktív, illetve backlogban lévő hozzárendelt taskok
+  - Pontosabb képet ad a csapat tényleges vs tervezett terheléséről
 - Git View sprint nézet:
   - Sprintenként csoportosított taskok megjelenítése
   - Taskokhoz rendelt commitok és PR-ok listája (CommitCard, PrCard)
@@ -1416,9 +1448,6 @@ Chunked upload vagy presigned URL megközelítés
   - GitHubProvider, GitLabProvider implementációk
   - Könnyen bővíthető új providerekkel (Bitbucket, Gitea stb.)
 
-- TaskStatusHistory: kezdeti bejegyzés task létrehozáskor (kész + CFD bug javítása (oszlop státusz update setében hibás megjelenítés)) 
-
-
 #### Manuális Tesztelési Területek
 Kritikus user flow-k:
 
@@ -1428,6 +1457,8 @@ Git webhook: push -> commit matching -> PR -> merge
 File feltöltés: task és projekt szintű
 Team management: meghívó -> csatlakozás -> role változtatás
 Statisztikák: burndown, velocity, CFD adatok helyessége
+
+Checklist a tesztekről: TESTING.md (repó root-ban)
 
 ## Deployment, Documentation & Presentation Preparation
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
