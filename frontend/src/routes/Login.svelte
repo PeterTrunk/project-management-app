@@ -15,18 +15,17 @@
                 email: response.email,
                 displayName: response.displayName
             });
-            push('/app');
+
+            // Pending invite token kezelése
+            const pendingToken = localStorage.getItem('pendingInviteToken');
+            if (pendingToken) {
+                localStorage.removeItem('pendingInviteToken');
+                push(`/invite/${pendingToken}`);
+            } else {
+                push('/app');
+            }
         } catch (e) {
             error = "Hibás email vagy jelszó!";
-        }
-
-        // Pending invite token kezelése
-        const pendingToken = localStorage.getItem('pendingInviteToken');
-        if (pendingToken) {
-            localStorage.removeItem('pendingInviteToken');
-            push(`/invite/${pendingToken}`);
-        } else {
-            push('/app');
         }
     }
 
