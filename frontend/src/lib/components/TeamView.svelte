@@ -61,9 +61,11 @@
         }
     }
 
+    let lastRefreshTrigger = 0;
     teamStore.subscribe(state => {
         members = state.members;
-        if (state.refreshTrigger > 0) {
+        if (state.refreshTrigger > 0 && state.refreshTrigger !== lastRefreshTrigger) {
+            lastRefreshTrigger = state.refreshTrigger;
             loadMembers();
         }
     });
