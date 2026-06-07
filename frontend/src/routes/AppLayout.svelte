@@ -246,7 +246,8 @@
 
         if (state.activeProject?.id && state.activeProject.id !== currentProjectId) {
             currentProjectId = state.activeProject.id;
-
+            activeView = 'overview';
+            
             signalRService.joinProject(state.activeProject.id).catch(console.error);
 
             loadLabels(state.activeProject.id).catch(console.error);
@@ -270,8 +271,6 @@
     let activeView = 'overview';
     
 </script>
-
-
 
 <div class="app-container">
     <!-- Bal oldal -->
