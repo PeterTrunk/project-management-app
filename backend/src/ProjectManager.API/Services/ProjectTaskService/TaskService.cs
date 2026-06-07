@@ -64,6 +64,19 @@ namespace ProjectManager.API.Services.ProjectTaskService
             counter.LastNum += 1;
             var taskKey = $"{project.ProjKey}-{counter.LastNum}";
 
+            // CompletedAt beállítása ha az utolsó oszlopba van létrehozva
+            DateTime? completedAt = null;
+            if (dto.BoardId.HasValue && dto.ColumnId.HasValue)
+            {
+                var lastColumn = await _context.ColumnDefinitions
+                    .Where(c => c.BoardId == dto.BoardId && c.Position > 0 && !c.IsDeleted)
+                    .OrderByDescending(c => c.Position)
+                    .FirstOrDefaultAsync();
+
+                if (lastColumn?.Id == dto.ColumnId)
+                    completedAt = DateTime.UtcNow;
+            }
+
             var task = new ProjectTask
             {
                 ProjectId = projectId,
@@ -78,6 +91,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Position = _lexorankService.GetInitialPosition(lastTask?.Position),
                 EstimateInMinutes = dto.EstimateInMinutes ?? null,
                 DueDate = dto.DueDate,
+                CompletedAt = completedAt
             };
             await _context.ProjectTasks.AddAsync(task);
             _context.TaskStatusHistories.Add(new TaskStatusHistory
