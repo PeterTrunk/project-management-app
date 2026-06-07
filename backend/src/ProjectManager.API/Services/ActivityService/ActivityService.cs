@@ -81,7 +81,7 @@ namespace ProjectManager.API.Services.ActivityService
                 query = query.Where(a => a.CreatedAt >= DateTime.SpecifyKind(dateFrom.Value, DateTimeKind.Utc));
 
             if (dateTo.HasValue)
-                query = query.Where(a => a.CreatedAt <= DateTime.SpecifyKind(dateTo.Value, DateTimeKind.Utc).AddDays(1));
+                query = query.Where(a => a.CreatedAt <= DateTime.SpecifyKind(dateTo.Value, DateTimeKind.Utc));
 
             var activities = await query
                 .OrderByDescending(a => a.CreatedAt)

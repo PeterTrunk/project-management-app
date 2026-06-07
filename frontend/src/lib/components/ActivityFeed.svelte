@@ -47,11 +47,13 @@
                 pageSize: PAGE_SIZE,
                 entityType: filterEntityType || undefined,
                 actorName: filterActorName || undefined,
-                dateFrom: filterDateFrom || undefined,
-                dateTo: filterDateTo || undefined,
+                dateFrom: filterDateFrom ? toUtcString(filterDateFrom) : undefined,
+                dateTo: filterDateTo ? toUtcString(filterDateTo) : undefined,
             });
             console.log('API válasz:', data);
             console.log('API válasz hossza:', data.length);
+            console.log('filterDateFrom:', filterDateFrom);
+            console.log('filterDateTo:', filterDateTo);
             activities = [...data];
             hasMore = data.length === PAGE_SIZE;
             page = 1;
@@ -89,13 +91,18 @@
         isTodayFilter = !isTodayFilter;
         if (isTodayFilter) {
             const today = new Date().toISOString().split('T')[0];
-            filterDateFrom = today;
-            filterDateTo = today;
+            filterDateFrom = `${today}T00:00`;
+            filterDateTo = `${today}T23:59`;
         } else {
             filterDateFrom = '';
             filterDateTo = '';
         }
         loadActivities();
+    }
+
+    function toUtcString(localDateTimeString: string): string {
+        if (!localDateTimeString) return '';
+        return new Date(localDateTimeString).toISOString();
     }
 
     function clearFilters() {
@@ -134,8 +141,7 @@
         if (diffDays === 1) return `tegnap ${timeStr}`;
         return `${date.toLocaleDateString('hu-HU')} ${timeStr}`;
     }
-
-
+    
     function getEntityIcon(entityType: string): any {
         switch (entityType) {
             case 'Task':        return ClipboardList;
@@ -183,7 +189,7 @@
     </select>
     <label>
         <input 
-            type="date"
+            type="datetime-local"
             bind:value={filterDateFrom}
             on:change={loadActivities}
         />
@@ -191,7 +197,7 @@
     </label>
     <label>
         <input
-            type="date"
+            type="datetime-local"
             bind:value={filterDateTo}
             on:change={loadActivities}
         />
@@ -377,7 +383,7 @@
 
     .filter-toolbar input[type="text"],
     .filter-toolbar select,
-    .filter-toolbar input[type="date"] {
+    .filter-toolbar input[type="datetime-local"] {
         background: var(--bg-input);
         border: 1px solid var(--border-hover);
         border-radius: 6px;
@@ -388,7 +394,7 @@
 
     .filter-toolbar input[type="text"]:focus,
     .filter-toolbar select:focus,
-    .filter-toolbar input[type="date"]:focus {
+    .filter-toolbar input[type="datetime-local"]:focus {
         outline: none;
         border-color: var(--accent-blue);
     }
