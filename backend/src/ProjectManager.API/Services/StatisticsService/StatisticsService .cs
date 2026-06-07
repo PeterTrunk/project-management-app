@@ -49,14 +49,21 @@ namespace ProjectManager.API.Services.StatisticsService
             return result;
         }
 
-        public async Task<List<CumulativeFlowDataPointDto>> GetCumulativeFlowAsync(Guid projectId, DateTime dateFrom, DateTime dateTo)
+        public async Task<List<CumulativeFlowDataPointDto>> GetCumulativeFlowAsync(
+            Guid projectId, 
+            DateTime dateFrom, 
+            DateTime dateTo,
+            Guid? boardId = null)
         {
             dateFrom = DateTime.SpecifyKind(dateFrom, DateTimeKind.Utc);
             dateTo = DateTime.SpecifyKind(dateTo, DateTimeKind.Utc).AddDays(1).AddSeconds(-1);
 
             //Csak MapsToStatus kell
             var statuses = await _context.ColumnDefinitions
-                .Where(c => c.Board.ProjectId == projectId && c.Position > 0 && !c.IsDeleted)
+                .Where(c => c.Board.ProjectId == projectId &&
+                            c.Position > 0 &&
+                            !c.IsDeleted &&
+                            (boardId == null || c.BoardId == boardId))
                 .Select(c => c.MapsToStatus)
                 .Distinct()
                 .ToListAsync();
@@ -66,13 +73,15 @@ namespace ProjectManager.API.Services.StatisticsService
             var histories = await _context.TaskStatusHistories
                 .Where(h => h.Task.ProjectId == projectId)
                 .Where(h => h.CreatedAt >= dateFrom && h.CreatedAt <= dateTo)
+                .Where(h => boardId == null ||
+                            (h.Column != null && h.Column.BoardId == boardId) ||
+                            (h.Column == null && boardId == null))
                 .Select(h => new
                 {
                     h.TaskId,
                     h.CreatedAt,
                     Status = h.Column != null ? h.Column.MapsToStatus : "Backlog"
                 })
-                .OrderBy(h => h.CreatedAt)
                 .ToListAsync();
 
             //A cikluson kívül csoportosítunk egyszer: O(histories)

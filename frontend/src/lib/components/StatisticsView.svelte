@@ -20,6 +20,8 @@
     import TeamWorkloadChart from './TeamWorkloadChart.svelte';
     import VelocityChart from './VelocityChart.svelte';
     import CumulativeFlowChart from './CumulativeFlowChart.svelte';
+    import type { BoardResponse } from '../api/boardApi';
+    import { boardStore } from '../stores/boardStore';
 
     export let projectId: string;
 
@@ -43,10 +45,16 @@
     let loadingWorkload = false;
     let loadingVelocity = false;
     let loadingCFD = false;
+    let selectedBoardId: string ='';
 
     let sprints: SprintResponse[] = [];
     sprintStore.subscribe(state => {
         sprints = state.sprints;
+    });
+
+    let boards: BoardResponse[] = [];
+    boardStore.subscribe(state => {
+        boards = state.boards;
     });
 
     onMount(async () => {
@@ -116,9 +124,11 @@
     async function loadCumulativeFlow() {
         loadingCFD = true;
         try {
+            console.log('CFD params:', { projectId, dateFrom, dateTo, boardId: selectedBoardId });
             cumulativeFlowData = await getCumulativeFlowAsync(
-                projectId, dateFrom, dateTo
+                projectId, dateFrom, dateTo, selectedBoardId
             );
+            console.log('CFD data:', cumulativeFlowData);
         } catch (e) {
             console.error('Hiba a CFD lekérésekor!');
         } finally {
@@ -239,6 +249,12 @@
                         bind:value={dateTo}
                         on:change={handleDateChange}
                     />
+                    <select bind:value={selectedBoardId} on:change={loadCumulativeFlow}>
+                        <option value="">Összes board</option>
+                        {#each boards as board}
+                            <option value={board.id}>{board.name}</option>
+                        {/each}
+                    </select>
                 </div>
             </div>
             {#if loadingCFD}

@@ -83,12 +83,16 @@ namespace ProjectManager.API.Controllers
         [HttpGet("cumulative-flow")]
         [Authorize(Policy = "ProjectViewer")]
         [ProducesResponseType(typeof(List<CumulativeFlowDataPointDto>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<List<CumulativeFlowDataPointDto>>> GetCumulativeFlowAsync(Guid projectId, [FromQuery] DateTime dateFrom, [FromQuery] DateTime dateTo)
+        public async Task<ActionResult<List<CumulativeFlowDataPointDto>>> GetCumulativeFlowAsync(
+            Guid projectId,
+            [FromQuery] DateTime dateFrom,
+            [FromQuery] DateTime dateTo,
+            [FromQuery] Guid? boardId = null)
         {
             try
             {
                 var response = await _statisticsService.GetCumulativeFlowAsync(
-                    projectId, dateFrom, dateTo);
+                    projectId, dateFrom, dateTo, boardId);
                 return Ok(response);
             }
             catch (Exception ex)

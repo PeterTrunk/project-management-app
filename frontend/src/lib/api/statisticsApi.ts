@@ -64,10 +64,10 @@ export async function getVelocityAsync(projectId: string): Promise<VelocityDataP
     return response.data;
 }
 
-export async function getCumulativeFlowAsync(projectId: string, dateFrom: string, dateTo: string): Promise<CumulativeFlowDataPoint[]> {
+export async function getCumulativeFlowAsync(projectId: string, dateFrom: string, dateTo: string, boardId?: string): Promise<CumulativeFlowDataPoint[]> {
     const response = await apiClient.get(
         `/projects/${projectId}/statistics/cumulative-flow`,
-        { params: { dateFrom, dateTo } }
+        { params: { dateFrom, dateTo, boardId } }
     );
     return response.data;
 }

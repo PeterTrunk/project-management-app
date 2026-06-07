@@ -8,6 +8,6 @@ namespace ProjectManager.API.Services.StatisticsService
         Task<List<BurndownDataPointDto>> GetBurndownAsync(Guid projectId, Guid sprintId);
         Task<List<WorkloadDataPointDto>> GetWorkloadAsync(Guid projectId, Guid? sprintId = null);
         Task<List<VelocityDataPointDto>> GetVelocityAsync(Guid projectId);
-        Task<List<CumulativeFlowDataPointDto>> GetCumulativeFlowAsync(Guid projectId, DateTime dateFrom, DateTime dateTo);
+        Task<List<CumulativeFlowDataPointDto>> GetCumulativeFlowAsync(Guid projectId, DateTime dateFrom, DateTime dateTo, Guid? boardId = null);
     }
 }
