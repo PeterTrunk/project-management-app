@@ -13,6 +13,16 @@
 - 2026-05-10: Testing, Bug Fixes & Final Integration
 - 2026-05-17: Deployment, Documentation & Presentation Preparation
 
+# Continuation (After MVP - kötetlen idő beosztással)
+- x: SignalR Architecture Refactor
+- x: Team & Project Improvements
+- x: File Upload Improvements
+- x: Security Hardening (TOTP 2FA)
+- x: Git Webhook Enhancements
+- x: Git View Sprint Overview
+- x: Git Intelligence – Branches & Insights
+- x: Multi-Sprint Analytics
+
 ## Development Environment Setup & Database Design
 Docker Compose environment setup with PostgreSQL, MinIO (S3-compatible object storage), and Nginx reverse proxy. PostgreSQL schema design using dbdiagram.io, defining all core entities (users, projects, tasks, sprints, labels, comments, attachments, activity_log) with proper relations, constraints, and indexing strategy. Project repository initialization with backend (ASP.NET Core) and frontend (Svelte) folder structure.
 
@@ -1463,6 +1473,22 @@ Checklist a tesztekről: TESTING.md (repó root-ban)
 ## Deployment, Documentation & Presentation Preparation
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
 
+**(After MVP - starting point)**
+## Security Hardening (TOTP 2FA) 
+AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
+
+## SignalR Architecture Refactor
+Centralized SignalR event handling at AppLayout level. Direct store updates from event payloads instead of full API reloads. Redis backplane support for horizontal scaling.
+
+## File Upload Improvements
+Configurable file size limits via environment variables. Explicit content-type allowlist. Chunked upload or presigned URL approach for large files.
+
+## Git Webhook Enhancements
+PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
+
+## Git View Sprint Overview
+Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks — no new backend endpoints required.
+
 ## Git Intelligence – Branches & Insights
 
 Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads — no access token required.
@@ -1600,4 +1626,10 @@ Legtöbb aktivitást kapott taskok listája
 - Git View Branches tab frontend
 - Git View Insights tab frontend
 - TaskDetailModal: kapcsolódó branchek
-- Sprint összehasonlítás (ha elegendő adat)
+- Sprint összehasonlítás (ha elegendő az adat)
+
+## Team & Project Improvements
+Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks). 
+
+## Multi-Sprint Analytics
+Sprint comparison charts after minimum 3-4 sprints of data. PR cycle time trends, stale task ratios, and team git activity over time.
