@@ -34,9 +34,9 @@
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
 
     import { 
-        LayoutDashboard, Kanban, Timer, Users, BarChart2, 
+        LayoutDashboard, Kanban, Timer, Users, ChartNoAxesColumn, 
         FolderOpen, GitBranch, Settings, LogOut, ChevronLeft, 
-        ChevronRight, Plus, FileText, User
+        ChevronRight, Plus, FileText, User, Archive
     } from 'lucide-svelte';
 
     //Ideiglenes Theme Váltó Toggle
@@ -55,7 +55,7 @@
         { view: 'board', label: 'Board', icon: Kanban },
         { view: 'sprints', label: 'Sprints', icon: Timer },
         { view: 'team', label: 'Team', icon: Users },
-        { view: 'statistics', label: 'Statisztika', icon: BarChart2 },
+        { view: 'statistics', label: 'Statisztika', icon: ChartNoAxesColumn },
         { view: 'teamResources', label: 'Resources', icon: FileText },
         { view: 'git', label: 'Git', icon: GitBranch },
         { view: 'projectSettings', label: 'Beállítások', icon: Settings },
@@ -381,6 +381,12 @@
                 </button>
             {/each}
         </nav>
+        {#if activeProject?.isArchived}
+            <div class="archived-banner">
+                <Archive size={16} />
+                <span>Ez a projekt archivált, csak olvasható hozzáférés!</span>
+            </div>
+        {/if}
 
         <!-- Dinamikus tartalom -->
         <div 
@@ -730,5 +736,18 @@
         .nav-label {
             display: none;
         }
+    }
+
+    .archived-banner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: var(--accent-yellow-bg);
+        color: var(--accent-yellow);
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--accent-yellow);
+        flex-shrink: 0;
     }
 </style>
