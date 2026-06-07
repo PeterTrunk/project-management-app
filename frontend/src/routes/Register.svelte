@@ -10,38 +10,40 @@
     
     let success = '';
     let error = '';
+    let emailError = '';
+    let displayNameError = '';
+    let passwordError = '';
+    let passwordConfirmError = '';
+
     
     async function handleRegister() {
         error = '';
-        let errorOccured: boolean = false;
-        const emailError = validateEmail(email);
-        const displayNameError = validateDisplayName(displayName);
-        const passwordError = validatePassword(password);
-        if(emailError!=null){
-            error = error + emailError;
-            errorOccured = true;
+        emailError = '';
+        displayNameError = '';
+        passwordError = '';
+        passwordConfirmError = '';
+        
+        let errorOccured = false;
+
+        const emailErr = validateEmail(email);
+        const displayNameErr = validateDisplayName(displayName);
+        const passwordErr = validatePassword(password);
+
+        if (emailErr) { emailError = emailErr; errorOccured = true; }
+        if (displayNameErr) { displayNameError = displayNameErr; errorOccured = true; }
+        if (passwordErr) { passwordError = passwordErr; errorOccured = true; }
+        if (password !== passwordconfirm) { 
+            passwordConfirmError = 'A két jelszó nem egyezik!'; 
+            errorOccured = true; 
         }
-        if(displayNameError!=null){
-            error = error + displayNameError;
-            errorOccured = true;
-        }
-        if (passwordError!=null) {
-            error = error + passwordError;
-            errorOccured = true;
-        }
-        if (password !== passwordconfirm) {
-            error = error + 'A két jelszó nem egyezik!\n';
-            errorOccured = true;
-        }
-        if(errorOccured) {
-            return;
-        }
+        
+        if (errorOccured) return;
+
         try {
             const response = await registerAsync({ email, displayName, password });
             success = 'Sikeres regisztráció! Átirányítás...';
             setTimeout(() => push('/'), 2000);
         } catch (e: any) {
-            console.error('Backend hiba:', e.response?.data);
             error = 'Hiba történt a regisztráció során!';
         }
     }
@@ -51,15 +53,35 @@
     <div class="auth-card">
         <h1>Regisztráció</h1>
         <form on:submit|preventDefault={handleRegister}>
-            <input type="email" placeholder="Email" bind:value={email}/>
-            <input type="text" placeholder="Felhasználónév" bind:value={displayName}/>
-            <input type="password" placeholder="Jelszó" bind:value={password}/>
-            <input type="password" placeholder="Jelszó megerősítése" bind:value={passwordconfirm}/>
-            {#if error}
-                <p id="failed">{error}</p>
-            {/if}
+            <div class="input-group">
+                <input type="email" placeholder="Email" bind:value={email}/>
+                {#if emailError}
+                    <p class="field-error">{emailError}</p>
+                {/if}
+            </div>
+            <div class="input-group">
+                <input type="text" placeholder="Felhasználónév" bind:value={displayName}/>
+                {#if displayNameError}
+                    <p class="field-error">{displayNameError}</p>
+                {/if}
+            </div>
+            <div class="input-group">
+                <input type="password" placeholder="Jelszó" bind:value={password}/>
+                {#if passwordError}
+                    <p class="field-error">{passwordError}</p>
+                {/if}
+            </div>
+            <div class="input-group">
+                <input type="password" placeholder="Jelszó megerősítése" bind:value={passwordconfirm}/>
+                {#if passwordConfirmError}
+                    <p class="field-error">{passwordConfirmError}</p>
+                {/if}
+            </div>
             {#if success}
                 <p id="success">{success}</p>
+            {/if}
+            {#if error}
+                <p id="failed">{error}</p>
             {/if}
             <button type="submit">Regisztráció</button>
         </form>
@@ -103,6 +125,18 @@
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
+    }
+
+    .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .field-error {
+        color: var(--accent-red);
+        font-size: 0.8rem;
+        margin: 0;
     }
 
     input {

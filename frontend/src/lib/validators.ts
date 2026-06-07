@@ -28,7 +28,7 @@ export function validatePassword(pwd: string): string | null {
 export function validateEmail(email: string): string | null {
     let aggregateError = '';
     if(email === '' || email === null ) aggregateError += 'Email nincs megadva!\n';
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) aggregateError += 'Hibás email szignatúra!\n';
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) aggregateError += 'Hibás email szignatúra! (MyEmail@example.com) \n';
     if(email.length > 255) aggregateError += 'Email nem lehet hosszabb mint 255 karakter!\n';
     return aggregateError === '' ? null : aggregateError;
 }
