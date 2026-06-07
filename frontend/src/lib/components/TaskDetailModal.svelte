@@ -312,6 +312,14 @@
                             <span class="meta-value">{new Date(task.createdAt).toLocaleDateString('hu-HU')}</span>
                             <span class="meta-label">Módosítva</span>
                             <span class="meta-value">{new Date(task.updatedAt).toLocaleDateString('hu-HU')}</span>
+                            {#if task.completedAt}
+                                <span class="meta-label">Elkészült</span>
+                                <span class="meta-value">{new Date(task.completedAt).toLocaleDateString('hu-HU')}</span>
+                            {/if}
+                            {#if task.closedAt}
+                                <span class="meta-label">Lezárva</span>
+                                <span class="meta-value">{new Date(task.closedAt).toLocaleDateString('hu-HU')}</span>
+                            {/if}
                         </div>
 
                         <div class="section">
