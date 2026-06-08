@@ -1473,6 +1473,63 @@ Checklist a tesztekről: TESTING.md (repó root-ban)
 ## Deployment, Documentation & Presentation Preparation
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final (MVP level) README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
 
+### Tervezett implementáció
+
+#### Docker Compose Production konfiguráció
+
+**Szolgáltatások:**
+services:
+- nginx:        # Reverse proxy + SSL termination
+- api:          # ASP.NET Core production build
+- db:           # PostgreSQL production konfiguráció
+- minio:        # MinIO object storage
+- certbot:      # Let's Encrypt SSL tanúsítvány
+
+
+**Nginx konfiguráció:**
+- HTTPS redirect (HTTP → HTTPS)
+- SSL termination (Let's Encrypt)
+- WebSocket proxy (SignalR)
+- Static file serving
+- Gzip compression
+
+**Environment Variables production értékek:**
+JWT_SECRET
+DB_CONNECTION_STRING
+MINIO_ENDPOINT / MINIO_ACCESS_KEY / MINIO_SECRET_KEY
+API_BASE_URL
+ENCRYPTION_KEY (jövőbeli AES-256 titkosításhoz)
+
+**ASP.NET Core production build:**
+- ASPNETCORE_ENVIRONMENT=Production
+- Health check endpoint
+- Logging konfiguráció
+
+---
+
+#### README kiegészítés a régebbi haladásra építve
+
+**Tartalom:**
+- Projekt áttekintés és funkciók listája
+- Architektúra áttekintés (Backend, Frontend, Infrastructure)
+- Development setup instrukciók
+- Production deployment instrukciók
+- Environment variables referencia
+- API végpontok áttekintése
+- Ismert limitációk és tervezett fejlesztések
+
+---
+
+#### Production Smoke Testing
+
+**Tesztelendő:**
+- SSL tanúsítvány érvényessége
+- SignalR WebSocket kapcsolat HTTPS-en
+- MinIO fájl feltöltés/letöltés
+- PostgreSQL kapcsolat
+- Git webhook fogadás (ngrok helyett éles URL)
+- TESTING.md kritikus flow-k production környezetben
+
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
 Centralized SignalR event handling at AppLayout level. Direct store updates from event payloads instead of full API reloads. Redis backplane support for horizontal scaling.
