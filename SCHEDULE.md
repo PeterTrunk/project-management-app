@@ -1471,7 +1471,33 @@ Statisztikák: burndown, velocity, CFD adatok helyessége
 Checklist a tesztekről: TESTING.md (repó root-ban)
 
 ## Deployment, Documentation & Presentation Preparation
+(Régi leírás:)
 Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final (MVP level) README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
+(Új átgondolt leírás:)
+Hetzner VPS alapú production deployment Dokploy PaaS platformon. Cloudflare DNS + SSL (Full Strict) konfiguráció. SignalR WebSocket keepalive a Cloudflare timeout kezeléshez. README frissítés production deployment instrukciókkal. Final smoke testing production környezetben.
+
+### Infrastruktúra döntések
+
+**Platform:**
+- **Szerver:** Hetzner VPS
+- **Domain & DNS:** Cloudflare
+- **PaaS:** Dokploy (self-hosted, Docker Compose alapú)
+
+**Cloudflare konfiguráció:**
+- Proxy: BE (Orange Cloud) — DDoS védelem, IP elrejtés
+- SSL mód: Full Strict
+- Dokploy automatikusan kezeli a Let's Encrypt tanúsítványt
+
+**Miért Dokploy:**
+- Beépített Traefik reverse proxy (WebSocket / SignalR támogatás)
+- Automatikus Let's Encrypt megújítás
+- Git-based auto deploy (push -> deploy)
+- Environment variables kezelés UI-ból
+- Docker Compose közvetlen import
+- Beépített monitoring és logok
+- Nginx és Certbot manuális konfiguráció NEM szükséges
+
+---
 
 ### Tervezett implementáció
 
@@ -1479,31 +1505,46 @@ Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized
 
 **Szolgáltatások:**
 services:
-- nginx:        # Reverse proxy + SSL termination
 - api:          # ASP.NET Core production build
 - db:           # PostgreSQL production konfiguráció
 - minio:        # MinIO object storage
-- certbot:      # Let's Encrypt SSL tanúsítvány
-
-
-**Nginx konfiguráció:**
-- HTTPS redirect (HTTP → HTTPS)
-- SSL termination (Let's Encrypt)
-- WebSocket proxy (SignalR)
-- Static file serving
-- Gzip compression
+- Nginx és Certbot NEM kell — Dokploy Traefik kezeli
 
 **Environment Variables production értékek:**
-JWT_SECRET
-DB_CONNECTION_STRING
-MINIO_ENDPOINT / MINIO_ACCESS_KEY / MINIO_SECRET_KEY
-API_BASE_URL
-ENCRYPTION_KEY (jövőbeli AES-256 titkosításhoz)
+- JWT
+JWT_SECRET=
+- PostgreSQL
+DB_HOST=
+DB_PORT=
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+- MinIO
+MINIO_ENDPOINT=
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_BUCKET=
+- API
+API_BASE_URL=
+- SignalR keepalive
+VITE_SIGNALR_KEEPALIVE_ENABLED=true
+VITE_SIGNALR_KEEPALIVE_SECONDS=15
+- Jövőbeli
+ENCRYPTION_KEY=
+REDIS_CONNECTION=
 
 **ASP.NET Core production build:**
 - ASPNETCORE_ENVIRONMENT=Production
-- Health check endpoint
-- Logging konfiguráció
+- Health check endpoint (`/health`)
+- Production logging konfiguráció
+
+#### SignalR WebSocket keepalive
+
+**Probléma:** Cloudflare 100 másodperces WebSocket timeout
+Megoldás:
+- 15mp-enként ping -> Cloudflare timeout sosem következik be
+- Backend konfiguráció NEM szükséges
+- Environment variable alapú kapcsoló
 
 ---
 
@@ -1523,12 +1564,28 @@ ENCRYPTION_KEY (jövőbeli AES-256 titkosításhoz)
 #### Production Smoke Testing
 
 **Tesztelendő:**
-- SSL tanúsítvány érvényessége
+- SSL tanúsítvány érvényessége (Full Strict)
 - SignalR WebSocket kapcsolat HTTPS-en
+- Cloudflare timeout nem következik be (keepalive teszt)
 - MinIO fájl feltöltés/letöltés
-- PostgreSQL kapcsolat
-- Git webhook fogadás (ngrok helyett éles URL)
+- PostgreSQL kapcsolat és migrációk
+- Git webhook fogadás éles URL-lel
 - TESTING.md kritikus flow-k production környezetben
+
+### Implementációs sorrend
+
+1. Hetzner VPS bérlés + Dokploy telepítés
+2. Cloudflare DNS beállítás (A record -> Hetzner IP)
+3. Docker Compose production konfiguráció kiegészítése
+4. SignalR keepalive implementálás (frontend)
+5. Health check endpoint hozzáadása (backend)
+6. Production .env összeállítása
+7. Dokploy-ba Docker Compose import + env vars beállítás
+8. First-time setup: DB migráció, MinIO bucket létrehozás
+9. Cloudflare SSL Full Strict beállítás
+10. Git webhook URL frissítés éles domain-re
+11. Production smoke testing (TESTING.md alapján)
+12. README production deployment instrukciók megírása
 
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
