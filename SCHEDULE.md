@@ -1352,7 +1352,7 @@ Elkészült:
 **6. TeamView végtelen loop fix:**
 - lastRefreshTrigger változó hozzáadva
 - loadMembers csak refreshTrigger értékváltozáskor fut
-- Recursive loop megszüntetve: loadMembers → setMembers → subscribe → loadMembers
+- Recursive loop megszüntetve: loadMembers -> setMembers -> subscribe -> loadMembers
 
 **7. CompletedAt beállítás task létrehozáskor:**
 - Ha task közvetlenül az utolsó oszlopba kerül létrehozáskor
@@ -1370,14 +1370,14 @@ Elkészült:
 #### Optimalizálások
 
 **N+1 query javítások:**
-- GetVelocityAsync: foreach → egyetlen LINQ projekció
-- GetTaskStatusDistributionAsync: in-memory GroupBy → DB szintű GroupBy
-- GetCumulativeFlowAsync: Include → Select projekció, előre csoportosított history
-- GetUnmatchedCommitsAsync / GetUnmatchedPrsAsync: két lekérdezés → JOIN
+- GetVelocityAsync: foreach -> egyetlen LINQ projekció
+- GetTaskStatusDistributionAsync: in-memory GroupBy -> DB szintű GroupBy
+- GetCumulativeFlowAsync: Include -> Select projekció, előre csoportosított history
+- GetUnmatchedCommitsAsync / GetUnmatchedPrsAsync: két lekérdezés -> JOIN
 
 **ColumnDefinition Soft Delete:**
 - IsDeleted és DeletedAt mezők hozzáadva
-- DeleteColumnAsync: hard delete → soft delete
+- DeleteColumnAsync: hard delete -> soft delete
 - Minden ColumnDefinition lekérdezés szűri a törölt oszlopokat
 - TaskStatusHistory megőrzi a törölt oszlopok adatait a CFD-hez
 
@@ -1471,14 +1471,134 @@ Statisztikák: burndown, velocity, CFD adatok helyessége
 Checklist a tesztekről: TESTING.md (repó root-ban)
 
 ## Deployment, Documentation & Presentation Preparation
-Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
+Docker Compose production configuration with HTTPS (Let's Encrypt) and optimized Nginx config. Final (MVP level) README with setup instructions, architecture overview, and API reference. Project documentation update (Functional and Technical Specification alignment with implemented features). Demo data preparation for presentation. Final smoke testing in production-like environment.
 
 **(After MVP - starting point)**
-## Security Hardening (TOTP 2FA) 
-AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
-
 ## SignalR Architecture Refactor
 Centralized SignalR event handling at AppLayout level. Direct store updates from event payloads instead of full API reloads. Redis backplane support for horizontal scaling.
+
+### Tervezett implementáció
+
+#### Backend változások
+
+**Broadcast egységesítés:**
+- Összes event projekt szintű csoportba kerül (project-{projectId})
+- board-{boardId} csoport eltávolítva
+- joinBoard / leaveBoard Hub metódusok eltávolítva
+- TaskCreated projekt szintű broadcast hozzáadása
+- TaskMoved payload kiegészítése (boardId, sprintId, completedAt)
+- TaskUpdated payload teljes TaskResponseDto-val
+
+**Endpoint optimalizálások:**
+- `GET /api/projects/{id}/tasks?activeSprintOnly=true&includeBacklog=true`
+  -> Csak aktív sprint + backlog taskok projekt megnyitáskor
+- `GET /api/projects/{id}/sprints?state=Active,Planning`
+  -> Csak aktív és tervezett sprintek projekt megnyitáskor
+  -> Completed sprintek lazy load SprintsView-ban
+- `GET /api/projects/{id}/boards?includeColumns=true`
+  -> Board + oszlopok egy kérésben
+
+**Redis Backplane (production):**
+- Docker Compose kiegészítése image-el és port-al
+
+- Program.cs configuráció hozzáadása
+
+- Fejlesztésben nem szükséges — csak production horizontális skálázásnál
+- Environment variable alapú kapcsoló: REDIS_CONNECTION jelenlétében aktiválódik
+
+---
+
+#### Frontend változások
+
+**Új event store-ok:**
+taskEventStore.ts    -> Task események (created/updated/moved/deleted/rebalanced/label/assignee)
+sprintEventStore.ts  -> Sprint események (created/updated/deleted)
+columnEventStore.ts  -> Oszlop események (created/updated/deleted/reordered)
+boardEventStore.ts   -> Board események (created/updated/deleted)
+activityEventStore.ts -> Activity események (created)
+
+Minden store struktúrája:
+- Típus, Payload, Timestamp (Duplikánsok kihagyása)
+
+**AppLayout — Centralizált event kezelés:**
+- Összes SignalR event az AppLayout-ban regisztrálva
+- Event érkezésekor -> megfelelő store emit
+- Komponensek NEM regisztrálnak SignalR eventeket
+- `joinBoard` / `leaveBoard` hívások eltávolítva
+
+**Komponensek frissítése:**
+BoardView:
+
+signalRService.on() hívások -> taskEventStore + columnEventStore + boardEventStore subscribe
+Board váltáskor nincs API hívás -> store szűrés boardId alapján
+Összes task már a store-ban van projekt megnyitáskor
+
+SprintsView:
+signalRService.on() hívások -> taskEventStore + sprintEventStore subscribe
+Completed sprintek lazy load: csak SprintsView-ban lévő szekció megnyitáskor kérjük le
+
+ProjectOverview:
+signalRService.on() hívások -> taskEventStore + sprintEventStore subscribe
+
+ActivityFeed:
+signalRService.on() -> activityEventStore subscribe
+
+GitView:
+signalRService.on() -> gitEventStore subscribe
+
+CommentSection:
+signalRService.on() -> commentEventStore subscribe
+
+
+**Projekt megnyitáskor párhuzamos betöltés:**
+- A frontenden egy Primise-ban kérjük le a szükséges alap adatokat (Nem egy GOD endpoint hanem a meglévő endpointok hívása párhuzamosan).
+
+**Lazy loading stratégia:**
+Azonnal (projekt megnyitáskor):
+- Aktív sprint taskjai
+- Projekt backlog taskjai
+- Aktív + Planning sprintek
+- Összes board + oszlop
+- Labelek, tagok, integrációk
+Igény szerint:
+- Completed sprint taskjai (SprintsView megnyitáskor)
+- Completed sprintek listája (SprintsView megnyitáskor)
+- Statistics adatok (StatisticsView megnyitáskor)
+
+---
+
+### Implementációs sorrend
+Backend:
+
+Endpoint optimalizálások (activeSprintOnly, includeColumns stb.)
+board-{boardId} broadcast csoport eltávolítása
+Összes event projekt szintű csoportba migrálása
+Payload kiegészítések (TaskMoved, TaskCreated, TaskUpdated)
+Redis backplane konfiguráció (production)
+
+Frontend:
+6. Event store-ok létrehozása
+7. AppLayout: SignalR -> store emit centralizálás
+8. BoardView refactor: signalRService.on -> store subscribe
+9. SprintsView refactor
+10. ProjectOverview refactor
+11. ActivityFeed refactor
+12. GitView refactor
+13. CommentSection refactor
+14. Párhuzamos initial load implementálása
+15. Lazy loading SprintsView completed sprintekhez
+
+### Várható előnyök
+- Board váltás azonnali (nincs API hívás)
+- Nincs race condition nézetek váltásakor
+- Kevesebb hálózati forgalom
+- Komponensek könnyen cserélhetők/tesztelhetők
+- Horizontálisan skálázható (Redis backplane)
+- Egységes event kezelés egy helyen
+- Lazy loading -> gyorsabb kezdeti betöltés
+
+## Security Hardening (TOTP 2FA) 
+AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
 
 ## File Upload Improvements
 Configurable file size limits via environment variables. Explicit content-type allowlist. Chunked upload or presigned URL approach for large files.
