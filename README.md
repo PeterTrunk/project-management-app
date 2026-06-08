@@ -15,19 +15,25 @@ Egy **Jira/Linear ihletésű projekt menedzsment webalkalmazás**, amely Kanban-
 
 ### Már implementált
 - **JWT autentikáció** – bejelentkezés, regisztráció, token rotáció (refresh token), jelszócsere
-- **RBAC jogosultságkezelés** – 4 projektszerep: `Owner`, `Maintainer`, `Member`, `Viewer`
+- **RBAC jogosultságkezelés** – 4 projektszerep: `Owner`, `Admin`, `Member`, `Viewer`
 - **Projekt & Task CRUD** – automatikus board/oszlop létrehozás, `PM-1` stílusú Task Key generálás
 - **Kanban tábla** – drag & drop oszlopok és taskok között (`svelte-dnd-action`)
-- **Lexorank pozicionálás** – iparági standard (Jira/Linear) string-alapú, végtelen közbeszúrást lehetővé tevő rendezési algoritmus
-- **Sprint menedzsment** – teljes lifecyle: `Planning → Active → Completed`, backlog kezelés, sprint lezárás befejezetlen task kezeléssel
+- **Lexorank pozicionálás** – iparági standard string-alapú rendezési algoritmus, BigInteger alapú implementáció
+- **Sprint menedzsment** – teljes lifecycle: `Planning → Active → Completed`, backlog kezelés, sprint lezárás befejezetlen task kezeléssel
 - **SignalR valós idejű frissítések** – task mozgatás, oszlop és sprint változások azonnal megjelennek minden bejelentkezett felhasználónál
 - **Kommentek & Labelek** – task szintű kommentelés és projekten belüli label kezelés
+- **Git Webhook integráció** – GitHub/GitLab commit és PR automatikus task-összerendelés regex alapján (`PM-123`), unmatched commit/PR manuális hozzárendeléssel, webhook verifikáció ping event alapján
+- **MinIO fájltárolás** – task és projekt szintű csatolmányok S3-kompatibilis objektumtárolóban, streaming letöltés
+- **Statisztika Dashboard** – ECharts alapú grafikonok: burndown/burnup, sprint velocity, team workload, task státusz eloszlás, Cumulative Flow Diagram
+- **Team Management** – tagok meghívása (meghívólink), szerepkör kezelés
+- **Activity Log** – projekt szintű aktivitásnapló szűréssel (felhasználó, típus, dátum)
+- **Dark/Light mód** – témaváltás localStorage perzisztenciával
+- **Overview Dashboard** – személyes task összefoglaló, overdue jelzések, sprint progress
+- **Search & Filter** – Board szintű keresés/szűrés (assignee, prioritás, label, határidő)
 
 ### Tervezett / Fejlesztés alatt
-- **Git Webhook integráció** – GitHub/GitLab commit és PR automatikus task-összerendelés (pl. `PM-123`)
-- **MinIO fájltárolás** – csatolmányok S3-kompatibilis objektumtárolóban
-- **Statisztika Dashboard** – ECharts alapú grafikonok: burndown, burnup, sprint velocity, team workload
-- **Team Management** – tagok meghívása (meghívólink), szerepkör kezelés, aktivitásnapló
+- Az alap MVP terv minden fejezete elkészült.
+- További fejleszések és limitációk a dokumentum végén.
 
 ---
 
@@ -67,14 +73,16 @@ project-management-app/
 | **svelte-dnd-action** | Drag & Drop |
 | **axios** | HTTP kliens, JWT interceptorral |
 | **@microsoft/signalr** | SignalR kliens |
-| **ECharts** *(tervezett)* | Statisztika grafikonok |
+| **ECharts** | Statisztika grafikonok |
+| **lucide-svelte** | Ikon könyvtár |
 
 ### Infrastruktúra
 | Technológia | Szerepe |
 |---|---|
-| **Docker Compose** | Konténerizált fejlesztői környezet |
-| **MinIO** *(tervezett)* | S3-kompatibilis fájltárolás |
-| **Nginx** *(tervezett)* | Reverse proxy, WebSocket proxy |
+| **Docker Compose** | Konténerizált fejlesztői és production környezet |
+| **MinIO** | S3-kompatibilis fájltárolás |
+| **Nginx** *(production)* | Reverse proxy, WebSocket proxy, SSL termination |
+| **Let's Encrypt** *(production)* | Automatikus SSL tanúsítvány |
 
 ---
 
@@ -84,13 +92,13 @@ A séma tervrajza [dbdiagram.io](https://dbdiagram.io)-val készült.
 
 | Entitáscsoport | Táblák |
 |---|---|
-| Felhasználók | `Users`, `ProjectMembers`, `RefreshTokens` |
-| Projekt struktúra | `Projects`, `Boards`, `ColumnDefinitions`, `Tasks` |
-| Sprint | `Sprints` |
-| Kommunikáció | `Comments`, `Labels`, `TaskLabels` |
-| Git integráció | `GitWebhooks`, `Commits`, `PullRequests` |
+| Felhasználók | `Users`, `ProjectMembers`, `RefreshTokens`, `ProjectInvites` |
+| Projekt struktúra | `Projects`, `ProjectCounters`, `Boards`, `ColumnDefinitions`, `ProjectTasks`, `TaskAssignments` |
+| Sprint | `Sprints`, `TaskStatusHistories` |
+| Kommunikáció | `Comments`, `Labels`, `LabelTasks` |
+| Git integráció | `Integrations`, `CommitLinks`, `PrLinks` |
 | Fájlok | `Attachments` |
-| Napló | `ActivityLog` |
+| Napló | `Activities` |
 
 ---
 
@@ -120,13 +128,15 @@ A backend minden jelentős változásra broadcastol a megfelelő project/board s
 
 | Esemény | Trigger |
 |---|---|
-| `TaskMoved`, `TaskCreated`, `TaskUpdated`, `TaskDeleted` | Task műveletek |
-| `ColumnCreated`, `ColumnUpdated`, `ColumnsReordered` | Oszlop műveletek |
-| `SprintCreated`, `SprintUpdated`, `SprintDeleted` | Sprint műveletek |
-| `BoardCreated`, `BoardUpdated`, `BoardDeleted` | Board műveletek |
-| `CommentAdded`, `CommentDeleted` | Komment műveletek |
-| `LabelCreated`, `LabelDeleted` | Label műveletek |
-| `ProjectUpdated`, `ProjectArchived` | Projekt műveletek |
+| `TaskAssigneeAdded`, `TaskAssigneeRemoved` | Assignee műveletek |
+| `TaskLabelAdded`, `TaskLabelRemoved` | Task label műveletek |
+| `TasksRebalanced` | Lexorank rebalancing |
+| `MemberAdded`, `MemberRemoved`, `MemberRoleUpdated` | Team műveletek |
+| `ProjectArchived`, `ProjectUnarchived` | Projekt archiválás |
+| `ActivityCreated` | Activity log |
+| `IntegrationCreated`, `IntegrationDeleted`, `IntegrationVerified`, `IntegrationUpdated` | Git integráció műveletek |
+| `CommitLinked`, `PrLinked` | Git webhook események |
+| `AttachmentUploaded`, `AttachmentDeleted` | Fájl műveletek |
 
 ---
 
@@ -137,6 +147,32 @@ A backend minden jelentős változásra broadcastol a megfelelő project/board s
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [.NET 8+ SDK](https://dotnet.microsoft.com/download)
 - [Node.js 20+](https://nodejs.org/)
+- [ngrok](https://ngrok.com/) *(opcionális, Git webhook lokális teszteléshez)*
+
+### Environment Variables
+
+A projekt gyökerében hozz létre egy `.env` fájlt:
+
+```env
+# JWT
+JWT_SECRET=your-jwt-secret-min-32-chars
+
+# PostgreSQL
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=projectmanager
+DB_USER=pmuser
+DB_PASSWORD=pmpassword
+
+# MinIO
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=project-manager
+
+# API
+API_BASE_URL=https://localhost:5178
+```
 
 ### 1. Adatbázis indítása Dockerrel
 
@@ -184,11 +220,22 @@ A részletes haladásnaplót a [`SCHEDULE.md`](./SCHEDULE.md) tartalmazza.
 | 2026-03-22 | Svelte frontend alap & layout | Kész |
 | 2026-03-29 | Kanban tábla & Task kezelés | Kész |
 | 2026-04-05 | SignalR valós idejű frissítések | Kész |
-| 2026-04-12 | Sprint & Team Management | Folyamatban |
-| 2026-04-19 | Git Webhook & MinIO fájltárolás | Tervezett |
-| 2026-04-26 | Statisztika Dashboard & ECharts | Tervezett |
-| 2026-05-03 | Keresés/szűrés & UI finomítás | Tervezett |
-| 2026-05-10 | Tesztelés & hibajvítás | Tervezett |
-| 2026-05-17 | Deployment & dokumentáció | Tervezett |
+| 2026-04-12 | Sprint & Team Management | Kész |
+| 2026-04-19 | Git Webhook & MinIO fájltárolás | Kész |
+| 2026-04-26 | Statisztika Dashboard & ECharts | Kész |
+| 2026-05-03 | Keresés/szűrés & UI finomítás | Kész |
+| 2026-05-10 | Tesztelés & hibajvítás | Kész |
+| 2026-05-17 | Deployment & dokumentáció | Folyamatban |
 
 ---
+
+## Ismert limitációk & Tervezett fejlesztések
+
+- **SignalR centralizálás** – komponensenkénti event kezelés helyett AppLayout szintű centralizált megoldás
+- **WebhookSecret titkosítás** – jelenleg plain text tárolás, tervezett AES-256 titkosítás
+- **File feltöltés optimalizálás** – méret limit konfiguráció, chunked upload
+- **TOTP 2FA** – bejelentkezés és kritikus műveletek védelme
+- **GitLab webhook** – teljes támogatás és tesztelés
+- **Redis backplane** – horizontális skálázáshoz SignalR-rel
+
+Részletes tervek: [`SCHEDULE.md`](./SCHEDULE.md)
