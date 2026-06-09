@@ -103,11 +103,13 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       - "traefik.http.routers.frontend-http.rule=Host(`${FRONTEND_DOMAIN}`)"
       - "traefik.http.routers.frontend-http.entrypoints=web"
-      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-http.middlewares=frontend-https-redirect"
+      - "traefik.http.middlewares.frontend-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.frontend-https-redirect.redirectscheme.permanent=true"
 
 networks:
   dokploy-network:
