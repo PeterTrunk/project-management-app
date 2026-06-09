@@ -62,6 +62,12 @@ foreach (var key in new[] { "JWT_SECRET", "JWT_ISSUER", "JWT_AUDIENCE", "DATABAS
 {
     Console.WriteLine($"ENV {key}: {Environment.GetEnvironmentVariable(key) ?? "NULL"}");
 }
+Console.WriteLine("=== ALL ENV VARS ===");
+foreach (System.Collections.DictionaryEntry env in System.Environment.GetEnvironmentVariables())
+{
+    Console.WriteLine($"{env.Key}={env.Value}");
+}
+Console.WriteLine("=== END ENV VARS ===");
 
 // Environment variables kinyerése
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
