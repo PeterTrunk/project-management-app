@@ -1574,10 +1574,13 @@ Megoldás:
 
 ### Implementációs sorrend
 
-1. Hetzner VPS bérlés + Dokploy telepítés
-2. Cloudflare DNS beállítás (A record -> Hetzner IP)
+1. Hetzner VPS bérlés + Dokploy telepítés (kész)
+2. Cloudflare DNS beállítás (A record -> Hetzner IP) (kész)
 3. Docker Compose production konfiguráció kiegészítése
-4. SignalR keepalive implementálás (frontend)
+4. SignalR keepalive implementálás (frontend) (kész)
+   - VITE_API_URL environment variable hub URL-hez
+   - VITE_SIGNALR_KEEPALIVE_ENABLED / VITE_SIGNALR_KEEPALIVE_SECONDS
+   - ImportMetaEnv type declaration (vite-env.d.ts)
 5. Health check endpoint hozzáadása (backend)
 6. Production .env összeállítása
 7. Dokploy-ba Docker Compose import + env vars beállítás
@@ -1586,6 +1589,25 @@ Megoldás:
 10. Git webhook URL frissítés éles domain-re
 11. Production smoke testing (TESTING.md alapján)
 12. README production deployment instrukciók megírása
+
+#### Build & Deployment stratégia
+
+**Megközelítés: Dokploy beépített build**
+- Dokploy figyeli a GitHub repót
+- Push esetén Dokploy lehúzza a kódot és buildelel Dockerfile alapján
+- Újraindítja a service-t automatikusan
+- Minden konfiguráció Dokploy UI-ból kezelhető
+- GitHub Actions nem szükséges (később könnyen hozzáadható)
+
+**Infrastruktúra döntések:**
+- Lokális: `docker-compose.yml` változatlan (postgres + minio)
+- Production: `docker-compose.prod.yml` (postgres + minio + api + Traefik)
+- Production fájlok NEM kerülnek git-be (.gitignore)
+- Production fájlok közvetlenül a szerveren hozandók létre
+
+**Docker fájlok:**
+- `backend/Dockerfile` — ASP.NET Core production build
+- `frontend/Dockerfile` — Svelte production build + static serving
 
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
