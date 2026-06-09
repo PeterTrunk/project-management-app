@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - default
+      - pma-internal
 
   minio:
     image: minio/minio
@@ -33,7 +33,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - default
+      - pma-internal
 
   api:
     build:
@@ -68,7 +68,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
     networks:
       - dokploy-network
-      - default
+      - pma-internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`${DOMAIN}`)"
@@ -97,7 +97,7 @@ services:
       - api
     networks:
       - dokploy-network
-      - default
+      - pma-internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
@@ -112,8 +112,9 @@ services:
 networks:
   dokploy-network:
     external: true
-  default:
+  pma-internal:
     driver: bridge
+    name: pma-internal
 
 volumes:
   postgres_data:
