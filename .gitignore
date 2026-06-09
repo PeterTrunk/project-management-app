@@ -3,7 +3,6 @@
 # Enviromental Variables
 .env
 .env.local
-docker-compose.prod.yml
 
 # .NET
 backend/**/bin/
