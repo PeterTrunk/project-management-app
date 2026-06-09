@@ -33,6 +33,8 @@ namespace ProjectManager.API.Services.TeamService
             // 32 karakter, kötőjel nélkül
             var token = Guid.NewGuid().ToString("N");
 
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
+
             var invite = new ProjectInvite
             {
                 Id = Guid.NewGuid(),
@@ -49,14 +51,14 @@ namespace ProjectManager.API.Services.TeamService
 
             await _context.ProjectInvites.AddAsync(invite);
             await _context.SaveChangesAsync();
-
+            
             return new InviteLinkResponseDto
             {
                 Token = token,
                 ExpiresAt = invite.ExpiresAt,
                 MaxUses = invite.MaxUses,
                 UseCount = invite.UseCount,
-                InviteUrl = $"http://localhost:5173/#/invite/{token}"
+                InviteUrl = $"{frontendUrl}/#/invite/{token}"
             };
         }
 
