@@ -33,21 +33,24 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// .env fájl betöltése
-var envFile = Path.Combine(
-    Directory.GetCurrentDirectory(),
-    "..", "..", "..",
-    ".env"
-);
-if (File.Exists(envFile))
+// .env fájl betöltése CSAK development-ben
+if (!builder.Environment.IsProduction())
 {
-    foreach (var line in File.ReadAllLines(envFile))
+    var envFile = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "..", "..", "..",
+        ".env"
+    );
+    if (File.Exists(envFile))
     {
-        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
-        var parts = line.Split('=', 2);
-        if (parts.Length == 2)
+        foreach (var line in File.ReadAllLines(envFile))
         {
-            Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
+            var parts = line.Split('=', 2);
+            if (parts.Length == 2)
+            {
+                Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+            }
         }
     }
 }
