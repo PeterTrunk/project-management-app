@@ -58,16 +58,15 @@ if (!builder.Environment.IsProduction())
 builder.Configuration.AddEnvironmentVariables();
 
 // Debug: összes env var kiírása
-foreach (var key in new[] { "JWT_SECRET", "JWT_ISSUER", "JWT_AUDIENCE", "DATABASE_URL" })
-{
-    Console.WriteLine($"ENV {key}: {Environment.GetEnvironmentVariable(key) ?? "NULL"}");
-}
+
+/*
 Console.WriteLine("=== ALL ENV VARS ===");
 foreach (System.Collections.DictionaryEntry env in System.Environment.GetEnvironmentVariables())
 {
     Console.WriteLine($"{env.Key}={env.Value}");
 }
 Console.WriteLine("=== END ENV VARS ===");
+*/
 
 // Environment variables kinyerése
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
@@ -226,6 +225,7 @@ while (retries > 0)
     catch (Exception ex)
     {
         retries--;
+        Console.WriteLine($"Connection String: {connectionString}");
         Console.WriteLine($"Migration failed, retrying... ({retries} attempts left): {ex.Message}");
         if (retries == 0) throw;
         await Task.Delay(3000);
