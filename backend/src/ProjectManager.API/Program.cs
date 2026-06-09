@@ -212,9 +212,25 @@ builder.Services.AddScoped<ProjectNotArchivedFilter>();
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
 //Middleware Pipeline - Sorrendjük kritikus
-using var scope = app.Services.CreateScope();
-var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-await db.Database.MigrateAsync();
+// Retry logika a migrációhoz
+var retries = 10;
+while (retries > 0)
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.MigrateAsync();
+        break;
+    }
+    catch (Exception ex)
+    {
+        retries--;
+        Console.WriteLine($"Migration failed, retrying... ({retries} attempts left): {ex.Message}");
+        if (retries == 0) throw;
+        await Task.Delay(3000);
+    }
+}
 
 if (app.Environment.IsDevelopment())
 {
