@@ -157,7 +157,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
-    ?? throw new InvalidOperationException("FRONTEND_URL nincs beállítva!");
+    ?? "http://localhost:5173";
 
 builder.Services.AddCors(options =>
 {
@@ -212,16 +212,15 @@ builder.Services.AddScoped<ProjectNotArchivedFilter>();
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
 //Middleware Pipeline - Sorrendjük kritikus
+using var scope = app.Services.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+await db.Database.MigrateAsync();
+
 if (app.Environment.IsDevelopment())
 {
     //Middleware hozzáadás ami development specifikus
     app.UseSwagger();
     app.UseSwaggerUI();
-
-    //Migráció, nem middleware de az inditáskor lefutnak egyszer!
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
 }
 
 //Middleware hozzáadás
@@ -235,6 +234,8 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapHub<ProjectHub>("/hubs/project");
+
+app.MapGet("/health", () => "OK");
 
 //Start
 app.Run();
