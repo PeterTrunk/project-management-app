@@ -57,6 +57,12 @@ if (!builder.Environment.IsProduction())
 
 builder.Configuration.AddEnvironmentVariables();
 
+// Debug: összes env var kiírása
+foreach (var key in new[] { "JWT_SECRET", "JWT_ISSUER", "JWT_AUDIENCE", "DATABASE_URL" })
+{
+    Console.WriteLine($"ENV {key}: {Environment.GetEnvironmentVariable(key) ?? "NULL"}");
+}
+
 // Environment variables kinyerése
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
     ?? throw new InvalidOperationException("JWT_SECRET nincs beállítva!");
