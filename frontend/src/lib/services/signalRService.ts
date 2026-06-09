@@ -1,15 +1,29 @@
 import * as signalR from '@microsoft/signalr';
 
+const HUB_URL = import.meta.env.VITE_API_URL 
+    ? `${import.meta.env.VITE_API_URL}/hubs/project`
+    : 'http://localhost:5178/hubs/project';
+
+const KEEPALIVE_ENABLED = import.meta.env.VITE_SIGNALR_KEEPALIVE_ENABLED === 'true';
+const KEEPALIVE_MS = parseInt(import.meta.env.VITE_SIGNALR_KEEPALIVE_SECONDS ?? '15') * 1000;
+
+
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
 
     async connect(token: string) {
-        this.connection = new signalR.HubConnectionBuilder()
-            .withUrl('http://localhost:5178/hubs/project', {
+        const builder = new signalR.HubConnectionBuilder()
+            .withUrl(HUB_URL, {
                 accessTokenFactory: () => token
             })
-            .withAutomaticReconnect([0, 2000, 5000, 10000])
-            .build();
+            .withAutomaticReconnect([0, 2000, 5000, 10000]);
+
+        if (KEEPALIVE_ENABLED) {
+            builder.withKeepAliveInterval(KEEPALIVE_MS);
+            console.log(`SignalR keepalive: ${KEEPALIVE_MS / 1000}s`);
+        }
+
+        this.connection = builder.build();
 
         this.connection.onreconnecting(() => console.log('SignalR reconnecting...'));
         this.connection.onreconnected(() => console.log('SignalR reconnected!'));
