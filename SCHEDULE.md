@@ -1497,6 +1497,15 @@ Hetzner VPS alapú production deployment Dokploy PaaS platformon. Cloudflare DNS
 - Beépített monitoring és logok
 - Nginx és Certbot manuális konfiguráció NEM szükséges
 
+**Domain struktúra:**
+- app.trunkpeter.com -> Frontend (Svelte SPA)
+- api.trunkpeter.com -> Backend API + SignalR hub
+
+**Cloudflare + Let's Encrypt kombináció:**
+- Cloudflare Proxy ON -> DDoS védelem, IP elrejtés
+- Full Strict SSL mód -> Dokploy Let's Encrypt tanúsítvány szükséges
+- certresolver neve Dokploy Traefik-ben: letsencrypt
+
 ---
 
 ### Tervezett implementáció
@@ -1575,18 +1584,25 @@ Megoldás:
 ### Implementációs sorrend
 
 1. Hetzner VPS bérlés + Dokploy telepítés (kész)
+  - Dokploy telepítés: curl -sSL https://dokploy.com/install.sh | sh
+  - Docker Swarm manuális init szükséges volt: docker swarm init --advertise-addr {IP}
 2. Cloudflare DNS beállítás (A record -> Hetzner IP) (kész)
+  - app.trunkpeter.com -> Frontend
+  - api.trunkpeter.com -> Backend API
 3. Docker Compose production konfiguráció kiegészítése
+  - Network konfiguráció: dokploy-network (Traefik) + default (belső kommunikáció)
+  - Minden service saját redirect middleware-t kap (Traefik Docker provider limitáció)
 4. SignalR keepalive implementálás (frontend) (kész)
-   - VITE_API_URL environment variable hub URL-hez
-   - VITE_SIGNALR_KEEPALIVE_ENABLED / VITE_SIGNALR_KEEPALIVE_SECONDS
-   - ImportMetaEnv type declaration (vite-env.d.ts)
+  - VITE_API_URL environment variable hub URL-hez
+  - VITE_SIGNALR_KEEPALIVE_ENABLED / VITE_SIGNALR_KEEPALIVE_SECONDS
+  - ImportMetaEnv type declaration (vite-env.d.ts)
 5. Health check endpoint hozzáadása (backend)
 6. Production .env összeállítása
 7. Dokploy-ba Docker Compose import + env vars beállítás
+  - Minden env var explicit megadandó a docker-compose environment szekciójában
 8. First-time setup: DB migráció, MinIO bucket létrehozás
 9. Cloudflare SSL Full Strict beállítás
-10. Git webhook URL frissítés éles domain-re
+10. Git webhook URL frissítés éles domain-re (kész volt, invite-esetében volt elmaradás)
 11. Production smoke testing (TESTING.md alapján)
 12. README production deployment instrukciók megírása
 
@@ -1608,6 +1624,35 @@ Megoldás:
 **Docker fájlok:**
 - `backend/Dockerfile` — ASP.NET Core production build
 - `frontend/Dockerfile` — Svelte production build + static serving
+
+#### Ismert gotchák és megoldások
+
+**Dokploy environment variables:**
+- Minden változót explicit kell a docker-compose environment szekciójában megadni
+- Csak a docker-compose-ban felsorolt változók kerülnek a konténerbe, ami nincs azt a környezet nem teszi elérhetővé az instance számára
+
+**Traefik middleware scope:**
+- Docker provider esetén middleware-ek service-specifikusak
+- Minden service saját redirect middleware-t kap egyedi névvel
+- Pl.: api-https-redirect, frontend-https-redirect
+
+**Docker network:**
+- API-nak mindkét network-ön kell lennie:
+  - dokploy-network: Traefik látja
+  - default: postgres/minio belső kommunikáció
+
+**PostgreSQL migration:**
+- depends_on healthcheck
+- Retry logika szükséges, ne egyből induljon újra (10 retry)
+
+**ASP.NET Core .env betöltés:**
+- Production-ban NE töltsük be a .env fájlt
+- ASPNETCORE_ENVIRONMENT=Production esetén kihagyandó
+- Docker environment variables közvetlenül elérhetők
+
+**Invite link URL:**
+- FRONTEND_URL environment variable alapján generálandó
+- Ne legyen hardcode-olva localhost:5173
 
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
