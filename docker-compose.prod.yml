@@ -82,6 +82,10 @@ services:
       - "traefik.http.routers.api-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security-headers.headers.customResponseHeaders.Cross-Origin-Resource-Policy=same-origin"
+      - "traefik.http.routers.frontend.middlewares=security-headers"
 
   frontend:
     build:
