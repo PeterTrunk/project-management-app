@@ -177,15 +177,32 @@ namespace ProjectManager.API.Services.ProjectTaskService
             catch { }
         }
 
-        public async Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null)
+        public async Task<List<TaskResponseDto>> GetTasksAsync(
+            Guid projectId,
+            Guid? boardId = null,
+            Guid? sprintId = null,
+            string? scope = null)
         {
-            //Jövőbeli fejlesztés: Lapozás
-
-            //tasks Lista
-            var tasks = await _context.ProjectTasks
+            var query = _context.ProjectTasks
                 .Where(t => t.ProjectId == projectId)
                 .Where(t => boardId == null || t.BoardId == boardId)
-                .Where(t => sprintId == null || t.SprintId == sprintId)
+                .AsQueryable();
+
+            if (scope == "initial")
+            {
+                // Backlog + Active + Planning sprintek taskjai
+                // Optimálisabb: Valószinüleg nem kell alapvetően a Completed Sprintekhez tartozó taskok, ha mégis kell akkor külön le lehet kérni.
+                query = query.Where(t =>
+                    t.SprintId == null ||
+                    t.Sprint.State == "Active" ||
+                    t.Sprint.State == "Planning");
+            }
+            else if (sprintId.HasValue)
+            {
+                query = query.Where(t => t.SprintId == sprintId);
+            }
+
+            var tasks = await query
                 .Include(t => t.CreatedByUser)
                 .Include(t => t.ColumnDefinition)
                 .ToListAsync();

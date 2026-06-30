@@ -6,7 +6,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
     {
         Task<TaskResponseDto> CreateTaskAsync(Guid projectId, CreateTaskDto dto);
         Task<TaskResponseDto> GetTaskByIdAsync(Guid projectId, Guid taskId);
-        Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null);
+        Task<List<TaskResponseDto>> GetTasksAsync(Guid projectId, Guid? boardId = null, Guid? sprintId = null, string? scope = null);
         Task<TaskResponseDto> UpdateTaskAsync(Guid taskId, UpdateTaskDto dto);
         Task<TaskResponseDto> MoveTaskAsync(Guid projectId, Guid taskId, MoveTaskDto dto);
         Task DeleteTaskAsync(Guid taskId);

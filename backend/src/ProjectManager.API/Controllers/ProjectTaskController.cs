@@ -72,7 +72,11 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectViewer")]
         [ProducesResponseType(typeof(List<TaskResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<List<TaskResponseDto>>> GetTasksAsync(Guid projectId, [FromQuery] Guid? boardId, [FromQuery] Guid? sprintId)
+        public async Task<ActionResult<List<TaskResponseDto>>> GetTasksAsync(
+            Guid projectId, 
+            [FromQuery] Guid? boardId, 
+            [FromQuery] Guid? sprintId,
+            [FromQuery] string? scope = null)
         {
             try
             {
