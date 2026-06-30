@@ -404,23 +404,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"board-{task.BoardId}")
-                .SendAsync("TaskMoved", new
-                {
-                    taskId = task.Id,
-                    columnId = task.ColumnId,
-                    position = task.Position,
-                    completedAt = task.CompletedAt,
-                    triggeredBy = task.CreatedById
-                });
 
             await _hubContext.Clients
                 .Group($"project-{task.ProjectId}")
                 .SendAsync("TaskMoved", new
                 {
                     taskId = task.Id,
+                    boardId = task.BoardId,
                     columnId = task.ColumnId,
+                    sprintId = task.SprintId,
                     position = task.Position,
                     completedAt = task.CompletedAt,
                     triggeredBy = task.CreatedById
@@ -704,6 +696,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         private async Task RebalanceColumnAsync(Guid columnId, string position)
         {
             var column = await _context.ColumnDefinitions
+                .Include(c => c.Board)
                 .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
 
             var bucket = _lexorankService.GetBucket(position);
@@ -729,9 +722,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
             await _context.SaveChangesAsync();
             await _hubContext.Clients
-                .Group($"board-{column!.BoardId}")
+                .Group($"project-{column!.Board.ProjectId}")
                 .SendAsync("TasksRebalanced", new
                 {
+                    boardId = column.BoardId,
                     columnId,
                     tasks = allTasksInColumn.Select(t => new { t.Id, t.Position })
                 });
