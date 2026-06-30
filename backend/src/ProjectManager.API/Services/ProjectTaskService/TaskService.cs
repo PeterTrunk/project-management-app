@@ -509,8 +509,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 {
                     taskId = task.Id,
                     title = task.Title,
+                    description = task.Description,
                     priority = task.Priority,
-                    dueDate = task.DueDate
+                    dueDate = task.DueDate,
+                    estimateInMinutes = task.EstimateInMinutes
                 });
 
             try
