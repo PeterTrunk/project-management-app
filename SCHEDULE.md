@@ -1569,11 +1569,31 @@ Megoldás:
 - Ismert limitációk és tervezett fejlesztések
 
 ---
+#### Security Headers Implementáció
+**Implementált fejlécek: Traefik middleware (frontend-security):**
+- X-Frame-Options: DENY - clickjacking védelem
+- Referrer-Policy: strict-origin-when-cross-origin
+- Cross-Origin-Resource-Policy: same-origin
+- Content-Security-Policy:
+  - script-src 'self' - nincs unsafe-inline (Svelte build nem használ inline scriptet)
+  - object-src 'none' - plugin tartalmak tiltása
+  - frame-ancestors 'none' - CSP szintű clickjacking védelem
+  - form-action 'self' - form submit csak saját domainre
+  - connect-src kiegészítve API + WebSocket (wss://) domainnel
+
+**Ismert kompromisszum:**
+- style-src 'unsafe-inline' megmaradtak, Svelte komponensek inline style-t generálnak, eltávolítása törné a UI-t, túl sok munka lenne jelenleg.
+
+**Security scannerek és eredmények:**
+- MDN HTTP Observatory (https://developer.mozilla.org/en-US/observatory) 125/100-as A+ értékelés a scanner elvárásai alapján
+- SSL Labs (https://www.ssllabs.com): SSL/TLS konfiguráció ellenőrizve
+- OWASP ZAP Quick Scan: frame-ancestors és form-action hiány azonosítva és javítva
+- OWASP ZAP Manual Scan: később
 
 #### Production Smoke Testing
 
 **Tesztelendő:**
-- SSL tanúsítvány érvényessége (Full Strict)
+- SSL tanúsítvány érvényessége (Full Strict) (SSL Labs scann alapján helyes és minden rendben)
 - SignalR WebSocket kapcsolat HTTPS-en
 - Cloudflare timeout nem következik be (keepalive teszt)
 - MinIO fájl feltöltés/letöltés
@@ -1653,6 +1673,10 @@ Megoldás:
 **Invite link URL:**
 - FRONTEND_URL environment variable alapján generálandó
 - Ne legyen hardcode-olva localhost:5173
+
+**SSH hozzáférés új gépről meglévő Hetzner szerverhez:**
+- Hetzner felületen utólag hozzáadott SSH kulcs NEM kerül fel automatikusan a már futó szerverre, csak szerver létrehozásakor adott kulcsok kerülnek be automatikusan
+- Megoldás: Rescue System bekapcsolása, rescue módban manuális felvétel, ujraindítás
 
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
