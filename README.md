@@ -3,6 +3,8 @@
 > Teljes körű, valós idejű projekt menedzsment alkalmazás  
 > **ASP.NET Core + Svelte + PostgreSQL + SignalR**
 
+**Élő demo:** [app.trunkpeter.com](https://app.trunkpeter.com)
+
 ---
 
 ## Projektleírás
@@ -19,7 +21,7 @@ Egy **Jira/Linear ihletésű projekt menedzsment webalkalmazás**, amely Kanban-
 - **Projekt & Task CRUD** – automatikus board/oszlop létrehozás, `PM-1` stílusú Task Key generálás
 - **Kanban tábla** – drag & drop oszlopok és taskok között (`svelte-dnd-action`)
 - **Lexorank pozicionálás** – iparági standard string-alapú rendezési algoritmus, BigInteger alapú implementáció
-- **Sprint menedzsment** – teljes lifecycle: `Planning → Active → Completed`, backlog kezelés, sprint lezárás befejezetlen task kezeléssel
+- **Sprint menedzsment** – teljes lifecycle: `Planning -> Active -> Completed`, backlog kezelés, sprint lezárás befejezetlen task kezeléssel
 - **SignalR valós idejű frissítések** – task mozgatás, oszlop és sprint változások azonnal megjelennek minden bejelentkezett felhasználónál
 - **Kommentek & Labelek** – task szintű kommentelés és projekten belüli label kezelés
 - **Git Webhook integráció** – GitHub/GitLab commit és PR automatikus task-összerendelés regex alapján (`PM-123`), unmatched commit/PR manuális hozzárendeléssel, webhook verifikáció ping event alapján
@@ -81,8 +83,9 @@ project-management-app/
 |---|---|
 | **Docker Compose** | Konténerizált fejlesztői és production környezet |
 | **MinIO** | S3-kompatibilis fájltárolás |
-| **Nginx** *(production)* | Reverse proxy, WebSocket proxy, SSL termination |
-| **Let's Encrypt** *(production)* | Automatikus SSL tanúsítvány |
+| **Nginx** | Frontend statikus fájl kiszolgálás + SPA routing (frontend konténer) |
+| **Traefik** *(Dokploy)* | Reverse proxy, WebSocket proxy, SSL termination |
+| **Let's Encrypt** *(Traefik)* | Automatikus SSL tanúsítvány |
 
 ---
 
@@ -154,46 +157,52 @@ A backend minden jelentős változásra broadcastol a megfelelő project/board s
 A projekt gyökerében hozz létre egy `.env` fájlt:
 
 ```env
+# PostgreSQL
+DATABASE_URL=Host=localhost;Port=5432;Database=projectmanager;Username=pmuser;Password=pmpassword
+POSTGRES_DB=projectmanager
+POSTGRES_USER=pmuser
+POSTGRES_PASSWORD=pmpassword
+
+# Frontend URL (CORS-hoz)
+FRONTEND_URL=http://localhost:5173
+
 # JWT
 JWT_SECRET=your-jwt-secret-min-32-chars
-
-# PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=projectmanager
-DB_USER=pmuser
-DB_PASSWORD=pmpassword
+JWT_ISSUER=ProjectManager.API
+JWT_AUDIENCE=ProjectManager.Client
+JWT_EXPIRY_MINUTES=60
 
 # MinIO
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=project-manager
+MINIO_USE_SSL=false
 
 # API
-API_BASE_URL=https://localhost:5178
+API_BASE_URL=http://localhost:5178
 ```
 
-### 1. Adatbázis indítása Dockerrel
+### 1. Háttérszolgáltatások indítása Dockerrel
 
 ```bash
 docker-compose up -d
 ```
 
-Ez elindít egy PostgreSQL 17 konténert a következő beállításokkal: (ez csak development config)
-- **Host:** `localhost:5432`
-- **Database:** `projectmanager`
-- **User:** `pmuser` / **Password:** `pmpassword`
+Ez elindít egy PostgreSQL 17 és egy MinIO konténert a következő beállításokkal (ez csak development config):
+- **PostgreSQL:** `localhost:5432` — Database: `projectmanager`, User: `pmuser` / Password: `pmpassword`
+- **MinIO:** `localhost:9000` (API), `localhost:9001` (Console)
 
 ### 2. Backend indítása
 
 ```bash
+cd backend/src/ProjectManager.API
 dotnet restore
 dotnet ef database update   # migrációk futtatása
 dotnet run
 ```
 
-Az API elérhető: `https://localhost:5173` (Swagger UI: `/swagger`)
+Az API elérhető: `http://localhost:5178` (Swagger UI: `/swagger`)
 
 ### 3. Frontend indítása
 
@@ -205,11 +214,123 @@ npm run dev
 
 Az alkalmazás elérhető: `http://localhost:5173`
 
+### 4. (Opcionális) Git Webhook lokális tesztelése ngrok-kal
+
+A Git webhook (GitHub/GitLab) csak publikusan elérhető URL-re tud kéréseket küldeni, ezért lokális fejlesztéshez egy ngrok tunnel szükséges a backend porton:
+
+```bash
+ngrok http 5178
+```
+
+Az ngrok ad egy publikus URL-t (pl. `https://random-id.ngrok-free.dev`) — ezt add meg `API_BASE_URL`-ként a `.env`-ben, majd ezt az URL-t használd a GitHub/GitLab integráció webhook címeként a projektben.
+
+---
+
+## Production Deployment
+
+Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS) segítségével, Cloudflare DNS és SSL mögött.
+
+### Infrastruktúra
+
+| Komponens | Megoldás |
+|---|---|
+| Szerver | Hetzner Cloud VPS |
+| Domain & DNS | Cloudflare (Proxy: ON, SSL: Full Strict) |
+| PaaS / Orchestration | Dokploy (Docker Swarm + Traefik) |
+| SSL tanúsítvány | Let's Encrypt (Dokploy/Traefik automatikus) |
+| Reverse Proxy | Traefik (Dokploy beépített) |
+
+**Domain struktúra:**
+- `app.trunkpeter.com`: Frontend (Svelte SPA, Nginx)
+- `api.trunkpeter.com`: Backend API + SignalR Hub
+
+### Deployment lépések
+
+1. **Hetzner VPS + Dokploy telepítés**
+```bash
+   curl -sSL https://dokploy.com/install.sh | sh
+```
+   (Docker Swarm manuális inicializálás szükséges lehet: `docker swarm init --advertise-addr <SZERVER_IP>`)
+
+2. **Cloudflare DNS** — két A rekord a szerver IP-jére (`app` és `api` subdomain), Proxy: ON
+
+3. **Dokploy projekt létrehozása** — Docker Compose alapú service, GitHub repo összekötése, `docker-compose.prod.yml` mint compose fájl megadása
+
+4. **Environment Variables** beállítása Dokploy UI-ban (lásd lentebb)
+
+5. **Deploy** — Dokploy automatikusan build-eli a `backend/Dockerfile` és `frontend/Dockerfile` alapján mindkét service-t; push-ra automatikus újradeploy fut
+
+### Production Environment Variables
+
+```env
+# PostgreSQL
+POSTGRES_DB=projectmanager
+POSTGRES_USER=pmuser
+POSTGRES_PASSWORD=
+DATABASE_URL=Host=postgres;Port=5432;Database=projectmanager;Username=pmuser;Password=
+
+# JWT
+JWT_SECRET=
+JWT_ISSUER=ProjectManager.API
+JWT_AUDIENCE=ProjectManager.Client
+JWT_EXPIRY_MINUTES=60
+
+# MinIO
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_BUCKET=project-manager
+MINIO_USE_SSL=false
+
+### Production Environment Variables
+
+```env
+# PostgreSQL
+POSTGRES_DB=projectmanager
+POSTGRES_USER=pmuser
+POSTGRES_PASSWORD=
+DATABASE_URL=Host=postgres;Port=5432;Database=projectmanager;Username=pmuser;Password=
+
+# JWT
+JWT_SECRET=
+JWT_ISSUER=ProjectManager.API
+JWT_AUDIENCE=ProjectManager.Client
+JWT_EXPIRY_MINUTES=60
+
+# MinIO
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_BUCKET=project-manager
+MINIO_USE_SSL=false
+
+# Domains & URLs
+API_BASE_URL=https://[API_BASE_URL]
+FRONTEND_URL=https://[FRONTEND_URL]
+DOMAIN=[API_BASE_URL]
+FRONTEND_DOMAIN=[FRONTEND_URL]
+
+# Frontend build args
+VITE_API_URL=https://[API_BASE_URL]
+VITE_SIGNALR_KEEPALIVE_ENABLED=true
+VITE_SIGNALR_KEEPALIVE_SECONDS=15
+```
+
+### SignalR WebSocket a Cloudflare mögött
+
+A Cloudflare proxy ~100 másodperc inaktivitás után bontja a WebSocket kapcsolatokat. Ennek elkerülésére a frontend SignalR kliens rendszeres keepalive ping-et küld (`VITE_SIGNALR_KEEPALIVE_SECONDS`, alapértelmezetten 15mp), ami környezeti változóból ki-/bekapcsolható.
+
+### Biztonsági fejlécek
+
+A Traefik `frontend-security` middleware-en keresztül beállított fejlécek: `Content-Security-Policy` (script-src, style-src, connect-src, object-src 'none', frame-ancestors 'none', form-action 'self'), `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Resource-Policy: same-origin`.
+
+Eredmény: [MDN HTTP Observatory](https://developer.mozilla.org/en-US/observatory) **A+ (125/100)**.
+
+A teljes infrastruktúra-döntésekről, gotchákról és implementációs sorrendről bővebben: [`SCHEDULE.md`](./SCHEDULE.md).
+
 ---
 
 ## Fejlesztési ütemterv
-
-A részletes haladásnaplót a [`SCHEDULE.md`](./SCHEDULE.md) tartalmazza.
 
 | Hét | Témakör | Státusz |
 |---|---|---|
@@ -225,7 +346,7 @@ A részletes haladásnaplót a [`SCHEDULE.md`](./SCHEDULE.md) tartalmazza.
 | 2026-04-26 | Statisztika Dashboard & ECharts | Kész |
 | 2026-05-03 | Keresés/szűrés & UI finomítás | Kész |
 | 2026-05-10 | Tesztelés & hibajvítás | Kész |
-| 2026-05-17 | Deployment & dokumentáció | Folyamatban |
+| 2026-05-17 | Deployment & dokumentáció | Kész |
 
 ---
 
@@ -238,4 +359,15 @@ A részletes haladásnaplót a [`SCHEDULE.md`](./SCHEDULE.md) tartalmazza.
 - **GitLab webhook** – teljes támogatás és tesztelés
 - **Redis backplane** – horizontális skálázáshoz SignalR-rel
 
-Részletes tervek: [`SCHEDULE.md`](./SCHEDULE.md)
+| Fejezet | Témakör |
+|---|---|
+| SignalR Architecture Refactor | Centralizált event kezelés, Redis backplane előkészítés |
+| Team & Project Improvements | Meghívó kezelés, csapat terhelés szétválasztás |
+| File Upload Improvements | Fájlméret limit, content-type szűrés, chunked upload |
+| Security Hardening | TOTP 2FA, AES-256 webhook secret titkosítás |
+| Git Webhook Enhancements | PR body matching, GitLab támogatás, provider absztrakció |
+| Git View Sprint Overview | Sprintenkénti commit/PR áttekintés és átrendelés |
+| Git Intelligence – Branches & Insights | Branch követés, sprint git analitika |
+| Multi-Sprint Analytics | Sprintek közötti összehasonlítás (3-4 sprint adat után) |
+
+Részletes leírások: [`SCHEDULE.md`](./SCHEDULE.md)
