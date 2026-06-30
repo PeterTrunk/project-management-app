@@ -24,11 +24,13 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectViewer")]
         [ProducesResponseType(typeof(List<SprintResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<List<SprintResponseDto>>> GetSprintsAsync(Guid projectId)
+        public async Task<ActionResult<List<SprintResponseDto>>> GetSprintsAsync(
+            Guid projectId,
+            [FromQuery] string? scope = null)
         {
             try
             {
-                var response = await _sprintService.GetSprintsAsync(projectId);
+                var response = await _sprintService.GetSprintsAsync(projectId, scope);
                 return Ok(response);
             }
             catch (Exception ex)

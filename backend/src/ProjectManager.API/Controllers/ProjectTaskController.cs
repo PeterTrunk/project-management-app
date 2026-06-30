@@ -80,7 +80,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var response = await _taskService.GetTasksAsync(projectId, boardId, sprintId);
+                var response = await _taskService.GetTasksAsync(projectId, boardId, sprintId, scope);
                 return Ok(response);
             }
             catch (Exception ex)
