@@ -118,6 +118,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.Priority,
                     task.DueDate,
                     task.EstimateInMinutes,
+                    task.Position,
                     task.CreatedAt,
                     task.CompletedAt
                 });
