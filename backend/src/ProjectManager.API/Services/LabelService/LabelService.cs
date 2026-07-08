@@ -41,7 +41,7 @@ namespace ProjectManager.API.Services.LabelService
             await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"project-{projectId}")
-                .SendAsync("TaskLabelAdded", new { taskId });
+                .SendAsync("TaskLabelAdded", new { taskId, labelId });
         }
 
         public async Task<LabelResponseDto> CreateLabelAsync(Guid projectId, CreateLabelDto dto)
@@ -126,7 +126,7 @@ namespace ProjectManager.API.Services.LabelService
             await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"project-{projectId}")
-                .SendAsync("TaskLabelRemoved", new { taskId });
+                .SendAsync("TaskLabelRemoved", new { taskId, labelId });
         }
     }
 }

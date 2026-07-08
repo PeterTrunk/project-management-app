@@ -31,6 +31,9 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található!");
             _context.Projects.Remove(project);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients
+                .Group($"project-{projectId}")
+                .SendAsync("ProjectDeleted", new { projectId });
         }
 
         public async Task ArchiveProjectAsync(Guid projectId)

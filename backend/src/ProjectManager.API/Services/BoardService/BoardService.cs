@@ -90,6 +90,7 @@ namespace ProjectManager.API.Services.BoardService
                 {
                     board.Id,
                     board.Name,
+                    board.Description,
                     board.IsDefault
                 });
 
@@ -231,6 +232,7 @@ namespace ProjectManager.API.Services.BoardService
                 {
                     boardId = board.Id,
                     board.Name,
+                    board.Description,
                     board.IsDefault
                 });
 

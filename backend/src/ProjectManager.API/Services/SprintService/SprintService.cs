@@ -240,7 +240,11 @@ namespace ProjectManager.API.Services.SprintService
                 {
                     sprint.Id,
                     sprint.Name,
-                    sprint.State
+                    sprint.Goal,
+                    sprint.State,
+                    sprint.StartDate,
+                    sprint.EndDate,
+                    sprint.CreatedAt
                 });
 
             try

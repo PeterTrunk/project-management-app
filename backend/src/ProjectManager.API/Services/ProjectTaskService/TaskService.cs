@@ -113,8 +113,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.BoardId,
                     task.ColumnId,
                     task.SprintId,
+                    task.TaskKey,
                     task.Title,
-                    task.TaskKey
+                    task.Priority,
+                    task.DueDate,
+                    task.EstimateInMinutes,
+                    task.CreatedAt,
+                    task.CompletedAt
                 });
 
             try

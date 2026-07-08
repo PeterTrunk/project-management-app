@@ -56,8 +56,9 @@ namespace ProjectManager.API.Services.CommentService
                     taskId,
                     commentId = comment.Id,
                     body = comment.Body,
+                    createdById = comment.UserId,
                     createdByName = user.DisplayName,
-                    createdAt = comment.CreatedAt
+                    createdAt = comment.CreatedAt,
                 });
 
             try

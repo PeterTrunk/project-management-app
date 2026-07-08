@@ -52,7 +52,8 @@ namespace ProjectManager.API.Services.ColumnService
                     column.BoardId,
                     column.Name,
                     column.Position,
-                    column.MapsToStatus
+                    column.MapsToStatus,
+                    column.WipLimit
                 });
 
             try
