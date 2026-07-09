@@ -14,6 +14,13 @@
     import { setMembers } from '../lib/stores/teamStore';
     import { getIntegrationsAsync } from '../lib/api/integrationApi';
     import { setIntegrations } from '../lib/stores/integrationStore';
+    import { setTasks } from '../lib/stores/taskStore';
+    import { getTasksAsync } from '../lib/api/taskApi';
+    import { setBoards } from '../lib/stores/boardStore';
+    import { getBoardsAsync } from '../lib/api/boardApi';
+    import { setColumns } from '../lib/stores/boardStore';
+    import { getSprintsAsync } from '../lib/api/sprintApi';
+    import { setSprints } from '../lib/stores/sprintStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -60,10 +67,15 @@
     let isUserSettingsOpen = false;
     
     let token = '';
+    
+    let signalRConnected = false;
 
-    let currentUserId = '';
-    authStore.subscribe(state => {
-        currentUserId = state.user?.userId ?? '';
+    authStore.subscribe(async (state) => {
+        if (state.token && !signalRConnected) {
+            signalRConnected = true;
+            await signalRService.connect(state.token);
+            registerSignalREvents();
+        }
     });
 
     onMount(async () => {
@@ -72,21 +84,6 @@
             registerSignalREvents();    
         }
     });
-
-    async function loadLabels(projectId: string) {
-        const labels = await getLabelsAsync(projectId);
-        setLabels(labels);
-    }
-
-    async function loadMembers(projectId: string) {
-        const members = await getMembersAsync(projectId);
-        setMembers(members);
-    }
-
-    async function loadIntegrations(projectId: string) {
-        const integrations = await getIntegrationsAsync(projectId);
-        setIntegrations(integrations);
-    }
 
     onDestroy(async () => {
         unregisterSignalREvents();
@@ -110,9 +107,6 @@
         }
     }
 
-    loadCurrentUser();
-    loadProjects();
-
     // authStore-ból kinyerjük a user adatokat
     let displayName = '';
     authStore.subscribe(state => {
@@ -120,7 +114,9 @@
         token = state.token ?? '';
     });
 
-    function handleLogout() {
+    async function handleLogout() {
+        unregisterSignalREvents();
+        await signalRService.disconnect();
         logout();
         push('/');
     }
@@ -149,7 +145,8 @@
                 getBoardsAsync(state.activeProject.id, 'initial')
                     .then(boards => {
                         setBoards(boards);
-                        // Oszlopok kinyerése a board response-ból
+                        //Oszlopok kinyerése a board response-ból, 
+                        //initial-load miatt már máshogy kezeljük az oszlopokat (már a getBoards adja az oszlopokat)
                         const columns = boards.flatMap(b => b.columns ?? []);
                         setColumns(columns);
                     }),
@@ -173,10 +170,10 @@
         }
     }
 
+    loadCurrentUser();
     loadProjects();
 
     let activeView = 'overview';
-    
 </script>
 
 <div class="app-container">
