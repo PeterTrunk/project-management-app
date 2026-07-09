@@ -23,8 +23,10 @@ export interface BoardResponse {
     updatedAt: Date;
 }
 
-export async function getBoardsAsync(projectId: string): Promise<BoardResponse[]> {
-    const response = await apiClient.get('/projects/'+projectId+'/boards');
+export async function getBoardsAsync(projectId: string, scope?: string): Promise<BoardResponse[]> {
+    const response = await apiClient.get('/projects/' + projectId + '/boards', {
+        params: { scope }
+    });
     return response.data;
 }
 

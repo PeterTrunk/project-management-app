@@ -81,11 +81,12 @@ export async function getTaskByIdAsync(projectId: string, taskId: string): Promi
     return response.data;
 }
 
-export async function getTasksAsync(projectId: string, boardId?: string, sprintId?: string): Promise<TaskResponse[]> {
+export async function getTasksAsync(projectId: string, boardId?: string, sprintId?: string, scope?: string): Promise<TaskResponse[]> {
     const response = await apiClient.get('/projects/' + projectId + '/tasks', {
         params: {
             boardId: boardId ?? undefined,
-            sprintId: sprintId ?? undefined
+            sprintId: sprintId ?? undefined,
+            scope: scope ?? undefined
         }
     });
     return response.data;
