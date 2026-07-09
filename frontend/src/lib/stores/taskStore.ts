@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import type { TaskResponse } from '../api/taskApi';
+import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
 
 interface TaskState {
@@ -169,6 +169,39 @@ export function handleTaskLabelRemoved(payload: { taskId: string; labelId: strin
         tasks: state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t, labelIds: t.labelIds.filter(id => id !== payload.labelId) }
+                : t
+        )
+    }));
+}
+
+export function handleCommitLinked(payload: {
+    taskId: string;
+    commitId: string;
+    commitSha: string;
+}) {
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(t =>
+            t.id === payload.taskId
+                ? { ...t, commitLinks: [...t.commitLinks, payload as unknown as CommitLinkResponse] }
+                : t
+        )
+    }));
+}
+
+export function handlePrLinked(payload: {
+    taskId: string;
+    prId: string;
+    prNumber: number;
+    title?: string;
+    state?: string;
+    authorName?: string;
+}) {
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(t =>
+            t.id === payload.taskId
+                ? { ...t, prLinks: [...t.prLinks, payload as unknown as PrLinkResponse] }
                 : t
         )
     }));
