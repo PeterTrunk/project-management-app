@@ -6,7 +6,7 @@
     import TaskDetailModal from './TaskDetailModal.svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
 
-    import { Pencil, Undo2, CircleCheck, Play, Trash2, Star } from 'lucide-svelte';
+    import { Pencil, Undo2, CircleCheck, Play, Trash2, Star, ChevronRight, ChevronDown  } from 'lucide-svelte';
 
     export let sprint: SprintResponse;
     export let tasks: TaskResponse[] = [];
@@ -22,8 +22,12 @@
     export let onBoardAssigned: () => Promise<void> = async () => {};
     export let onAssignToSprint: (taskId: string, sprintId: string) => void = () => {};
     export let onDeleteTask: (taskId: string) => void = () => {};
+    export let onLoadTasks: ((sprintId: string) => Promise<void>) | null = null;
+    export let tasksLoaded: boolean = true;
 
     let isTaskDetailOpen = false;
+
+    let collapsed = sprint.state === 'Completed';
 
     $: groupedTasks = buildGroupedTasks(tasks, boards);
 
@@ -76,6 +80,13 @@
             {sprint.endDate ? new Date(sprint.endDate).toLocaleDateString('hu-HU') : '?'}
         </div>
         <div class="sprint-actions">
+            <button class="collapse-btn" on:click={() => collapsed = !collapsed}>
+                {#if collapsed}
+                    <ChevronRight size={14} />
+                {:else}
+                    <ChevronDown size={14} />
+                {/if}
+            </button>
             {#if sprint.state === 'Active'}
                 <button on:click={() => onEdit(sprint)}>
                     <Pencil size={14} /> Szerkesztés
@@ -102,43 +113,51 @@
     {#if sprint.goal}
         <p class="sprint-goal">Cél: {sprint.goal}</p>
     {/if}
-    {#each sortedGroupedTasks as [boardName, boardTasks]}
-        <div class="board-group">
-            <h4>
-                {boardName}
-                {#if boards.find(b => b.name === boardName)?.isDefault}
-                    <span class="default-badge"><Star size={12} /></span>
-                {/if}
-            </h4>
-            <div class="task-list">
-                {#each boardTasks as task (task.id)}
-                    <BacklogTaskCard
-                        {task}
-                        {boards}
-                        sprints={sprints}
-                        projectId={projectId}
-                        onAssignToSprint={onAssignToSprint}
-                        onDelete={() => onDeleteTask(task.id)}
-                        onBoardAssigned={async () => {
-                            await onBoardAssigned();
-                        }}
-                        onOpenDetail={(task) => {
-                            setActiveTask(task);
-                            isTaskDetailOpen = true;
-                        }}
-                    />
-                {/each}
-                {#if boardTasks.length === 0}
-                    <p class="empty">↓ Húzz ide taskot</p>
-                {/if}
+    
+    {#if !collapsed}
+        {#each sortedGroupedTasks as [boardName, boardTasks]}
+            <div class="board-group">
+                <h4>
+                    {boardName}
+                    {#if boards.find(b => b.name === boardName)?.isDefault}
+                        <span class="default-badge"><Star size={12} /></span>
+                    {/if}
+                </h4>
+                <div class="task-list">
+                    {#each boardTasks as task (task.id)}
+                        <BacklogTaskCard
+                            {task}
+                            {boards}
+                            sprints={sprints}
+                            projectId={projectId}
+                            onAssignToSprint={onAssignToSprint}
+                            onDelete={() => onDeleteTask(task.id)}
+                            onBoardAssigned={async () => {
+                                await onBoardAssigned();
+                            }}
+                            onOpenDetail={(task) => {
+                                setActiveTask(task);
+                                isTaskDetailOpen = true;
+                            }}
+                        />
+                    {/each}
+                    {#if boardTasks.length === 0}
+                        <p class="empty">↓ Húzz ide taskot</p>
+                    {/if}
+                </div>
             </div>
-        </div>
-    {/each}
-    {#if tasks.length === 0}
-        <div>
-            <p class="empty">Még nincs hozzárendelt Task.</p>
-        </div>
-    {/if}
+        {/each}
+        {#if tasks.length === 0 && (sprint.state !== 'Completed' || tasksLoaded)}
+            <div>
+                <p class="empty">Még nincs hozzárendelt Task.</p>
+            </div>
+        {/if}
+        {#if sprint.state === 'Completed' && onLoadTasks && !tasksLoaded}
+            <button on:click={() => onLoadTasks!(sprint.id)}>
+                Taskok betöltése
+            </button>
+        {/if}
+    {/if}  
 </div>
 
 {#if isTaskDetailOpen && $taskStore.activeTask}

@@ -13,6 +13,7 @@
     import UpdateSprintModal from './UpdateSprintModal.svelte';
     import CompleteSprintModal from './CompleteSprintModal.svelte';
     import ConfirmModal from './ConfirmModal.svelte';
+    import { getTasksAsync } from '../api/taskApi';
 
     import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
 
@@ -36,6 +37,7 @@
     let unfinishedTasks: TaskResponse[] = [];
     let planningCollapsed = true;
     let completedCollapsed = true;
+    let completedSprintsLoaded = false;
     
     taskStore.subscribe(state => {
         allTasks = state.tasks;
@@ -128,6 +130,36 @@
         );
     }
 
+    async function toggleCompleted() {
+        completedCollapsed = !completedCollapsed;
+        if (!completedCollapsed && !completedSprintsLoaded) {
+            const completedSprints = await getSprintsAsync(projectId, 'completed');
+            // Merge a meglévő sprintekkel (ne írja felül az active/planning-et)
+            sprintStore.update(state => ({
+                ...state,
+                sprints: [
+                    ...state.sprints.filter(s => s.state !== 'Completed'),
+                    ...completedSprints
+                ]
+            }));
+            completedSprintsLoaded = true;
+        }
+    }
+
+    let completedSprintTasksLoaded = new Set<string>();
+
+    async function handleLoadCompletedSprintTasks(sprintId: string) {
+        const tasks = await getTasksAsync(projectId, undefined, sprintId);
+        taskStore.update(state => ({
+            ...state,
+            tasks: [
+                ...state.tasks.filter(t => t.sprintId !== sprintId),
+                ...tasks
+            ]
+        }));
+        completedSprintTasksLoaded = new Set([...completedSprintTasksLoaded, sprintId]);
+    }
+    
     function openConfirm(title: string, message: string, text: string, action: () => Promise<void>) {
         confirmTitle = title;
         confirmMessage = message;
@@ -147,13 +179,13 @@
 
     <div class="sprints-content">
         <!-- Completed sprintek -->
-        <button class="section-toggle" on:click={() => completedCollapsed = !completedCollapsed}>
+        <button class="section-toggle" on:click={toggleCompleted}>
             {#if completedCollapsed}
                 <ChevronRight size={14} />
             {:else}
                 <ChevronDown size={14} />
             {/if}
-            Befejezett sprintek ({sprints.filter(s => s.state === 'Completed').length})
+            Befejezett sprintek {completedSprintsLoaded ? `(${sprints.filter(s => s.state === 'Completed').length})` : '(?)'}
         </button>
         {#if !completedCollapsed}
             {#each sprints.filter(s => s.state === 'Completed') as sprint}
@@ -170,6 +202,8 @@
                     onRemoveTask={handleRemoveFromSprint}
                     onDeleteTask={handleDeleteTask}
                     onBoardAssigned={async () => {}}
+                    tasksLoaded={completedSprintTasksLoaded.has(sprint.id)}
+                    onLoadTasks={sprint.state === 'Completed' ? handleLoadCompletedSprintTasks : null}
                 />
             {/each}
             <hr class="completed-divider">
