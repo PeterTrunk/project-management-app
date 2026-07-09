@@ -140,9 +140,26 @@
             
             signalRService.joinProject(state.activeProject.id).catch(console.error);
 
-            loadLabels(state.activeProject.id).catch(console.error);
-            loadMembers(state.activeProject.id).catch(console.error);
-            loadIntegrations(state.activeProject.id).catch(console.error);
+            // Párhuzamos initial load
+            Promise.all([
+                getTasksAsync(state.activeProject.id, undefined, undefined, 'initial')
+                    .then(tasks => setTasks(tasks)),
+                getSprintsAsync(state.activeProject.id, 'initial')
+                    .then(sprints => setSprints(sprints)),
+                getBoardsAsync(state.activeProject.id, 'initial')
+                    .then(boards => {
+                        setBoards(boards);
+                        // Oszlopok kinyerése a board response-ból
+                        const columns = boards.flatMap(b => b.columns ?? []);
+                        setColumns(columns);
+                    }),
+                getLabelsAsync(state.activeProject.id)
+                    .then(labels => setLabels(labels)),
+                getMembersAsync(state.activeProject.id)
+                    .then(members => setMembers(members)),
+                getIntegrationsAsync(state.activeProject.id)
+                    .then(integrations => setIntegrations(integrations))
+            ]).catch(console.error);
         }
     });
 

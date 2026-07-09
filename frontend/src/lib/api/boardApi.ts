@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import { type ColumnResponse } from "./columnApi";
 
 interface CreateBoardRequest {
     projectId: string;
@@ -21,6 +22,7 @@ export interface BoardResponse {
     isDefault: boolean;
     createdAt: Date;
     updatedAt: Date;
+    columns?: ColumnResponse[];
 }
 
 export async function getBoardsAsync(projectId: string, scope?: string): Promise<BoardResponse[]> {
