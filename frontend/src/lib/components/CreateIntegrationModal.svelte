@@ -44,7 +44,6 @@
                 webhookSecret,
                 accessToken: accessToken || null
             });
-            addIntegration(integration);
             closeModal();
         } catch (e: any) {
             error = e.response?.data ?? 'Hiba történt az integráció létrehozásakor!';
