@@ -12,7 +12,11 @@ import { handleIntegrationCreated, handleIntegrationUpdated,
 import { handleMemberAdded, handleMemberRemoved, handleMemberRoleUpdated } from '../stores/teamStore';
 import { handleProjectUpdated, handleProjectArchived, 
          handleProjectUnarchived, handleProjectDeleted,
-         handleLabelCreated, handleLabelDeleted } from '../stores/projectStore';
+         handleLabelCreated, handleLabelDeleted, setProjects, setActiveProject } from '../stores/projectStore';
+import { get } from 'svelte/store';
+import { authStore } from '../stores/authStore';
+import { push } from 'svelte-spa-router';
+import { getProjectsAsync } from '../api/projectApi';
 
 export function registerSignalREvents() {
     // Task events
@@ -50,7 +54,18 @@ export function registerSignalREvents() {
 
     // Team events
     signalRService.on('MemberAdded', handleMemberAdded);
-    signalRService.on('MemberRemoved', handleMemberRemoved);
+    signalRService.on('MemberRemoved', async (data) => {
+        const currentUserId = get(authStore).user?.userId;
+        if (data.userId === currentUserId) {
+            const projects = await getProjectsAsync();
+            setProjects(projects);
+            setActiveProject(null);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            push('/app');
+        } else {
+            handleMemberRemoved(data);
+        }
+    });
     signalRService.on('MemberRoleUpdated', handleMemberRoleUpdated);
 
     // Project events
