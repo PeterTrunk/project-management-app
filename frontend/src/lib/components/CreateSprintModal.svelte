@@ -86,7 +86,7 @@
         <button class="close-btn" type="button" on:click={closeModal}>
             <X size={16} />
         </button>
-        <form>
+        <form on:submit|preventDefault={handleSprintCreation}>
             <h1>Sprint Létrehozás {activeProject?.name}-hoz</h1>
             Sprint neve
             <input type="text" bind:value={name}>
@@ -102,7 +102,7 @@
             {#if success}
                 <p id="success">{success}</p>
             {/if}
-            <button type="submit" on:click={handleSprintCreation} id="create">Létrehozás</button>
+            <button type="submit" id="create">Létrehozás</button>
         </form>
     </div>
 </div>
