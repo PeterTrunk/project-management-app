@@ -10,16 +10,10 @@
     import type { ProjectResponse } from '../lib/api/projectApi';
     import { getLabelsAsync } from '../lib/api/labelApi';
     import { setLabels } from '../lib/stores/projectStore';
-    import { triggerTeamRefresh } from '../lib/stores/teamStore';
-    import { clearTeam } from '../lib/stores/teamStore';
     import { getMembersAsync } from '../lib/api/teamApi';
     import { setMembers } from '../lib/stores/teamStore';
     import { getIntegrationsAsync } from '../lib/api/integrationApi';
-    import { setIntegrations, clearIntegrations } from '../lib/stores/integrationStore';
-    import { integrationStore } from '../lib/stores/integrationStore';
-    import { updateIntegration } from '../lib/stores/integrationStore';
-    import type { IntegrationResponse } from '../lib/api/integrationApi';
-    import { addIntegration, removeIntegration } from '../lib/stores/integrationStore';
+    import { setIntegrations } from '../lib/stores/integrationStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -29,6 +23,8 @@
     import TeamResources from '../lib/components/TeamResources.svelte';
     import GitView from '../lib/components/GitView.svelte';
     import StatisticsView from '../lib/components/StatisticsView.svelte';
+
+    import { registerSignalREvents, unregisterSignalREvents } from '../lib/services/signalRClientService';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -47,7 +43,6 @@
     let currentTheme = 'dark';
     themeStore.subscribe(t => currentTheme = t);
 
-    
     let sidebarCollapsed = false;
 
     const navItems = [
@@ -74,101 +69,7 @@
     onMount(async () => {
         if (token) {
             await signalRService.connect(token);
-
-            if (activeProject?.id) {
-                const labels = await getLabelsAsync(activeProject.id);
-                setLabels(labels);
-            }
-
-            signalRService.on('LabelCreated', async () => {
-                if (currentProjectId) {
-                    await loadLabels(currentProjectId);
-                }
-            });
-
-            signalRService.on('LabelDeleted', async () => {
-                if (currentProjectId) {
-                    await loadLabels(currentProjectId);
-                }
-            });
-
-            signalRService.on('ProjectUpdated', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('ProjectArchived', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('ProjectUnarchived', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('MemberRemoved', async (data) => {
-                console.log('MemberRemoved:', data.userId, 'currentUserId:', currentUserId);
-                if (data.userId === currentUserId) {
-                    const projects = await getProjectsAsync();
-                    setProjects(projects);
-                    setActiveProject(null);
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    push('/app');
-                } else {
-                    triggerTeamRefresh();
-                }
-            });
-
-            signalRService.on('MemberAdded', () => {
-                triggerTeamRefresh();
-            });
-
-            signalRService.on('MemberRoleUpdated', () => {
-                triggerTeamRefresh();
-            });
-            
-            signalRService.on('IntegrationVerified', (data) => {
-                let currentIntegrations: IntegrationResponse[] = [];
-                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
-                
-                const integration = currentIntegrations.find(i => i.id === data.integrationId);
-                if (integration) {
-                    updateIntegration({ ...integration, isVerified: true });
-                }
-            });
-
-            signalRService.on('IntegrationUpdated', (data) => {
-                let currentIntegrations: IntegrationResponse[] = [];
-                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
-                
-                const integration = currentIntegrations.find(i => i.id === data.integrationId);
-                if (integration) {
-                    updateIntegration({ ...integration, isVerified: data.isVerified });
-                }
-            });
-            
-            signalRService.on('IntegrationCreated', async (data) => {
-                // Friss integráció lekérése és store-ba rakása
-                const integrations = await getIntegrationsAsync(currentProjectId);
-                setIntegrations(integrations);
-            });
-
-            signalRService.on('IntegrationDeleted', (data) => {
-                removeIntegration(data.integrationId);
-            });
+            registerSignalREvents();    
         }
     });
 
@@ -188,18 +89,7 @@
     }
 
     onDestroy(async () => {
-        signalRService.off('LabelCreated');
-        signalRService.off('LabelDeleted');
-        signalRService.off('ProjectUpdated');
-        signalRService.off('ProjectArchived');
-        signalRService.off('ProjectUnarchived');
-        signalRService.off('MemberAdded');
-        signalRService.off('MemberRemoved');
-        signalRService.off('MemberRoleUpdated');
-        signalRService.off('IntegrationVerified');
-        signalRService.off('IntegrationUpdated');
-        signalRService.off('IntegrationCreated');
-        signalRService.off('IntegrationDeleted');
+        unregisterSignalREvents();
         await signalRService.disconnect();
     });
 
