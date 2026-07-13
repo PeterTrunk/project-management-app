@@ -52,7 +52,7 @@
             return;
         }
         try {
-            const response = await createSprintAsync(projectId, {
+            await createSprintAsync(projectId, {
                 projectId: projectId,
                 name: name,
                 goal: goal,

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { boardStore, setActiveBoard } from '../stores/boardStore';
+    import { boardStore } from '../stores/boardStore';
     import { createTaskAsync } from '../api/taskApi';
     import type { ColumnResponse } from '../api/columnApi';
     import { validateTaskTitle, validateTaskDescription, validateTaskDueDate } from '../validators';
@@ -50,7 +50,6 @@
 
     let title: string;
     let description: string = '';
-    let sprintId: string = '';
     let priority: string = '';
     let estimateInMinutes: number;
     let dueDate: string = '';

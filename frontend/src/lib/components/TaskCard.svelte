@@ -90,7 +90,7 @@
 <style>
     .task-card {
         background: var(--bg-hover);
-        border-radius: 6px;
+        border-radius: 1px;
         padding: 0.75rem;
         margin-bottom: 0.5rem;
         border: 1px solid var(--border-subtle);

@@ -17,7 +17,7 @@
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
-    import { uploadTaskAttachmentAsync, downloadAttachmentAsync, deleteTaskAttachmentAsync } from '../api/attachmentApi';
+    import { uploadTaskAttachmentAsync, } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -40,8 +40,6 @@
         : null;
 
     $: currentTask = $taskStore.activeTask ?? task;
-
-    $: currentLabelIds = currentTask.labelIds;
 
     export let projectId: string;
     export let allLabels: LabelResponse[] = [];
@@ -222,9 +220,6 @@
             input.value = '';
         }
     }
-
-    
-
 
     function closeModal() {
         isTaskDetailOpen = false;

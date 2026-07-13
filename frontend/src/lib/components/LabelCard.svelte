@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { LabelResponse } from '../api/labelApi';
-    import ConfirmModal from './ConfirmModal.svelte';
 
     import { Trash2 } from 'lucide-svelte';
 

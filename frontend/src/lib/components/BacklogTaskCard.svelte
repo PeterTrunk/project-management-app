@@ -178,7 +178,7 @@
         align-items: flex-start;
         gap: 0.5rem;
         background: var(--bg-hover);
-        border-radius: 6px;
+        border-radius: 1px;
         border: 1px solid var(--border-subtle);
         padding: 0.75rem;
         position: relative;

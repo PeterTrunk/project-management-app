@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { createIntegrationAsync } from '../api/integrationApi';
-    import { addIntegration } from '../stores/integrationStore';
 
     import { GitBranch, Plus, TriangleAlert } from 'lucide-svelte';
 

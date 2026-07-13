@@ -10,17 +10,11 @@
     import BacklogTaskCard from './BacklogTaskCard.svelte';
     import TaskDetailModal from './TaskDetailModal.svelte';
     import { setActiveTask } from '../stores/taskStore';
-    import { onMount, onDestroy } from 'svelte';
-    import { getTasksAsync } from '../api/taskApi';
-    import { setTasks } from '../stores/taskStore';
-    import { getSprintsAsync } from '../api/sprintApi';
-    import { setSprints } from '../stores/sprintStore';
 
     import { ClipboardList, CircleAlert, Timer, ChartNoAxesColumn } from 'lucide-svelte';
 
     export let project: ProjectResponse;
-
-    let activeProjectId = project.id;
+    
     let tasks: TaskResponse[] = [];
     let activeSprint: SprintResponse | null = null;
     let currentUserId = '';

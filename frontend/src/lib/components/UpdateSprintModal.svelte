@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { updateSprintAsync, type SprintResponse } from '../api/sprintApi';
-    import { projectStore } from '../stores/projectStore';
     import { validateSprintName, validateSprintGoal, validateSprintDates } from '../validators';
 
     export let isUpdateSprintOpen = false;

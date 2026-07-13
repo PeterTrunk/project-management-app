@@ -45,8 +45,7 @@
             
             closeModal();
         } catch (e: any) {
-            console.error('Backend hiba:', e.response?.data);
-            console.error('Backend hiba részletek:', JSON.stringify(e.response?.data));
+            //console.error('Backend hiba részletek:', JSON.stringify(e.response?.data));
             error = e.response?.data ?? 'Hiba történt a sprint lezárásakor!';
         }
     }
