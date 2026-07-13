@@ -17,6 +17,15 @@ services:
     networks:
       - pma-internal
 
+  redis:
+    image: redis:alpine
+    container_name: pm-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - pma-internal
+
   minio:
     image: minio/minio
     container_name: pm-file-storage
@@ -46,6 +55,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5178
