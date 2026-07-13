@@ -450,7 +450,7 @@
         display: flex;
         gap: 1rem;
         align-items: flex-start;
-        height: calc(100vh - 165px);
+        height: calc(95vh - 165px);
         min-width: min-content;
     }
 

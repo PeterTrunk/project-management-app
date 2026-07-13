@@ -17,6 +17,7 @@ import { get } from 'svelte/store';
 import { authStore } from '../stores/authStore';
 import { push } from 'svelte-spa-router';
 import { getProjectsAsync } from '../api/projectApi';
+import { handleActivityCreated } from '../stores/activityStore';
 
 export function registerSignalREvents() {
     // Task events
@@ -77,6 +78,9 @@ export function registerSignalREvents() {
     // Label events
     signalRService.on('LabelCreated', handleLabelCreated);
     signalRService.on('LabelDeleted', handleLabelDeleted);
+
+    // Activity events
+    signalRService.on('ActivityCreated', handleActivityCreated);
 }
 
 export function unregisterSignalREvents() {
@@ -114,4 +118,5 @@ export function unregisterSignalREvents() {
     signalRService.off('ProjectDeleted');
     signalRService.off('LabelCreated');
     signalRService.off('LabelDeleted');
+    signalRService.off('ActivityCreated');
 }

@@ -92,13 +92,14 @@
         background: var(--bg-hover);
         border-radius: 1px;
         padding: 0.75rem;
-        margin-bottom: 0.5rem;
+        margin: 0.5rem;
         border: 1px solid var(--border-subtle);
         cursor: pointer;
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
         transition: border-color 0.15s;
+
     }
 
     .task-card:hover {
