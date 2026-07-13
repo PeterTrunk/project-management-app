@@ -1828,6 +1828,79 @@ Frontend:
 ## Security Hardening (TOTP 2FA) 
 AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
 
+### Tervezett implementáció
+
+#### AES-256 WebhookSecret titkosítás
+
+**Cél:** A webhook secret-ek plain text helyett titkosítva kerüljenek az adatbázisba. (Minimális védelem)
+
+**Implementáció:**
+- IEncryptionService + EncryptionService — AES-256-GCM alapú titkosítás
+- Minden Encrypt hívás random 12 byte nonce-t generál
+- Visszatérési formátum: `nonce || ciphertext || authTag` (base64 string)
+- `ENCRYPTION_KEY` env var: pontosan 32 byte, base64 kódolt
+  - Soha nem kerül git-be
+  - Soha nem kerül ugyanabba a backupba mint a DB
+- App induláskor fail-fast validáció: ha kulcs nem pontosan 32 byte -> app nem indul el
+- `System.Security.Cryptography.AesGcm` — .NET beépített implementáció, nincs extra dependency
+
+**IntegrationService:**
+- CreateIntegrationAsync: WebhookSecret mentése előtt Encrypt()
+- GetIntegrationAsync és minden olvasási pont: Decrypt() hívás
+- Decrypt hibakezelés: AuthTag validáció bukásakor explicit exception (nem silent fail)
+
+**GitWebhookService:**
+- HMAC validáció előtt Decrypt() hívás
+- Decryptelt secret csak a HMAC számítás idejére él memóriában (local változó)
+- Nem cache-elhető, nem logolható
+- HMAC összehasonlítás constant-time compare-rel: CryptographicOperations.FixedTimeEquals()
+
+---
+
+#### TOTP 2FA
+
+**Cél:** Opcionális kétfaktoros hitelesítés Google Authenticator kompatibilis TOTP tokenekkel.
+
+**Backend:**
+- 'Otp.NET` NuGet csomag
+- User modell kiegészítés: TotpSecret, IsTotpEnabled mezők + migration
+- Új endpointok:
+  - POST /api/auth/totp/setup -> TOTP secret + QR kód generálás
+  - POST /api/auth/totp/verify -> token validáció és 2FA aktiválás
+  - POST /api/auth/totp/disable -> 2FA kikapcsolás
+- Login endpoint módosítás:
+  - Ha IsTotpEnabled -> JWT nem kerül visszaadásra, helyette requiresTotp: true flag
+  - Külön POST /api/auth/totp/login endpoint a TOTP token validáláshoz -> JWT visszaadás
+
+**Frontend:**
+- Regisztrációkor felugró kérdés: "Szeretnél 2FA-t beállítani?"
+  - Igen -> QR kód megjelenítés -> Google Authenticator scan -> token verify -> aktiválás
+  - Nem -> később UserSettings-ben elérhető
+- Bejelentkezéskor ha IsTotpEnabled:
+  - Email + jelszó után -> TOTP token megadása külön képernyőn
+- Bezárható banner bejelentkezés után ha 2FA nincs beállítva:
+  - "Javasoljuk a kétfaktoros hitelesítés beállítását a biztonságod érdekében!"
+- UserSettings: 2FA beállítás / kikapcsolás tab
+
+#### HashiCorp Vault (elhalasztva)
+(alsóhang tól komplex, nem annyira éri meg ha csak self hosted megoldást nézünk, külső service-ek pedig nem voltak beletervezve a budgetbe)
+
+Scope-on kívül a jelenleg projektben. Az `ENCRYPTION_KEY` és egyéb szenzitív env var-ok megfelelő biztonságot nyújtanak production skálán. Vault integráció csak akkor indokolt ha több szolgáltatás, több környezet és audit log igény merül fel. (Valamiféle audit vagy logololás általánosan még szóba jöhet viszont könnyebb menedzsment érdekében)
+
+
+### Implementációs sorrend
+
+1. EncryptionService implementáció (IEncryptionService, AES-256-GCM)
+2. Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
+3. IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
+4. GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
+5. Migration: meglévő plain text secret-ek titkosítása (egyszer futó migráció script)
+6. User modell: TotpSecret, IsTotpEnabled mezők + migration
+7. Otp.NET csomag telepítése
+8. TOTP endpointok implementálása
+9. Login endpoint módosítása
+10. Frontend: regisztrációs felugró, login TOTP lépés, UserSettings tab, banner
+
 ## Team & Project Improvements
 Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks).
 
