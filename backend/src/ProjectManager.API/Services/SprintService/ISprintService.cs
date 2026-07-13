@@ -5,7 +5,7 @@ namespace ProjectManager.API.Services.SprintService
 {
     public interface ISprintService
     {
-        Task<List<SprintResponseDto>> GetSprintsAsync(Guid projectId);
+        Task<List<SprintResponseDto>> GetSprintsAsync(Guid projectId, string? scope = null);
         Task<SprintResponseDto> CreateSprintAsync(Guid projectId, CreateSprintDto dto);
         Task<SprintResponseDto> UpdateSprintAsync(Guid projectId, Guid sprintId, UpdateSprintDto dto);
         Task DeleteSprintAsync(Guid projectId, Guid sprintId);

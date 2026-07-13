@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.DTOs.Boards
+﻿using ProjectManager.API.DTOs.Columns;
+
+namespace ProjectManager.API.DTOs.Boards
 {
     public class BoardResponseDto
     {
@@ -9,5 +11,6 @@
         public bool IsDefault { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public List<ColumnResponseDto>? Columns { get; set; } // null ha scope != initial
     }
 }

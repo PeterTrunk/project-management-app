@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Boards;
+using ProjectManager.API.DTOs.Columns;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
@@ -89,6 +90,7 @@ namespace ProjectManager.API.Services.BoardService
                 {
                     board.Id,
                     board.Name,
+                    board.Description,
                     board.IsDefault
                 });
 
@@ -152,15 +154,22 @@ namespace ProjectManager.API.Services.BoardService
             catch { }
         }
 
-        public async Task<List<BoardResponseDto>> GetBoardsAsync(Guid projectId)
+        public async Task<List<BoardResponseDto>> GetBoardsAsync(
+            Guid projectId, 
+            string? scope = null)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var boards = await _context.Boards
+            var boardsQuery = _context.Boards
                 .Where(b => b.ProjectId == projectId)
-                .ToListAsync();
+                .AsQueryable();
+
+            if (scope == "initial")
+                boardsQuery = boardsQuery.Include(b => b.ColumnDefinitions.Where(c => !c.IsDeleted));
+
+            var boards = await boardsQuery.ToListAsync();
 
             return boards.Select(b => new BoardResponseDto
             {
@@ -170,7 +179,20 @@ namespace ProjectManager.API.Services.BoardService
                 Description = b.Description,
                 IsDefault = b.IsDefault,
                 CreatedAt = b.CreatedAt,
-                UpdatedAt = b.UpdatedAt
+                UpdatedAt = b.UpdatedAt,
+                Columns = scope == "initial"
+                    ? b.ColumnDefinitions
+                        .OrderBy(c => c.Position)
+                        .Select(c => new ColumnResponseDto
+                        {
+                            Id = c.Id,
+                            BoardId = c.BoardId,
+                            Name = c.Name,
+                            MapsToStatus = c.MapsToStatus,
+                            Position = c.Position,
+                            WipLimit = c.WipLimit
+                        }).ToList()
+                    : null
             }).ToList();
         }
 
@@ -210,6 +232,7 @@ namespace ProjectManager.API.Services.BoardService
                 {
                     boardId = board.Id,
                     board.Name,
+                    board.Description,
                     board.IsDefault
                 });
 

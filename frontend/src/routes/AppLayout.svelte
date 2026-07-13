@@ -10,16 +10,17 @@
     import type { ProjectResponse } from '../lib/api/projectApi';
     import { getLabelsAsync } from '../lib/api/labelApi';
     import { setLabels } from '../lib/stores/projectStore';
-    import { triggerTeamRefresh } from '../lib/stores/teamStore';
-    import { clearTeam } from '../lib/stores/teamStore';
     import { getMembersAsync } from '../lib/api/teamApi';
     import { setMembers } from '../lib/stores/teamStore';
     import { getIntegrationsAsync } from '../lib/api/integrationApi';
-    import { setIntegrations, clearIntegrations } from '../lib/stores/integrationStore';
-    import { integrationStore } from '../lib/stores/integrationStore';
-    import { updateIntegration } from '../lib/stores/integrationStore';
-    import type { IntegrationResponse } from '../lib/api/integrationApi';
-    import { addIntegration, removeIntegration } from '../lib/stores/integrationStore';
+    import { setIntegrations } from '../lib/stores/integrationStore';
+    import { setTasks } from '../lib/stores/taskStore';
+    import { getTasksAsync } from '../lib/api/taskApi';
+    import { setBoards } from '../lib/stores/boardStore';
+    import { getBoardsAsync } from '../lib/api/boardApi';
+    import { setColumns } from '../lib/stores/boardStore';
+    import { getSprintsAsync } from '../lib/api/sprintApi';
+    import { setSprints } from '../lib/stores/sprintStore';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -29,6 +30,8 @@
     import TeamResources from '../lib/components/TeamResources.svelte';
     import GitView from '../lib/components/GitView.svelte';
     import StatisticsView from '../lib/components/StatisticsView.svelte';
+
+    import { registerSignalREvents, unregisterSignalREvents } from '../lib/services/signalRClientService';
 
     import CreateProjectModal from '../lib/components/CreateProjectModal.svelte';
     import UserSettingsModal from '../lib/components/UserSettingsModal.svelte';
@@ -47,7 +50,6 @@
     let currentTheme = 'dark';
     themeStore.subscribe(t => currentTheme = t);
 
-    
     let sidebarCollapsed = false;
 
     const navItems = [
@@ -65,141 +67,26 @@
     let isUserSettingsOpen = false;
     
     let token = '';
+    
+    let signalRConnected = false;
 
-    let currentUserId = '';
-    authStore.subscribe(state => {
-        currentUserId = state.user?.userId ?? '';
+    authStore.subscribe(async (state) => {
+        if (state.token && !signalRConnected) {
+            signalRConnected = true;
+            await signalRService.connect(state.token);
+            registerSignalREvents();
+        }
     });
 
     onMount(async () => {
         if (token) {
             await signalRService.connect(token);
-
-            if (activeProject?.id) {
-                const labels = await getLabelsAsync(activeProject.id);
-                setLabels(labels);
-            }
-
-            signalRService.on('LabelCreated', async () => {
-                if (currentProjectId) {
-                    await loadLabels(currentProjectId);
-                }
-            });
-
-            signalRService.on('LabelDeleted', async () => {
-                if (currentProjectId) {
-                    await loadLabels(currentProjectId);
-                }
-            });
-
-            signalRService.on('ProjectUpdated', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('ProjectArchived', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('ProjectUnarchived', async () => {
-                const data = await getProjectsAsync();
-                setProjects(data);
-                if (activeProject?.id) {
-                    const updated = data.find(p => p.id === activeProject!.id);
-                    if (updated) setActiveProject(updated);
-                }
-            });
-
-            signalRService.on('MemberRemoved', async (data) => {
-                console.log('MemberRemoved:', data.userId, 'currentUserId:', currentUserId);
-                if (data.userId === currentUserId) {
-                    const projects = await getProjectsAsync();
-                    setProjects(projects);
-                    setActiveProject(null);
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    push('/app');
-                } else {
-                    triggerTeamRefresh();
-                }
-            });
-
-            signalRService.on('MemberAdded', () => {
-                triggerTeamRefresh();
-            });
-
-            signalRService.on('MemberRoleUpdated', () => {
-                triggerTeamRefresh();
-            });
-            
-            signalRService.on('IntegrationVerified', (data) => {
-                let currentIntegrations: IntegrationResponse[] = [];
-                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
-                
-                const integration = currentIntegrations.find(i => i.id === data.integrationId);
-                if (integration) {
-                    updateIntegration({ ...integration, isVerified: true });
-                }
-            });
-
-            signalRService.on('IntegrationUpdated', (data) => {
-                let currentIntegrations: IntegrationResponse[] = [];
-                integrationStore.subscribe(state => { currentIntegrations = state.integrations; })();
-                
-                const integration = currentIntegrations.find(i => i.id === data.integrationId);
-                if (integration) {
-                    updateIntegration({ ...integration, isVerified: data.isVerified });
-                }
-            });
-            
-            signalRService.on('IntegrationCreated', async (data) => {
-                // Friss integráció lekérése és store-ba rakása
-                const integrations = await getIntegrationsAsync(currentProjectId);
-                setIntegrations(integrations);
-            });
-
-            signalRService.on('IntegrationDeleted', (data) => {
-                removeIntegration(data.integrationId);
-            });
+            registerSignalREvents();    
         }
     });
 
-    async function loadLabels(projectId: string) {
-        const labels = await getLabelsAsync(projectId);
-        setLabels(labels);
-    }
-
-    async function loadMembers(projectId: string) {
-        const members = await getMembersAsync(projectId);
-        setMembers(members);
-    }
-
-    async function loadIntegrations(projectId: string) {
-        const integrations = await getIntegrationsAsync(projectId);
-        setIntegrations(integrations);
-    }
-
     onDestroy(async () => {
-        signalRService.off('LabelCreated');
-        signalRService.off('LabelDeleted');
-        signalRService.off('ProjectUpdated');
-        signalRService.off('ProjectArchived');
-        signalRService.off('ProjectUnarchived');
-        signalRService.off('MemberAdded');
-        signalRService.off('MemberRemoved');
-        signalRService.off('MemberRoleUpdated');
-        signalRService.off('IntegrationVerified');
-        signalRService.off('IntegrationUpdated');
-        signalRService.off('IntegrationCreated');
-        signalRService.off('IntegrationDeleted');
+        unregisterSignalREvents();
         await signalRService.disconnect();
     });
 
@@ -220,9 +107,6 @@
         }
     }
 
-    loadCurrentUser();
-    loadProjects();
-
     // authStore-ból kinyerjük a user adatokat
     let displayName = '';
     authStore.subscribe(state => {
@@ -230,7 +114,9 @@
         token = state.token ?? '';
     });
 
-    function handleLogout() {
+    async function handleLogout() {
+        unregisterSignalREvents();
+        await signalRService.disconnect();
         logout();
         push('/');
     }
@@ -250,9 +136,27 @@
             
             signalRService.joinProject(state.activeProject.id).catch(console.error);
 
-            loadLabels(state.activeProject.id).catch(console.error);
-            loadMembers(state.activeProject.id).catch(console.error);
-            loadIntegrations(state.activeProject.id).catch(console.error);
+            // Párhuzamos initial load
+            Promise.all([
+                getTasksAsync(state.activeProject.id, undefined, undefined, 'initial')
+                    .then(tasks => setTasks(tasks)),
+                getSprintsAsync(state.activeProject.id, 'initial')
+                    .then(sprints => setSprints(sprints)),
+                getBoardsAsync(state.activeProject.id, 'initial')
+                    .then(boards => {
+                        setBoards(boards);
+                        //Oszlopok kinyerése a board response-ból, 
+                        //initial-load miatt már máshogy kezeljük az oszlopokat (már a getBoards adja az oszlopokat)
+                        const columns = boards.flatMap(b => b.columns ?? []);
+                        setColumns(columns);
+                    }),
+                getLabelsAsync(state.activeProject.id)
+                    .then(labels => setLabels(labels)),
+                getMembersAsync(state.activeProject.id)
+                    .then(members => setMembers(members)),
+                getIntegrationsAsync(state.activeProject.id)
+                    .then(integrations => setIntegrations(integrations))
+            ]).catch(console.error);
         }
     });
 
@@ -266,10 +170,10 @@
         }
     }
 
+    loadCurrentUser();
     loadProjects();
 
     let activeView = 'overview';
-    
 </script>
 
 <div class="app-container">

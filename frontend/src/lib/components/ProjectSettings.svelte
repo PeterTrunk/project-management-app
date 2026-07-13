@@ -1,15 +1,13 @@
 <script lang="ts">
     import type { ProjectResponse } from '../api/projectApi';
     import { validateDescription, validateProjName } from '../validators';
-    import { setActiveProject, setProjects, projectStore, setLabels } from '../../lib/stores/projectStore';
-    import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject, getProjectByIdAsync } from '../../lib/api/projectApi'
+    import { projectStore, setLabels } from '../../lib/stores/projectStore';
+    import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject } from '../../lib/api/projectApi'
     import ConfirmModal from '../components/ConfirmModal.svelte';
     import { getLabelsAsync, deleteLabelAsync, type LabelResponse } from '../api/labelApi';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
-    import { onMount } from 'svelte';
-    import { integrationStore, setIntegrations } from '../stores/integrationStore';
-    import { getIntegrationsAsync } from '../api/integrationApi';
+    import { integrationStore } from '../stores/integrationStore';
     import type { IntegrationResponse } from '../api/integrationApi';
     import IntegrationCard from './IntegrationCard.svelte';
     import CreateIntegrationModal from './CreateIntegrationModal.svelte';
@@ -31,16 +29,6 @@
     projectStore.subscribe(state => {
         labels = state.labels;
     });
-
-    onMount(async () => {
-       const data = await getLabelsAsync(project.id);
-       setLabels(data); 
-    });
-
-    async function refreshProject() {
-        const updated = await getProjectByIdAsync(project.id);
-        setActiveProject(updated);
-    }
     
     function requestDeleteLabel(labelId: string) {
         labelToDelete = labelId;
@@ -54,7 +42,6 @@
     async function handleDeleteLabel(labelId: string) {
         try {
             await deleteLabelAsync(project.id, labelId);
-            setLabels(labels.filter(l => l.id !== labelId));
         } catch (e) {
             error = 'Hiba történt a label törlésekor!';
         }
@@ -100,7 +87,6 @@
         try {
             const response = await updateProjectAsync({ name, description, isArchived }, project.id);
             success = 'Módosítások mentve';
-            await refreshProject();
             return;
         } catch (e) {
             error = 'Hiba történt a módosítás során!';
@@ -113,7 +99,6 @@
         try {
             const response = await archiveProjectAsync(project.id);
             success = 'Projekt arhiválva!';
-            await refreshProject();
             return;
         } catch (e) {
             error = 'Hiba történt az arhiválás során!'
@@ -126,7 +111,6 @@
         try {
             const response = await unarchiveProjectAsync(project.id);
             success = 'Projekt aktiválva!';
-            await refreshProject();
             return;
         } catch (e) {
             error = 'Hiba történt az aktiválás során!'
@@ -134,20 +118,13 @@
     }
 
     async function handleDelete() {
-    error = '';
-    try {
-        await deleteProject(project.id);
-        // Eltávolítjuk a listából
-        let currentProjects: ProjectResponse[] = [];
-        projectStore.subscribe(state => currentProjects = state.projects)();
-        setProjects(currentProjects.filter(p => p.id !== project.id));
-        // Nullázzuk az aktív projektet
-        setActiveProject(null);
-    } catch (e) {
-        error = 'Hiba történt a törlés során!';
+        error = '';
+        try {
+            await deleteProject(project.id);
+        } catch (e) {
+            error = 'Hiba történt a törlés során!';
+        }
     }
-}
-
 </script>
 
 <div class="settings-container">
@@ -293,7 +270,7 @@
     </div>
 </div>
 
-<!--Modálok – változatlan-->
+<!--Modálok -->
 {#if isConfirmOpen}
     <ConfirmModal
         bind:isOpen={isConfirmOpen}

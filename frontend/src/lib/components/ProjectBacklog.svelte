@@ -6,8 +6,7 @@
     import BacklogTaskCard from './BacklogTaskCard.svelte';
     import CreateTaskModal from './CreateTaskModal.svelte';
     import TaskDetailModal from './TaskDetailModal.svelte';
-    import { getTasksAsync } from '../api/taskApi';
-    import { setActiveTask, setTasks, taskStore } from '../stores/taskStore';
+    import { setActiveTask, taskStore } from '../stores/taskStore';
 
     import { ChevronRight, ChevronDown, Plus } from 'lucide-svelte';
 

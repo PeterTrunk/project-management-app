@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { onDestroy } from 'svelte';
-    import { signalRService } from '../services/signalRService';
     import { authStore } from '../stores/authStore';
     import { boardStore, setBoards, setActiveBoard, setColumns } from '../stores/boardStore';
     import { getBoardsAsync, } from '../api/boardApi';
@@ -13,10 +11,8 @@
     import { onMount } from 'svelte';
     import { reorderColumnsAsync } from '../api/columnApi';
     import { dndzone } from 'svelte-dnd-action';
-    import { sprintStore, setSprints } from '../stores/sprintStore';
-    import { getSprintsAsync } from '../api/sprintApi';
+    import { sprintStore } from '../stores/sprintStore';
     import type { SprintResponse } from '../api/sprintApi';
-    import { getTaskByIdAsync } from '../api/taskApi';
     import type { LabelResponse } from '../api/labelApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
@@ -30,7 +26,7 @@
     import UpdateBoardModal from './UpdateBoardModal.svelte';
     import ColumnDetailModal from './ColumnDetailModal.svelte';
 
-    import { ChevronDown, Plus, Columns2, Pencil, ArrowLeftRight, X, Search } from 'lucide-svelte';
+    import { ChevronDown, Plus, Pencil, ArrowLeftRight, X, Search } from 'lucide-svelte';
 
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
@@ -46,13 +42,12 @@
         isColumnDetailOpen = true;
     }
 
-    onMount(async () => {
-        if (activeProjectId) {
-            // Először sprintek betöltése
-            const sprintData =  await getSprintsAsync(activeProjectId);
-            setSprints(sprintData);
-            // Utána boardok
-            await loadBoards(activeProjectId);
+    onMount(() => {
+        const defaultBoard = boards.find(b => b.isDefault) 
+            ?? [...boards].sort((a, b) => a.name.localeCompare(b.name))[0];
+        if (defaultBoard) {
+            setActiveBoard(defaultBoard);
+            distributeTasks(tasks);
         }
     });
 
@@ -116,7 +111,6 @@
     
     $: distributeTasks(filteredTasks);
 
-    //
     let sprints: SprintResponse[] = [];
     let boards: BoardResponse[] = [];
     let activeBoard: BoardResponse | null = null;
@@ -161,13 +155,7 @@
 
     let activeProjectId = '';
     projectStore.subscribe(state => {
-        const newProjectId = state.activeProject?.id ?? '';
-        if (newProjectId !== activeProjectId) {
-            activeProjectId = newProjectId;
-            if (activeProjectId) {
-                loadBoards(activeProjectId);
-            }
-        }
+        activeProjectId = state.activeProject?.id ?? '';
     });
 
     let isDragging = false;
@@ -247,276 +235,25 @@
         } catch (err: any) {
             console.error('Backend hiba:', err.response?.data);
             isDragging = false;
-            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '');
-            setTasks(_tasks);
-            distributeTasks(_tasks);
+            // Nem kell API újrahívás, a store már naprakész.
+            distributeTasks(tasks);
         }
     }
    
-    async function loadBoards(projectId: string) {
-        try {
-            const data = await getBoardsAsync(projectId);
-            setBoards(data);
-            
-            // Default board keresése, ha nincs akkor ABC szerint az első betöltése egyből.
-            const defaultBoard = data.find(b => b.isDefault) 
-                ?? data.sort((a, b) => a.name.localeCompare(b.name))[0];
-            
-            if (defaultBoard) {
-                await loadBoard(defaultBoard);
-            }
-        } catch (e) {
-            console.error('Hiba a boardok lekérésekor!');
-        }
+    async function loadBoards(board: BoardResponse) {
+        setActiveBoard(board);
+        distributeTasks(tasks);
     }
 
     async function loadBoard(board: BoardResponse) {
-        //Előző elhagyása, ha volt
-        if (activeBoard) {
-            await signalRService.leaveBoard(activeBoard.id);
-        }
-
         setActiveBoard(board);
-
-        //Csatlakozás egy másikhoz
-        await signalRService.joinBoard(board.id);
-        try {
-            const cols = await getColumnsAsync(activeProjectId, board.id);
-            const sortedCols = cols.sort((a, b) => a.position - b.position);
-            setColumns(sortedCols);
-
-            // Friss sprint adat lekérése
-            let currentActiveSprint: SprintResponse | null = null;
-            const unsubscribe = sprintStore.subscribe(state => {
-                currentActiveSprint = state.activeSprint;
-            });
-            unsubscribe();
-
-            const activeSprintId = (currentActiveSprint as SprintResponse | null)?.id ?? undefined;
-            
-            // Csak aktív sprint taskjai ha van aktív sprint
-            const _tasks = await getTasksAsync(
-                activeProjectId, 
-                board.id,
-                activeSprintId ?? undefined, //  sprintId szűrés
-            );
-
-            //Lezárt taskok kiszűrése.
-            const filteredTasks = _tasks.filter(t => !t.closedAt);
-            setTasks(filteredTasks);
-
-        } catch (e) {
-            console.error('Hiba az oszlopok/taskok lekérésekor!');
-        }
-        // SignalR események regisztrálása
-        registerSignalREvents();
+        distributeTasks(tasks);
     }
-
-    function registerSignalREvents() {
-        // Előző események törlése
-        signalRService.off('TaskMoved');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('TasksRebalanced');
-        signalRService.off('ColumnCreated');
-        signalRService.off('ColumnUpdated');
-        signalRService.off('ColumnDeleted');
-        signalRService.off('ColumnsReordered');
-        signalRService.off('BoardCreated');
-        signalRService.off('BoardUpdated');
-        signalRService.off('BoardDeleted');
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-
-        signalRService.on('TaskLabelAdded', async (data) => {
-            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined);
-            const filtered = _tasks.filter(t => !t.closedAt);
-            setTasks([...filtered]);
-            distributeTasks([...filtered]);
-            console.log('TaskLabelAdded ' + data);
-        });
-
-        signalRService.on('TaskLabelRemoved', async (data) => {
-            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined);
-            const filtered = _tasks.filter(t => !t.closedAt);
-            setTasks([...filtered]);
-            distributeTasks([...filtered]);
-            console.log('TaskLabelRemoved ' + data);
-        });
-
-        signalRService.on('SprintUpdated', async (data) => {
-            // Sprint store frissítése
-            const sprintData = await getSprintsAsync(activeProjectId);
-            setSprints(sprintData);
-            
-            // Taskok újratöltése az új aktív sprint alapján
-            if (activeBoard) {
-                await loadBoard(activeBoard);
-            }
-        });
-        
-        signalRService.on('TaskMoved', (data) => {
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => {
-                currentTasks = state.tasks;
-            })();
-            
-            const updatedTasks = currentTasks.map((t: TaskResponse) =>
-                t.id === data.taskId 
-                    ? { ...t, columnId: data.columnId, position: data.position, completedAt: data.completedAt }
-                    : t
-            );
-            setTasks(updatedTasks);
-            distributeTasks(updatedTasks);
-        });
-
-        signalRService.on('TaskCreated', (data) => {
-            if (data.boardId !== activeBoard?.id) return;
-            // Teljes újratöltés mert a teljes DTO kell
-            getTasksAsync(activeProjectId, activeBoard?.id, activeSprint?.id ?? undefined)
-                .then(t => { setTasks(t); distributeTasks(t); });
-        });
-
-        signalRService.on('TaskUpdated', (data) => {
-            const updatedTasks = tasks.map((t: TaskResponse) =>
-                t.id === data.taskId ? { ...t, ...data } : t
-            );
-            setTasks(updatedTasks);
-            distributeTasks(updatedTasks);
-        });
-
-        signalRService.on('TaskDeleted', (data) => {
-            const updatedTasks = tasks.filter((t: TaskResponse) => t.id !== data.taskId);
-            setTasks(updatedTasks);
-            distributeTasks(updatedTasks);
-        });
-
-        signalRService.on('ColumnCreated', async () => {
-            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
-            setColumns(cols.sort((a, b) => a.position - b.position));
-        });
-
-        signalRService.on('ColumnUpdated', async () => {
-            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
-            setColumns(cols.sort((a, b) => a.position - b.position));
-        });
-
-        signalRService.on('ColumnDeleted', async () => {
-            const cols = await getColumnsAsync(activeProjectId, activeBoard?.id ?? '');
-            setColumns(cols.sort((a, b) => a.position - b.position));
-        });
-
-        signalRService.on('ColumnsReordered', (data) => {
-            let currentCols: ColumnResponse[] = [];
-            boardStore.subscribe(state => { currentCols = state.columns; })();
-            
-            const updated = currentCols.map(c => {
-                const found = data.columns.find((d: any) => d.id === c.id);
-                return found ? { ...c, position: found.position } : c;
-            }).sort((a, b) => a.position - b.position);
-            
-            setColumns(updated);
-        });
-
-        signalRService.on('TasksRebalanced', (data) => {
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => { currentTasks = state.tasks; })();
-            
-            const updated = currentTasks.map(t => {
-                const found = data.tasks.find((d: any) => d.id === t.id);
-                return found ? { ...t, position: found.position } : t;
-            });
-            setTasks(updated);
-            distributeTasks(updated);
-        });
-
-        signalRService.on('BoardCreated', async () => {
-            const data = await getBoardsAsync(activeProjectId);
-            setBoards(data);
-        });
-
-        signalRService.on('BoardUpdated', async () => {
-            const data = await getBoardsAsync(activeProjectId);
-            setBoards(data);
-            
-            if ( data.find(b => b.id === activeBoard?.id) ) {
-                const updatedBoard = data.find(b=> b.id === activeBoard?.id);
-                if (updatedBoard) {
-                    setActiveBoard(updatedBoard);
-                }
-            }
-        });
-
-        signalRService.on('BoardDeleted', async () => {
-            const data = await getBoardsAsync(activeProjectId);
-            setBoards(data);
-            // Ha az aktív board lett törölve akkor az első boardot töltjük be
-            if (!boards.find(b => b.id === activeBoard?.id)) {
-                await loadBoards(activeProjectId);
-            }
-        });
-
-        signalRService.on('TaskAssigneeAdded', async (data) => {
-            let activeTask: TaskResponse | null = null;
-            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
-            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
-
-            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => { currentTasks = state.tasks; })();
-            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
-            setTasks([...updated]);
-            distributeTasks([...updated]);
-        });
-
-        signalRService.on('TaskAssigneeRemoved', async (data) => {
-            let activeTask: TaskResponse | null = null;
-            taskStore.subscribe(state => { activeTask = state.activeTask as TaskResponse | null; })();
-            if ((activeTask as TaskResponse | null)?.id === data.taskId) return;
-
-            const updatedTask = await getTaskByIdAsync(activeProjectId, data.taskId);
-            let currentTasks: TaskResponse[] = [];
-            taskStore.subscribe(state => { currentTasks = state.tasks; })();
-            const updated = currentTasks.map(t => t.id === data.taskId ? { ...updatedTask } : t);
-            setTasks([...updated]);
-            distributeTasks([...updated]);
-        });
-    }
-
-    onDestroy(async () => {
-        if (activeBoard) {
-            await signalRService.leaveBoard(activeBoard.id);
-        }
-        signalRService.off('TaskMoved');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('TasksRebalanced');
-        signalRService.off('ColumnCreated');
-        signalRService.off('ColumnUpdated');
-        signalRService.off('ColumnDeleted');
-        signalRService.off('ColumnsReordered');
-        signalRService.off('BoardCreated');
-        signalRService.off('BoardUpdated');
-        signalRService.off('BoardDeleted');
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-    });
  
     function handleTaskClick(task: TaskResponse) {
         setActiveTask(task);
         isTaskDetailOpen = true;
     }
-
-
-
 </script>
 <div class="board-toolbar">
     <div class="dropdown">
@@ -713,7 +450,7 @@
         display: flex;
         gap: 1rem;
         align-items: flex-start;
-        height: calc(100vh - 165px);
+        height: calc(95vh - 165px);
         min-width: min-content;
     }
 

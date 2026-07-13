@@ -45,14 +45,15 @@ namespace ProjectManager.API.Services.ColumnService
             _context.ColumnDefinitions.Add(column);
             await _context.SaveChangesAsync();
             await _hubContext.Clients
-                .Group($"board-{boardId}")
+                .Group($"project-{projectId}")
                 .SendAsync("ColumnCreated", new
                 {
                     column.Id,
                     column.BoardId,
                     column.Name,
                     column.Position,
-                    column.MapsToStatus
+                    column.MapsToStatus,
+                    column.WipLimit
                 });
 
             try
@@ -109,8 +110,8 @@ namespace ProjectManager.API.Services.ColumnService
             
             await _context.SaveChangesAsync();
             await _hubContext.Clients
-                .Group($"board-{boardId}")
-                .SendAsync("ColumnDeleted", new { columnId });
+                .Group($"project-{projectId}")
+                .SendAsync("ColumnDeleted", new { columnId, boardId });
 
             try
             {
@@ -189,9 +190,10 @@ namespace ProjectManager.API.Services.ColumnService
 
             await _context.SaveChangesAsync();
             await _hubContext.Clients
-                .Group($"board-{boardId}")
+                .Group($"project-{projectId}")
                 .SendAsync("ColumnsReordered", new
                 {
+                    boardId,
                     columns = columns.Select(c => new { c.Id, c.Position })
                 });
 
@@ -226,10 +228,11 @@ namespace ProjectManager.API.Services.ColumnService
 
             await _context.SaveChangesAsync();
             await _hubContext.Clients
-                .Group($"board-{boardId}")
+                .Group($"project-{projectId}")
                 .SendAsync("ColumnUpdated", new
                 {
                     columnId = column.Id,
+                    boardId = column.BoardId,
                     column.Name,
                     column.MapsToStatus,
                     column.WipLimit

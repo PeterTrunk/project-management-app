@@ -29,10 +29,12 @@ interface UpdateSprintRequest {
     endDate: Date | null;
 }
 
-export async function getSprintsAsync(projectId: string): Promise<SprintResponse[]>  {
-    const response = await apiClient.get("/projects/"+ projectId +"/sprints");
+export async function getSprintsAsync(projectId: string, scope?: string): Promise<SprintResponse[]> {
+    const response = await apiClient.get("/projects/" + projectId + "/sprints", {
+        params: { scope }
+    });
     return response.data;
-} 
+}
 
 export async function createSprintAsync(projectId: string, data: CreateSprintRequest): Promise<SprintResponse> {
     const response = await apiClient.post("/projects/"+ projectId +"/sprints", data);

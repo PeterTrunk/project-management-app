@@ -27,3 +27,37 @@ export function triggerTeamRefresh() {
 export function clearTeam() {
     teamStore.set(initialState);
 }
+
+// SignalR handle metódusok
+
+export function handleMemberAdded(payload: {
+    userId: string;
+    displayName: string;
+    projectRole: string;
+}) {
+    teamStore.update(state => ({
+        ...state,
+        members: [...state.members, payload as unknown as MemberResponse]
+    }));
+}
+
+export function handleMemberRemoved(payload: { userId: string }) {
+    teamStore.update(state => ({
+        ...state,
+        members: state.members.filter(m => m.userId !== payload.userId)
+    }));
+}
+
+export function handleMemberRoleUpdated(payload: {
+    userId: string;
+    projectRole: string;
+}) {
+    teamStore.update(state => ({
+        ...state,
+        members: state.members.map(m =>
+            m.userId === payload.userId
+                ? { ...m, projectRole: payload.projectRole }
+                : m
+        )
+    }));
+}

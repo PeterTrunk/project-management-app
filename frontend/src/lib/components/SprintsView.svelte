@@ -1,21 +1,19 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { signalRService } from '../services/signalRService';
     import { sprintStore, setSprints } from '../stores/sprintStore';
     import { getSprintsAsync, type SprintResponse } from '../api/sprintApi';
-    import { getTasksAsync, type TaskResponse, deleteTaskAsync } from '../api/taskApi';
-    import { boardStore, setBoards } from '../stores/boardStore';
-    import { getBoardsAsync } from '../api/boardApi';
+    import { type TaskResponse, deleteTaskAsync } from '../api/taskApi';
+    import { boardStore } from '../stores/boardStore';
     import { planSprintAsync, activateSprintAsync, 
             assignTaskToSprintAsync, removeTaskFromSprintAsync,
             deleteSprintAsync, getUnfinishedTasksAsync } from '../api/sprintApi';
-
+    import { taskStore } from '../stores/taskStore';
     import SprintCard from './SprintCard.svelte';
     import ProjectBacklog from './ProjectBacklog.svelte';
     import CreateSprintModal from './CreateSprintModal.svelte';
     import UpdateSprintModal from './UpdateSprintModal.svelte';
     import CompleteSprintModal from './CompleteSprintModal.svelte';
     import ConfirmModal from './ConfirmModal.svelte';
+    import { getTasksAsync } from '../api/taskApi';
 
     import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
 
@@ -39,109 +37,16 @@
     let unfinishedTasks: TaskResponse[] = [];
     let planningCollapsed = true;
     let completedCollapsed = true;
+    let completedSprintsLoaded = false;
+    
+    taskStore.subscribe(state => {
+        allTasks = state.tasks;
+    });
 
     sprintStore.subscribe(state => {
         sprints = state.sprints;
         activeSprint = state.activeSprint;
     });
-
-    async function loadAll() {
-        // Sprintek
-        const sprintData = await getSprintsAsync(projectId);
-        setSprints(sprintData);
-        
-        // Boardok
-        if ($boardStore.boards.length === 0) {
-            const boardData = await getBoardsAsync(projectId);
-            setBoards(boardData);
-        }
-        
-        // Összes task — board és sprint szűrés NÉLKÜL
-        const taskData = await getTasksAsync(projectId);
-        allTasks = [...taskData];
-    }
-
-    onMount(async () => {
-        await loadAll();
-        registerSignalREvents();
-    });
-
-    function registerSignalREvents() {
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('SprintDeleted');
-        signalRService.off('SprintCreated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-        signalRService.off('TaskMoved');
-
-        signalRService.on('TaskLabelAdded', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskLabelRemoved', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('SprintCreated', async () => {
-            await loadAll();
-        });
-
-        signalRService.on('SprintDeleted', async () => {
-            await loadAll();
-        });
-
-        signalRService.on('SprintUpdated', async () => {
-            await loadAll();
-        });
-
-        signalRService.on('TaskUpdated', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskCreated', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskDeleted', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskAssigneeAdded', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskAssigneeRemoved', async () => {
-            await refreshTasks();
-        });
-
-        signalRService.on('TaskMoved', async () => {
-            await refreshTasks();
-        });
-    }
-
-    onDestroy(() => {
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('SprintDeleted');
-        signalRService.off('SprintCreated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-        signalRService.off('TaskMoved');
-    });
-
-    async function refreshTasks() {
-        const taskData = await getTasksAsync(projectId);
-        allTasks = [...taskData];
-    }
 
     async function handleActivateSprint(sprintId: string) {
         const sprintTasks = allTasks.filter(t => t.sprintId === sprintId);
@@ -155,12 +60,10 @@
                 'Aktiválás',
                 async () => {
                     await activateSprintAsync(projectId, sprintId);
-                    await loadAll();
                 }
             );
         } else {
             await activateSprintAsync(projectId, sprintId);
-            await loadAll();
         }
     }
 
@@ -171,7 +74,6 @@
         'Megerősítés',
         async () => {
             await planSprintAsync(projectId, sprintId);
-            await loadAll();
         });
     }
 
@@ -182,7 +84,6 @@
             'Törlés',
             async () => {
                 await deleteSprintAsync(projectId, sprintId);
-                await loadAll();
             }
         );
     }
@@ -197,12 +98,10 @@
         } else {
             await assignTaskToSprintAsync(projectId, sprintId, taskId);
         }
-        await refreshTasks();
     }
 
     async function handleRemoveFromSprint(taskId: string, sprintId: string) {
         await removeTaskFromSprintAsync(projectId, sprintId, taskId);
-        await refreshTasks();
     }
 
     function openEditSprint(sprint: SprintResponse) {
@@ -227,11 +126,40 @@
             'Törlés',
             async () => {
                 await deleteTaskAsync(projectId, taskId);
-                await refreshTasks();
             }
         );
     }
 
+    async function toggleCompleted() {
+        completedCollapsed = !completedCollapsed;
+        if (!completedCollapsed && !completedSprintsLoaded) {
+            const completedSprints = await getSprintsAsync(projectId, 'completed');
+            // Merge a meglévő sprintekkel (ne írja felül az active/planning-et)
+            sprintStore.update(state => ({
+                ...state,
+                sprints: [
+                    ...state.sprints.filter(s => s.state !== 'Completed'),
+                    ...completedSprints
+                ]
+            }));
+            completedSprintsLoaded = true;
+        }
+    }
+
+    let completedSprintTasksLoaded = new Set<string>();
+
+    async function handleLoadCompletedSprintTasks(sprintId: string) {
+        const tasks = await getTasksAsync(projectId, undefined, sprintId);
+        taskStore.update(state => ({
+            ...state,
+            tasks: [
+                ...state.tasks.filter(t => t.sprintId !== sprintId),
+                ...tasks
+            ]
+        }));
+        completedSprintTasksLoaded = new Set([...completedSprintTasksLoaded, sprintId]);
+    }
+    
     function openConfirm(title: string, message: string, text: string, action: () => Promise<void>) {
         confirmTitle = title;
         confirmMessage = message;
@@ -251,13 +179,13 @@
 
     <div class="sprints-content">
         <!-- Completed sprintek -->
-        <button class="section-toggle" on:click={() => completedCollapsed = !completedCollapsed}>
+        <button class="section-toggle" on:click={toggleCompleted}>
             {#if completedCollapsed}
                 <ChevronRight size={14} />
             {:else}
                 <ChevronDown size={14} />
             {/if}
-            Befejezett sprintek ({sprints.filter(s => s.state === 'Completed').length})
+            Befejezett sprintek {completedSprintsLoaded ? `(${sprints.filter(s => s.state === 'Completed').length})` : '(?)'}
         </button>
         {#if !completedCollapsed}
             {#each sprints.filter(s => s.state === 'Completed') as sprint}
@@ -273,7 +201,9 @@
                     onDelete={handleDeleteSprint}
                     onRemoveTask={handleRemoveFromSprint}
                     onDeleteTask={handleDeleteTask}
-                    onBoardAssigned={async () => await loadAll()}
+                    onBoardAssigned={async () => {}}
+                    tasksLoaded={completedSprintTasksLoaded.has(sprint.id)}
+                    onLoadTasks={sprint.state === 'Completed' ? handleLoadCompletedSprintTasks : null}
                 />
             {/each}
             <hr class="completed-divider">
@@ -295,7 +225,7 @@
                 onRemoveTask={handleRemoveFromSprint}
                 onDeleteTask={handleDeleteTask}
                 onAssignToSprint={handleAssignToSprint}
-                onBoardAssigned={async () => await loadAll()}
+                onBoardAssigned={async () => {}}
             />
         {/if}
 
@@ -324,7 +254,7 @@
                     onRemoveTask={handleRemoveFromSprint}
                     onDeleteTask={handleDeleteTask}
                     onAssignToSprint={handleAssignToSprint}
-                    onBoardAssigned={async () => await loadAll()}
+                    onBoardAssigned={async () => {}}
                 />
             {/each}
         {/if}
@@ -337,7 +267,7 @@
             projectId={projectId}
             onAssignToSprint={handleAssignToSprint}
             onDelete={handleDeleteTask}
-            onRefresh={refreshTasks}
+            onRefresh={async () => {}}
         />
     </div>
 
@@ -373,10 +303,7 @@
         sprint={selectedCompleteSprint}
         unfinishedTasks={unfinishedTasks}
         sprints={sprints}
-        onClose={async () => {
-            isCompleteSprintOpen = false;
-            await loadAll();
-        }}
+        onClose={async () => { isCompleteSprintOpen = false; }}
     />
 {/if}
 

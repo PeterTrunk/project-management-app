@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount } from 'svelte';
     import { getActivitiesAsync, type ActivityResponse } from '../api/activityApi';
-    import { signalRService } from '../services/signalRService';
+    import { activityStore, setPagedActivities } from '../stores/activityStore';
 
     import { 
         ClipboardList, Timer, MessageSquare, Pin, 
-        LayoutDashboard, User, Folder, GitCommit, 
+        LayoutDashboard, User, Folder, GitCommitHorizontal, 
         GitPullRequest, Link, Circle, X
     } from 'lucide-svelte';
 
@@ -19,6 +19,10 @@
     let hasMore = true;
     const PAGE_SIZE = 20;
     
+    let liveActivities: ActivityResponse[] = [];
+    activityStore.subscribe(state => {
+        liveActivities = state.liveActivities;
+    });
 
     // Szűrő state-ek
     let filterEntityType = '';
@@ -31,9 +35,13 @@
     $: hasActiveFilter = filterEntityType !== '' || filterActorName !== '' || 
         filterDateFrom !== '' || filterDateTo !== '';
 
+    $: displayedActivities = hasActiveFilter
+    ? activities
+    : [...liveActivities, ...activities]
+        .filter((a, i, arr) => arr.findIndex(b => b.id === a.id) === i);
+
     onMount(async () => {
         await loadActivities();
-        registerSignalREvents();
     });
 
     async function loadActivities() {
@@ -114,17 +122,6 @@
         loadActivities();
     }
 
-    function registerSignalREvents() {
-        signalRService.off('ActivityCreated');
-        signalRService.on('ActivityCreated', (data: ActivityResponse) => {
-            activities = [data, ...activities];
-        });
-    }
-
-    onDestroy(() => {
-        signalRService.off('ActivityCreated');
-    });
-
     function formatDate(dateString: string): string {
         const date = new Date(dateString);
         const now = new Date();
@@ -151,7 +148,7 @@
             case 'Column':      return LayoutDashboard;
             case 'Member':      return User;
             case 'Project':     return Folder;
-            case 'Commit':      return GitCommit;
+            case 'Commit':      return GitCommitHorizontal;
             case 'PullRequest': return GitPullRequest;
             case 'Integration': return Link;
             default:            return Circle;
@@ -221,11 +218,11 @@
         <p class="loading">Betöltés...</p>
     {:else if error}
         <p class="error">{error}</p>
-    {:else if activities.length === 0}
+    {:else if displayedActivities.length === 0}
         <p class="empty">Még nincs aktivitás</p>
     {:else}
         <div class="activity-list">
-            {#each activities as activity (activity.id)}
+            {#each displayedActivities as activity (activity.id)}
                 <div class="activity-item">
                     <span class="activity-icon">
                         <svelte:component this={getEntityIcon(activity.entityType)} size={16} />

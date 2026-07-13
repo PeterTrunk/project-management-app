@@ -16,6 +16,9 @@ namespace ProjectManager.API.Services.IntegrationService
         private readonly IActivityService _activityService;
         private readonly IHubContext<ProjectHub> _hubContext;
 
+        public string baseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
+                ?? "http://localhost:5178";
+
         public IntegrationService(AppDbContext context, ICurrentUserService currentUserService, IActivityService activityService, IHubContext<ProjectHub> hubContext)
         {
             _context = context;
@@ -62,7 +65,11 @@ namespace ProjectManager.API.Services.IntegrationService
                 {
                     integrationId = integration.Id,
                     provider = integration.Provider,
-                    repoFullName = integration.RepoFullName
+                    repoFullName = integration.RepoFullName,
+                    isEnabled = integration.IsEnabled,
+                    isVerified = integration.IsVerified,
+                    webhookUrl = $"{baseUrl}/api/git/webhook/{integration.WebhookToken}",
+                    createdAt = integration.CreatedAt
                 });
 
             try
@@ -263,9 +270,6 @@ namespace ProjectManager.API.Services.IntegrationService
 
         private IntegrationResponseDto MapToDto(Integration integration)
         {
-            var baseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
-                ?? "http://localhost:5178";
-
             return new IntegrationResponseDto
             {
                 Id = integration.Id,

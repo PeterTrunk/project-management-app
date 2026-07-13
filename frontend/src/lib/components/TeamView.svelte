@@ -1,12 +1,7 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { push } from 'svelte-spa-router'
-    import { signalRService } from '../services/signalRService';
-    import { onDestroy } from 'svelte';
-    import { getMembersAsync, type MemberResponse } from '../api/teamApi';
+    import { type MemberResponse } from '../api/teamApi';
     import { authStore } from '../stores/authStore';
-    import { projectStore } from '../stores/projectStore';
-    import { teamStore, setMembers, triggerTeamRefresh } from '../stores/teamStore';
+    import { teamStore  } from '../stores/teamStore';
     import MemberCard from './MemberCard.svelte';
     import InviteModal from './InviteModal.svelte';
     import ActivityFeed from './ActivityFeed.svelte';
@@ -20,53 +15,24 @@
     let currentUserRole = '';
     let isInviteModalOpen = false;
     let error = '';
-    let loading = true;
+    let loading = false;
 
     authStore.subscribe(state => {
         currentUserId = state.user?.userId ?? '';
     });
 
-    $: currentUserRole = members.find(m => m.userId === currentUserId)?.projectRole ?? '';
-    $: canInvite = currentUserRole === 'Owner' || currentUserRole === 'Admin';
-
-    onMount(async () => {
-        await loadMembers();
-        registerSignalREvents();
+    teamStore.subscribe(state => {
+        members = state.members;
     });
 
-    function registerSignalREvents() {
-        signalRService.off('MemberAdded');
-        signalRService.off('MemberRoleUpdated');
-
-        signalRService.on('MemberAdded', async () => {
-            await loadMembers();
-        });
-
-        signalRService.on('MemberRoleUpdated', async () => {
-            await loadMembers();
-        });
-    }
-
-    async function loadMembers() {
-        loading = true;
-        error = '';
-        try {
-            const data = await getMembersAsync(projectId);
-            setMembers(data);
-            members = data;
-        } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt!';
-        } finally {
-            loading = false;
-        }
-    }
+    $: currentUserRole = members.find(m => m.userId === currentUserId)?.projectRole ?? '';
+    $: canInvite = currentUserRole === 'Owner' || currentUserRole === 'Admin';
 
     let lastRefreshTrigger = 0;
     teamStore.subscribe(state => {
         members = state.members;
         if (state.refreshTrigger > 0 && state.refreshTrigger !== lastRefreshTrigger) {
             lastRefreshTrigger = state.refreshTrigger;
-            loadMembers();
         }
     });
 
@@ -77,11 +43,6 @@
         const bOrder = roleOrder[b.projectRole as keyof typeof roleOrder] ?? 4;
         if (aOrder !== bOrder) return aOrder - bOrder;
         return a.displayName.localeCompare(b.displayName);
-    });
-
-    onDestroy(() => {
-        signalRService.off('MemberAdded');
-        signalRService.off('MemberRoleUpdated');
     });
 </script>
 
@@ -112,7 +73,7 @@
                         {projectId}
                         {currentUserRole}
                         {currentUserId}
-                        onRefresh={loadMembers}
+                        onRefresh={async () => {}}
                     />
                 {/each}
             </div>

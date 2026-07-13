@@ -10,86 +10,11 @@
     import BacklogTaskCard from './BacklogTaskCard.svelte';
     import TaskDetailModal from './TaskDetailModal.svelte';
     import { setActiveTask } from '../stores/taskStore';
-    import { onMount, onDestroy } from 'svelte';
-    import { getTasksAsync } from '../api/taskApi';
-    import { setTasks } from '../stores/taskStore';
-    import { getSprintsAsync } from '../api/sprintApi';
-    import { setSprints } from '../stores/sprintStore';
-    import { signalRService } from '../services/signalRService';
 
-    import { ClipboardList, CircleAlert, Timer, BarChart2 } from 'lucide-svelte';
-
-    onMount(async () => {
-        // Taskok és sprintek betöltése
-        const [taskData, sprintData] = await Promise.all([
-            getTasksAsync(activeProjectId),
-            getSprintsAsync(activeProjectId)
-        ]);
-        setTasks(taskData.filter(t => !t.closedAt));
-        setSprints(sprintData);
-
-        registerSignalREvents();
-    });
-
-    function registerSignalREvents() {
-        signalRService.off('TaskMoved');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('TasksRebalanced');
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-
-        const reloadTasks = async () => {
-            const data = await getTasksAsync(activeProjectId);
-            const filtered = data.filter(t => !t.closedAt);
-            console.log('reloadTasks fut, tasks száma:', filtered.length);
-            console.log('completedAt értékek:', filtered.map(t => ({ id: t.taskKey, completedAt: t.completedAt })));
-            setTasks([...filtered]);
-        };
-
-        const reloadSprints = async () => {
-            const data = await getSprintsAsync(activeProjectId);
-            setSprints(data);
-        };
-
-        signalRService.on('TaskMoved', ()=> {
-            reloadTasks();
-            console.log("TaskMoved érzékelve!");
-        });
-        signalRService.on('TaskCreated', reloadTasks);
-        signalRService.on('TaskUpdated', reloadTasks);
-        signalRService.on('TaskDeleted', reloadTasks);
-        signalRService.on('TasksRebalanced', reloadTasks);
-        signalRService.on('TaskLabelAdded', reloadTasks);
-        signalRService.on('TaskLabelRemoved', reloadTasks);
-        signalRService.on('TaskAssigneeAdded', reloadTasks);
-        signalRService.on('TaskAssigneeRemoved', reloadTasks);
-        signalRService.on('SprintUpdated', async () => {
-            await reloadSprints();
-            await reloadTasks();
-        });
-    }
-
-    onDestroy(() => {
-        signalRService.off('TaskMoved');
-        signalRService.off('TaskCreated');
-        signalRService.off('TaskUpdated');
-        signalRService.off('TaskDeleted');
-        signalRService.off('TasksRebalanced');
-        signalRService.off('SprintUpdated');
-        signalRService.off('TaskLabelAdded');
-        signalRService.off('TaskLabelRemoved');
-        signalRService.off('TaskAssigneeAdded');
-        signalRService.off('TaskAssigneeRemoved');
-    });
+    import { ClipboardList, CircleAlert, Timer, ChartNoAxesColumn } from 'lucide-svelte';
 
     export let project: ProjectResponse;
-
-    let activeProjectId = project.id;
+    
     let tasks: TaskResponse[] = [];
     let activeSprint: SprintResponse | null = null;
     let currentUserId = '';
@@ -98,10 +23,11 @@
     let isTaskDetailOpen = false;
 
     taskStore.subscribe(state => {
-        console.log('taskStore frissült:', state.tasks.length);
-        tasks = state.tasks; 
+        tasks = state.tasks.filter(t => !t.closedAt);
     });
+
     sprintStore.subscribe(state => { activeSprint = state.activeSprint; });
+
     authStore.subscribe(state => {
         currentUserId = state.user?.userId ?? '';
         displayName = state.user?.displayName ?? '';
@@ -156,13 +82,13 @@
         })
         .slice(0, 8);
 
-    function getDueStatus(task: TaskResponse): 'overdue' | 'due-soon' | 'normal' | null {
-        if (!task.dueDate) return null;
-        const due = new Date(task.dueDate);
-        if (due < getNow() && !task.completedAt) return 'overdue';
-        if ((due.getTime() - getNow().getTime()) < 24 * 60 * 60 * 1000 && !task.completedAt) return 'due-soon';
-        return 'normal';
-    }
+    //function getDueStatus(task: TaskResponse): 'overdue' | 'due-soon' | 'normal' | null {
+    //    if (!task.dueDate) return null;
+    //    const due = new Date(task.dueDate);
+    //    if (due < getNow() && !task.completedAt) return 'overdue';
+    //    if ((due.getTime() - getNow().getTime()) < 24 * 60 * 60 * 1000 && !task.completedAt) return 'due-soon';
+    //    return 'normal';
+    //}
 
     function handleOpenDetail(task: TaskResponse) {
         setActiveTask(task);
@@ -257,7 +183,7 @@
 
         <!-- Recent Activity -->
         <div class="section activity-section">
-            <h3><BarChart2 size={14} /> Recent Activity</h3>
+            <h3><ChartNoAxesColumn size={14} /> Recent Activity</h3>
             <div class="activity-scroll">
                 <ActivityFeed projectId={project.id} />
             </div>

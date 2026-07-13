@@ -55,7 +55,7 @@
             return;
         }
         try {
-            const response = await createBoardAsync(projectId, { projectId, name, description, isDefault });
+            await createBoardAsync(projectId, { projectId, name, description, isDefault });
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             success = 'Board létrehozva!';

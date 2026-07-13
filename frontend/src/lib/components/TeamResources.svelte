@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { getProjectAttachmentsAsync, uploadProjectAttachmentAsync, getTaskAttachmentsAsync } from '../api/attachmentApi';
+    import { getProjectAttachmentsAsync, uploadProjectAttachmentAsync } from '../api/attachmentApi';
     import { getTasksAsync, type TaskResponse } from '../api/taskApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';

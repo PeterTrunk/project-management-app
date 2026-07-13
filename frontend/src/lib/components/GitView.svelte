@@ -10,7 +10,7 @@
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
 
-    import { GitBranch, GitCommit, GitPullRequest, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
+    import { GitBranch, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
 
     export let projectId: string;
 
@@ -36,7 +36,16 @@
 
     onMount(async () => {
         await loadAll();
-        registerSignalREvents();
+        signalRService.off('CommitLinked');
+        signalRService.off('PrLinked');
+
+        signalRService.on('CommitLinked', async () => {
+            unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
+        });
+
+        signalRService.on('PrLinked', async () => {
+            unmatchedPrs = await getUnmatchedPrsAsync(projectId);
+        });
     });
 
     async function loadAll() {
@@ -75,20 +84,7 @@
             error = e.response?.data ?? 'Hiba történt a hozzárendeléskor!';
         }
     }
-
-    function registerSignalREvents() {
-        signalRService.off('CommitLinked');
-        signalRService.off('PrLinked');
-
-        signalRService.on('CommitLinked', async () => {
-            unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
-        });
-
-        signalRService.on('PrLinked', async () => {
-            unmatchedPrs = await getUnmatchedPrsAsync(projectId);
-        });
-    }
-
+    
     onDestroy(() => {
         signalRService.off('CommitLinked');
         signalRService.off('PrLinked');

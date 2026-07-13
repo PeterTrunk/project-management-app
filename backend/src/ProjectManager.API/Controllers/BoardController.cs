@@ -56,11 +56,13 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectViewer")]
         [ProducesResponseType(typeof(List<BoardResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<List<BoardResponseDto>>> GetBoardsAsync(Guid projectId)
+        public async Task<ActionResult<List<BoardResponseDto>>> GetBoardsAsync(
+            Guid projectId,
+            [FromQuery] string? scope = null)
         {
             try
             {
-                var response = await _boardService.GetBoardsAsync(projectId);
+                var response = await _boardService.GetBoardsAsync(projectId, scope);
                 return Ok(response);
             }
             catch (Exception ex)

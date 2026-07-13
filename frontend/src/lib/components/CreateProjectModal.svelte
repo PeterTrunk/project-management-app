@@ -1,6 +1,5 @@
 <script lang="ts">
     import { createProjectAsync } from '../../lib/api/projectApi';
-    import { setProjects, projectStore } from '../../lib/stores/projectStore';
     
     import { validateDescription, validateProjName } from '../validators';
 

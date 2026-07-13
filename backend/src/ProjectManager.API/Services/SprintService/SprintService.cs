@@ -240,7 +240,11 @@ namespace ProjectManager.API.Services.SprintService
                 {
                     sprint.Id,
                     sprint.Name,
-                    sprint.State
+                    sprint.Goal,
+                    sprint.State,
+                    sprint.StartDate,
+                    sprint.EndDate,
+                    sprint.CreatedAt
                 });
 
             try
@@ -310,13 +314,31 @@ namespace ProjectManager.API.Services.SprintService
             catch { }
         }
 
-        public async Task<List<SprintResponseDto>> GetSprintsAsync(Guid projectId)
+        public async Task<List<SprintResponseDto>> GetSprintsAsync(
+            Guid projectId, 
+            string? scope = null)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprints = await _context.Sprints.Where(s => s.ProjectId == projectId).ToListAsync();
+            var query = _context.Sprints
+                .Where(s => s.ProjectId == projectId)
+                .AsQueryable();
+
+            if (scope == "initial")
+            {
+                // Aktív + Planning sprintek (kezdő betöltéshez)
+                query = query.Where(s => s.State == "Active" || s.State == "Planning");
+            }
+            else if (scope == "completed")
+            {
+                // Csak lezárt sprintek (SprintsView lazy load)
+                query = query.Where(s => s.State == "Completed");
+            }
+            // scope == null: összes sprint (backward compatibility)
+
+            var sprints = await query.ToListAsync();
 
             return sprints.Select(s => new SprintResponseDto
             {

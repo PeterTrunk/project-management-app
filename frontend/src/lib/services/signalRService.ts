@@ -44,15 +44,7 @@ class SignalRService {
     async leaveProject(projectId: string) {
         await this.connection?.invoke('LeaveProject', projectId);
     }
-
-    async joinBoard(boardId: string) {
-        await this.connection?.invoke('JoinBoard', boardId);
-    }
-
-    async leaveBoard(boardId: string) {
-        await this.connection?.invoke('LeaveBoard', boardId);
-    }
-
+    
     on(event: string, callback: (...args: any[]) => void) {
         this.connection?.on(event, callback);
     }

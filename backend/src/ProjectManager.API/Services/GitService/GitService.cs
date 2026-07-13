@@ -82,9 +82,6 @@ namespace ProjectManager.API.Services.GitService
             commit.TaskId = taskId;
             await _context.SaveChangesAsync();
 
-            commit.TaskId = taskId;
-            await _context.SaveChangesAsync();
-
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("CommitLinked", new
