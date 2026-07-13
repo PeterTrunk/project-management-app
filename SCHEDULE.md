@@ -1680,7 +1680,7 @@ Megoldás:
 
 **(After MVP - starting point)**
 ## SignalR Architecture Refactor
-Centralized SignalR event handling at AppLayout level. Direct store updates from event payloads instead of full API reloads. Redis backplane support for horizontal scaling.
+Centralized SignalR event handling at AppLayout level. Direct store updates from event payloads instead of full API reloads. Redis backplane support for horizontal scaling. Migration from dual-group (board + project) to single project-level broadcasting.
 
 ### Tervezett implementáció
 
@@ -1690,73 +1690,86 @@ Centralized SignalR event handling at AppLayout level. Direct store updates from
 - Összes event projekt szintű csoportba kerül (project-{projectId})
 - board-{boardId} csoport eltávolítva
 - joinBoard / leaveBoard Hub metódusok eltávolítva
-- TaskCreated projekt szintű broadcast hozzáadása
-- TaskMoved payload kiegészítése (boardId, sprintId, completedAt)
-- TaskUpdated payload teljes TaskResponseDto-val
+- TaskCreated projekt szintű broadcast + position mező hozzáadva
+- TaskMoved payload kiegészítve (boardId, sprintId, completedAt)
+- TaskUpdated payload csak módosítható mezőket tartalmaz (title, description, priority, dueDate, estimateInMinutes) — teljes DTO helyett kompakt payload, mivel label/assignee/attachment változások saját dedikált eventeken érkeznek
+- Összes service payload standardizálva (BoardUpdated description, ColumnCreated WipLimit, CommentAdded createdById, TaskLabelAdded/Removed labelId, SprintCreated teljes payload, stb.)
+- ProjectDeleted broadcast hozzáadva
 
 **Endpoint optimalizálások:**
-- `GET /api/projects/{id}/tasks?activeSprintOnly=true&includeBacklog=true`
-  -> Csak aktív sprint + backlog taskok projekt megnyitáskor
-- `GET /api/projects/{id}/sprints?state=Active,Planning`
-  -> Csak aktív és tervezett sprintek projekt megnyitáskor
-  -> Completed sprintek lazy load SprintsView-ban
-- `GET /api/projects/{id}/boards?includeColumns=true`
-  -> Board + oszlopok egy kérésben
+- `GET /api/projects/{id}/tasks?scope=initial`
+  -> Backlog + Active + Planning sprint taskok egy kérésben
+  -> scope=initial névkonvenció egységes mindhárom endpointon
+- `GET /api/projects/{id}/sprints?scope=initial`
+  -> Csak Active + Planning sprintek projekt megnyitáskor
+  -> scope=completed: Completed sprintek lazy load SprintsView-ban
+- `GET /api/projects/{id}/boards?scope=initial`
+  -> Board + oszlopok egy kérésben (columns mező a BoardResponseDto-ban)
 
 **Redis Backplane (production):**
-- Docker Compose kiegészítése image-el és port-al
-
-- Program.cs configuráció hozzáadása
-
+- docker-compose.prod.yml: redis:alpine service + redis_data volume + pma-internal network
+- docker-compose.yml (lokális): redis:alpine service ports: 6379:6379 fejlesztési teszteléshez
+- Program.cs: REDIS_CONNECTION env var jelenlétében aktiválódik az AddStackExchangeRedis()
+- ChannelPrefix: "ProjectManager" (több app ugyanazon Redis-en)
+- Microsoft.AspNetCore.SignalR.StackExchangeRedis NuGet csomag telepítve
 - Fejlesztésben nem szükséges — csak production horizontális skálázásnál
-- Environment variable alapú kapcsoló: REDIS_CONNECTION jelenlétében aktiválódik
 
 ---
 
 #### Frontend változások
 
-**Új event store-ok:**
-taskEventStore.ts    -> Task események (created/updated/moved/deleted/rebalanced/label/assignee)
-sprintEventStore.ts  -> Sprint események (created/updated/deleted)
-columnEventStore.ts  -> Oszlop események (created/updated/deleted/reordered)
-boardEventStore.ts   -> Board események (created/updated/deleted)
-activityEventStore.ts -> Activity események (created)
+**Architektúra döntés — Store alapú megközelítés event store-ok helyett:**
 
-Minden store struktúrája:
-- Típus, Payload, Timestamp (Duplikánsok kihagyása)
+Eredetileg külön event store-ok lettek tervezve (taskEventStore, sprintEventStore stb.) 
+mint közvetítő réteget a SignalR és a meglévő store-ok között. 
+
+Végül ezt a réteget implementáció közben feleslegesen komplexnek találtam:
+- A meglévő store-ok közvetlenül kapják a handle metódusokat
+- Az AppLayout -> signalRClientService -> store.handleXxx() lánc elegendő
+- Kevesebb kód, könnyebb debuggolás, ugyanolyan hatékony
+
+**Store bővítések handle metódusokkal:**
+- taskStore: handleTaskCreated/Updated/Moved/Deleted/Rebalanced/AssigneeAdded/Removed/LabelAdded/Removed/CommitLinked/PrLinked
+- sprintStore: handleSprintCreated/Updated/Deleted
+- boardStore: handleBoardCreated/Updated/Deleted + handleColumnCreated/Updated/Deleted/Reordered
+- projectStore: handleProjectUpdated/Archived/Unarchived/Deleted + handleLabelCreated/Deleted
+- teamStore: handleMemberAdded/Removed/RoleUpdated
+- integrationStore: handleIntegrationCreated/Updated/Verified/Deleted
+- activityStore: liveActivities (max 50, SignalR) + pagedActivities (API, lapozható) szétválasztva
+
+**signalRClientService.ts (új fájl, a meglévő signalRService.ts-re építve):**
+- Egyetlen helyen az összes SignalR event regisztráció
+- Minden event -> megfelelő store.handleXxx() hívás
+- MemberRemoved speciális kezelés: bejelentkezett user eltávolításakor navigáció
+- AppLayout csak registerSignalREvents() / unregisterSignalREvents() hívásokat tartalmaz
 
 **AppLayout — Centralizált event kezelés:**
-- Összes SignalR event az AppLayout-ban regisztrálva
-- Event érkezésekor -> megfelelő store emit
-- Komponensek NEM regisztrálnak SignalR eventeket
-- `joinBoard` / `leaveBoard` hívások eltávolítva
+- Összes SignalR event az AppLayout-ban regisztrálva (signalRClientService.registerSignalREvents metódussal)
+- Komponensek (Nagyrészt) NEM regisztrálnak SignalR eventeket
+- signalRClientService.registerSignalREvents() az onMount-ban
+- signalRClientService.unregisterSignalREvents() az onDestroy-ban és handleLogout-ban
+- joinBoard / leaveBoard hívások eltávolítva mindenhonnan
+- Projekt váltáskor párhuzamos Promise.all initial load
+- authStore.subscribe alapú SignalR kapcsolódás (token biztosan elérhető)
 
-**Komponensek frissítése:**
-BoardView:
+**Komponensek migrálása (signalRService.on/off eltávolítva):**
+- BoardView: összes SignalR handler eltávolítva, store-okból olvas, egyéb egyszerűsítések
+- SprintsView: összes SignalR handler eltávolítva, taskStore + sprintStore subscribe
+- ProjectOverview: összes SignalR handler eltávolítva, store-okból olvas
+- TeamView: összes SignalR handler eltávolítva, teamStore subscribe
+- ProjectSettings: onMount és refreshProject eltávolítva, store-ok kezelik a frissítést
+- GitView: CommitLinked/PrLinked komponens szintű kezelés marad (lokális unmatched lista)
+- ActivityFeed: SignalR handler eltávolítva, activityStore liveActivities figyelése
+- CommentSection: komponens szintű SignalR kezelés marad (csak nyitott task kommentjei)
 
-signalRService.on() hívások -> taskEventStore + columnEventStore + boardEventStore subscribe
-Board váltáskor nincs API hívás -> store szűrés boardId alapján
-Összes task már a store-ban van projekt megnyitáskor
-
-SprintsView:
-signalRService.on() hívások -> taskEventStore + sprintEventStore subscribe
-Completed sprintek lazy load: csak SprintsView-ban lévő szekció megnyitáskor kérjük le
-
-ProjectOverview:
-signalRService.on() hívások -> taskEventStore + sprintEventStore subscribe
-
-ActivityFeed:
-signalRService.on() -> activityEventStore subscribe
-
-GitView:
-signalRService.on() -> gitEventStore subscribe
-
-CommentSection:
-signalRService.on() -> commentEventStore subscribe
-
+**SprintCard és SprintsView kiegészítések:**
+- SprintCard összecsukható (Completed sprintek alapból összecsukva)
+- Completed sprintek lazy load: scope=completed API hívás első megnyitáskor
+- Completed sprint taskok lazy load: "Taskok betöltése" gomb SprintCard-ban
+- tasksLoaded prop: megkülönbözteti a "nincs task" és "még nem töltöttük be" állapotokat
 
 **Projekt megnyitáskor párhuzamos betöltés:**
-- A frontenden egy Primise-ban kérjük le a szükséges alap adatokat (Nem egy GOD endpoint hanem a meglévő endpointok hívása párhuzamosan).
+- A frontenden egy Promise-ban kérjük le a szükséges alap adatokat (Nem egy GOD endpoint hanem a meglévő endpointok hívása párhuzamosan).
 
 **Lazy loading stratégia:**
 Azonnal (projekt megnyitáskor):
@@ -1772,38 +1785,51 @@ Igény szerint:
 
 ---
 
-### Implementációs sorrend
-Backend:
+### Implementációs sorrend (elvégezve)
 
-Endpoint optimalizálások (activeSprintOnly, includeColumns stb.)
-board-{boardId} broadcast csoport eltávolítása
-Összes event projekt szintű csoportba migrálása
-Payload kiegészítések (TaskMoved, TaskCreated, TaskUpdated)
-Redis backplane konfiguráció (production)
+Backend:
+1. Payload standardizálás minden service-ben 
+2. board-{boardId} broadcast csoport eltávolítása 
+3. Összes event projekt szintű csoportba migrálása 
+4. scope paraméter: tasks, sprints, boards endpointokon 
+5. Redis backplane konfiguráció 
 
 Frontend:
-6. Event store-ok létrehozása
-7. AppLayout: SignalR -> store emit centralizálás
-8. BoardView refactor: signalRService.on -> store subscribe
-9. SprintsView refactor
-10. ProjectOverview refactor
-11. ActivityFeed refactor
-12. GitView refactor
-13. CommentSection refactor
-14. Párhuzamos initial load implementálása
-15. Lazy loading SprintsView completed sprintekhez
+6. Store handle metódusok implementálása 
+7. signalRClientService létrehozása 
+8. AppLayout refactor: párhuzamos initial load, centralizált SignalR 
+9. BoardView refactor 
+10. SprintsView refactor + lazy loading 
+11. ProjectOverview refactor 
+12. TeamView refactor 
+13. ProjectSettings refactor 
+14. ActivityFeed refactor + activityStore 
+15. GitView egyszerűsítés 
+16. SprintCard összecsukható + taskok lazy load 
 
-### Várható előnyök
+### Megvalósult előnyök
 - Board váltás azonnali (nincs API hívás)
 - Nincs race condition nézetek váltásakor
-- Kevesebb hálózati forgalom
-- Komponensek könnyen cserélhetők/tesztelhetők
+- Kevesebb hálózati forgalom (payload alapú frissítés, nem teljes újratöltés)
+- Komponensek könnyen cserélhetők/tesztelhetők (store-okból olvasnak)
 - Horizontálisan skálázható (Redis backplane)
-- Egységes event kezelés egy helyen
+- Egységes event kezelés egy helyen (signalRClientService)
 - Lazy loading -> gyorsabb kezdeti betöltés
+- activityStore: live + paged szétválasztás, értesítési rendszer alapja
+
+### Ismert korlátok és kompromisszumok
+- Completed sprint taskok nem töltődnek be automatikusan -> manuális "Taskok betöltése" gomb szükséges ha vissza akarjuk nézni a régebbi Sprintek taskjait
+- ActivityFeed szűrés továbbra is API alapú (kliens oldali szűrés hiányos adatokon félrevezető lenne)
+- GitView unmatched commit/PR lista komponens szintű SignalR kezelés marad -> minden megnyitáskor API hívás
+- CommentSection komponens szintű SignalR kezelés marad -> csak nyitott task kommentjei frissülnek
+- Redis backplane csak production-ban aktív -> lokális fejlesztésben single-instance működés is lehetséges
+- Attachment broadcast még nincs implementálva -> fájl feltöltés/törlés nem frissül real-time más felhasználóknál
 
 ## Security Hardening (TOTP 2FA) 
 AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
+
+## Team & Project Improvements
+Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks).
 
 ## File Upload Improvements
 Configurable file size limits via environment variables. Explicit content-type allowlist. Chunked upload or presigned URL approach for large files.
@@ -1953,9 +1979,6 @@ Legtöbb aktivitást kapott taskok listája
 - Git View Insights tab frontend
 - TaskDetailModal: kapcsolódó branchek
 - Sprint összehasonlítás (ha elegendő az adat)
-
-## Team & Project Improvements
-Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks). 
 
 ## Multi-Sprint Analytics
 Sprint comparison charts after minimum 3-4 sprints of data. PR cycle time trends, stale task ratios, and team git activity over time.
