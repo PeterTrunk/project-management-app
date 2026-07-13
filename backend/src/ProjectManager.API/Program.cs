@@ -131,6 +131,7 @@ if (!string.IsNullOrEmpty(redisConnection))
     {
         options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
     });
+    Console.WriteLine("#Redis-el fut!");
 }
 
 builder.Services.AddSwaggerGen(options =>
