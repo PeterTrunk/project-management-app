@@ -28,6 +28,7 @@ using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
 using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
+using StackExchange.Redis;
 using System.Reflection;
 using System.Text;
 
@@ -121,7 +122,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddSignalR();
+var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
+
+var signalRBuilder = builder.Services.AddSignalR();
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    signalRBuilder.AddStackExchangeRedis(redisConnection, options =>
+    {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
+    });
+}
 
 builder.Services.AddSwaggerGen(options =>
 {
