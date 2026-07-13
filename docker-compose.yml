@@ -12,12 +12,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-    redis:
-      image: redis:alpine
-      container_name: pm-redis
-      restart: unless-stopped
-      volumes:
-        - redis_data:/data
+  redis:
+    image: redis:alpine
+    container_name: pm-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
 
   minio:
     image: minio/minio
