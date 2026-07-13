@@ -123,7 +123,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
-
+Console.WriteLine("#Debug 0");
 var signalRBuilder = builder.Services.AddSignalR();
 if (!string.IsNullOrEmpty(redisConnection))
 {
@@ -133,6 +133,7 @@ if (!string.IsNullOrEmpty(redisConnection))
     });
     Console.WriteLine("#Redis-el fut!");
 }
+Console.WriteLine("#Debug 1");
 
 builder.Services.AddSwaggerGen(options =>
 {
