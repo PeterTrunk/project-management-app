@@ -11,5 +11,12 @@ namespace ProjectManager.API.Services.Auth
         Task<UserProfileDto> MeAsync(Guid userId);
         Task ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
         Task <UserProfileDto> ChangeUserProfileAsync(Guid userId, UpdateProfileDto dto);
+        //TOTP
+        Task<TotpSetupResponseDto> SetupTotpAsync();
+        Task<bool> VerifyAndEnableTotpAsync(string token);
+        Task DisableTotpAsync();
+        Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto);
+        Task<bool> IsTotpRequiredAsync(string email);
+
     }
 }

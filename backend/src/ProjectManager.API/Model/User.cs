@@ -9,6 +9,8 @@ namespace ProjectManager.API.Model
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public string? TotpSecret { get; set; }
+        public bool IsTotpEnabled { get; set; } = false;
 
         // Egy usernek sok UserRole-ja lehet
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();

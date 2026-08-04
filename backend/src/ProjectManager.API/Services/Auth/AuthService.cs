@@ -1,9 +1,11 @@
 ﻿using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OtpNet;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.CurrentUserService;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -13,10 +15,13 @@ namespace ProjectManager.API.Services.Auth
     public class AuthService : IAuthService
     {
         private readonly AppDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public AuthService(AppDbContext context)
+
+        public AuthService(AppDbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {   
@@ -25,6 +30,18 @@ namespace ProjectManager.API.Services.Auth
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             {
                 throw new Exception("Hibás email vagy jelszó!");
+            }
+
+            //Ha TOTP aktív akkor ne adjunk JWT-t, csak jelezzük hogy kell a TOTP token
+            if (user.IsTotpEnabled)
+            {
+                return new AuthResponseDto
+                {
+                    RequiresTotp = true,
+                    Email = user.Email,
+                    UserId = user.Id,
+                    DisplayName = user.DisplayName
+                };
             }
 
             //Token előállítás
@@ -211,6 +228,123 @@ namespace ProjectManager.API.Services.Auth
                 Email = user.Email,
                 UserId = user.Id
             };
+        }
+
+        public async Task<TotpSetupResponseDto> SetupTotpAsync()
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+            //Random 20 byte-os secret generálás
+            var secretKey = KeyGeneration.GenerateRandomKey(20);
+            var base32Secret = Base32Encoding.ToString(secretKey);
+
+            //Ideiglenesen tároljuk (még nincs aktiválva)
+            user.TotpSecret = base32Secret;
+            await _context.SaveChangesAsync();
+
+            //otpauth:// URI generálás Google Authenticator számára
+            var otpAuthUri = $"otpauth://totp/ProjectManager:{Uri.EscapeDataString(user.Email)}" +
+                             $"?secret={base32Secret}&issuer=ProjectManager&algorithm=SHA1&digits=6&period=30";
+
+            return new TotpSetupResponseDto
+            {
+                SecretKey = base32Secret,
+                OtpAuthUri = otpAuthUri
+            };
+        }
+
+        public async Task<bool> VerifyAndEnableTotpAsync(string token)
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+            if (string.IsNullOrEmpty(user.TotpSecret))
+                throw new Exception("TOTP nincs beállítva!");
+
+            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var totp = new Totp(secretKey);
+
+            var isValid = totp.VerifyTotp(
+                token,
+                out _,
+                VerificationWindow.RfcSpecifiedNetworkDelay
+            );
+
+            if (!isValid)
+                return false;
+
+            user.IsTotpEnabled = true;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task DisableTotpAsync()
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+            user.TotpSecret = null;
+            user.IsTotpEnabled = false;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+                throw new Exception("Hibás email vagy jelszó!");
+
+            if (!user.IsTotpEnabled || string.IsNullOrEmpty(user.TotpSecret))
+                throw new Exception("TOTP nincs bekapcsolva ennél a felhasználónál!");
+
+            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var totp = new Totp(secretKey);
+
+            var isValid = totp.VerifyTotp(
+                dto.TotpToken,
+                out _,
+                VerificationWindow.RfcSpecifiedNetworkDelay
+            );
+
+            if (!isValid)
+                throw new Exception("Érvénytelen TOTP token!");
+
+            var token = CreateToken(user);
+
+            var refreshTokenEntry = new RefreshToken
+            {
+                Token = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+            await _context.SaveChangesAsync();
+
+            return new AuthResponseDto
+            {
+                Token = token,
+                UserId = user.Id,
+                Email = user.Email,
+                DisplayName = user.DisplayName,
+                RefreshToken = refreshTokenEntry.Token,
+                IsTotpEnabled = true
+            };
+        }
+
+        public async Task<bool> IsTotpRequiredAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            return user?.IsTotpEnabled ?? false;
         }
     }
 }
