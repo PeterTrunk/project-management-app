@@ -1828,7 +1828,7 @@ Frontend:
 ## Security Hardening (TOTP 2FA) 
 AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2FA implementation for login and critical operations (Google Authenticator compatible). Considering HashiCorp Vault integration for production-scale secret management.
 
-### Tervezett implementáció
+### Elvégzett implementáció
 
 #### AES-256 WebhookSecret titkosítás
 
@@ -1846,14 +1846,17 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 
 **IntegrationService:**
 - CreateIntegrationAsync: WebhookSecret mentése előtt Encrypt()
-- GetIntegrationAsync és minden olvasási pont: Decrypt() hívás
+- ResetWebhookSecretAsync: WebhookSecret mentése előtt Encrypt()
 - Decrypt hibakezelés: AuthTag validáció bukásakor explicit exception (nem silent fail)
+- Migration script: app induláskor egyszer fut, meglévő plain text secret-eket titkosítja
+  - Detektálás: Decrypt() hívással — ha sikeres már titkosított, ha hibát dob plain text
 
 **GitWebhookService:**
 - HMAC validáció előtt Decrypt() hívás
 - Decryptelt secret csak a HMAC számítás idejére él memóriában (local változó)
 - Nem cache-elhető, nem logolható
 - HMAC összehasonlítás constant-time compare-rel: CryptographicOperations.FixedTimeEquals()
+- ValidateGitLabSignature fix: korábban globális env var-t használt, most integration-specifikus titkosított secret-et használ
 
 ---
 
@@ -1862,17 +1865,20 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 **Cél:** Opcionális kétfaktoros hitelesítés Google Authenticator kompatibilis TOTP tokenekkel.
 
 **Backend:**
-- 'Otp.NET` NuGet csomag
+- Otp.NET NuGet csomag
 - User modell kiegészítés: TotpSecret, IsTotpEnabled mezők + migration
 - Új endpointok:
-  - POST /api/auth/totp/setup -> TOTP secret + QR kód generálás
+  - POST /api/auth/totp/setup -> TOTP secret + otpauth:// URI generálás
   - POST /api/auth/totp/verify -> token validáció és 2FA aktiválás
   - POST /api/auth/totp/disable -> 2FA kikapcsolás
+  - POST /api/auth/totp/login -> TOTP token + credentials validálás -> JWT visszaadás
 - Login endpoint módosítás:
   - Ha IsTotpEnabled -> JWT nem kerül visszaadásra, helyette requiresTotp: true flag
-  - Külön POST /api/auth/totp/login endpoint a TOTP token validáláshoz -> JWT visszaadás
+    - Ez megakadályozza hogy a TOTP második lépés kikerülhető legyen
+- UserProfileDto és MeAsync kiegészítve IsTotpEnabled mezővel
 
 **Frontend:**
+- qrcode npm csomag QR kód generáláshoz
 - Regisztrációkor felugró kérdés: "Szeretnél 2FA-t beállítani?"
   - Igen -> QR kód megjelenítés -> Google Authenticator scan -> token verify -> aktiválás
   - Nem -> később UserSettings-ben elérhető
@@ -1881,25 +1887,67 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 - Bezárható banner bejelentkezés után ha 2FA nincs beállítva:
   - "Javasoljuk a kétfaktoros hitelesítés beállítását a biztonságod érdekében!"
 - UserSettings: 2FA beállítás / kikapcsolás tab
+  - QR kód megjelenítés + manuális kód másolása (copy ikon -> pipa ikon visszajelzés)
+  - Token verify lépés
+  - 2FA kikapcsolás ConfirmModal-lal
+  - Státusz jelző (zöld ha aktív)
+  - authStore frissítése TOTP enable/disable után
+
+#### Email Verification & Password Reset (tervezett) 
+
+**Cél:** Email megerősítés regisztrációkor és elfelejtett jelszó funkció.
+
+**Email infrastruktúra:**
+- **Production:** Resend (https://resend.com) - ingyenes tier 3000 email/hó, nem kell hitelkártya
+- **Fejlesztés (opcionális):** Mailhog Docker konténer — fake SMTP szerver, web UI-on láthatók a küldött emailek, valódi email nem kerül ki
+
+**Email megerősítés:**
+- User modell: IsEmailVerified, EmailVerificationToken mezők + migration
+- Regisztrációkor: token generálás -> email küldés verification linkkel
+- Új endpoint: GET /api/auth/verify-email?token=... -> IsEmailVerified = true
+- Bejelentkezés csak verified usernél működik
+- Resend email link a frontend /verify-email route-ra mutat
+- Frontend: /verify-email oldal, resend verification email gomb
+
+**Elfelejtett jelszó:**
+- PasswordResetTokens tábla: token, userId, expiresAt (1 óra)
+- Új endpointok:
+  - POST /api/auth/forgot-password -> token generálás + email küldés
+  - POST /api/auth/reset-password -> token validálás + jelszó frissítés + token érvénytelenítés
+- Frontend: "Elfelejtett jelszó" link login oldalon -> email megadása -> reset oldal
+
+**Env vars:**
+RESEND_API_KEY=re_xxxxxxxxxxxx
+EMAIL_FROM=noreply@yourdomain.com
 
 #### HashiCorp Vault (elhalasztva)
 (alsóhang tól komplex, nem annyira éri meg ha csak self hosted megoldást nézünk, külső service-ek pedig nem voltak beletervezve a budgetbe)
 
 Scope-on kívül a jelenleg projektben. Az `ENCRYPTION_KEY` és egyéb szenzitív env var-ok megfelelő biztonságot nyújtanak production skálán. Vault integráció csak akkor indokolt ha több szolgáltatás, több környezet és audit log igény merül fel. (Valamiféle audit vagy logololás általánosan még szóba jöhet viszont könnyebb menedzsment érdekében)
 
-
 ### Implementációs sorrend
 
-1. EncryptionService implementáció (IEncryptionService, AES-256-GCM)
-2. Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
-3. IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
-4. GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
-5. Migration: meglévő plain text secret-ek titkosítása (egyszer futó migráció script)
-6. User modell: TotpSecret, IsTotpEnabled mezők + migration
-7. Otp.NET csomag telepítése
-8. TOTP endpointok implementálása
-9. Login endpoint módosítása
-10. Frontend: regisztrációs felugró, login TOTP lépés, UserSettings tab, banner
+**Elvégzett:**
+EncryptionService implementáció (IEncryptionService, AES-256-GCM)
+Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
+IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
+GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
+Migration script: meglévő plain text secret-ek titkosítása
+User modell: TotpSecret, IsTotpEnabled mezők + migration
+Otp.NET csomag telepítése
+TOTP endpointok implementálása
+Login endpoint módosítása (requiresTotp flag)
+Frontend: login TOTP lépés, UserSettings tab, authStore frissítés
+
+**Tervezett:**
+Resend integráció (IEmailService, ResendEmailService)
+User modell: IsEmailVerified, EmailVerificationToken + migration
+Email verification endpoint + email küldés regisztrációkor
+PasswordResetTokens tábla + migration
+Forgot-password + reset-password endpointok
+Frontend: verify-email oldal, forgot-password oldal, reset-password oldal
+Login: elfelejtett jelszó link
+Register: email verification tájékoztató
 
 ## Team & Project Improvements
 Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks).
