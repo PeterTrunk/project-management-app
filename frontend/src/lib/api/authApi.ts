@@ -36,6 +36,19 @@ interface AuthResponse {
     userId: string;
     email: string;
     displayName: string;
+    requiresTotp?: boolean;
+    isTotpEnabled?: boolean;
+}
+
+interface TotpSetupResponse {
+    secretKey: string;
+    otpAuthUri: string;
+}
+
+interface LoginWithTotpRequest {
+    email: string;
+    password: string;
+    totpToken: string;
 }
 
 export async function loginAsync(data: LoginRequest): Promise<AuthResponse> {
@@ -68,6 +81,25 @@ export async function changePasswordAsync(data: ChangePasswordRequest): Promise<
 
 export async function updateProfileAsync(data: UpdateProfileRequest): Promise<UserProfileResponse> {
     const response = await apiClient.patch('/auth/profile', data);
+    return response.data;
+}
+
+//TOTP
+export async function setupTotpAsync(): Promise<TotpSetupResponse> {
+    const response = await apiClient.post('/auth/totp/setup');
+    return response.data;
+}
+
+export async function verifyTotpAsync(token: string): Promise<void> {
+    await apiClient.post('/auth/totp/verify', { token });
+}
+
+export async function disableTotpAsync(): Promise<void> {
+    await apiClient.post('/auth/totp/disable');
+}
+
+export async function loginWithTotpAsync(data: LoginWithTotpRequest): Promise<AuthResponse> {
+    const response = await apiClient.post('/auth/totp/login', data);
     return response.data;
 }
 

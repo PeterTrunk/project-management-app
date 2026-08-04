@@ -1,57 +1,94 @@
 <script lang="ts">
-    import { loginAsync } from '../lib/api/authApi';
+    import { loginAsync, loginWithTotpAsync } from '../lib/api/authApi';
     import { login } from '../lib/stores/authStore';
     import { push } from 'svelte-spa-router';
 
     let email = '';
     let password = '';
+    let totpToken = '';
     let error = '';
+    let requiresTotp = false;
 
     async function handleLogin() {
         try {
             const response = await loginAsync({ email, password });
-            login(response.token, response.refreshToken, {
-                userId: response.userId,
-                email: response.email,
-                displayName: response.displayName
-            });
-
-            // Pending invite token kezelése
-            const pendingToken = localStorage.getItem('pendingInviteToken');
-            if (pendingToken) {
-                localStorage.removeItem('pendingInviteToken');
-                push(`/invite/${pendingToken}`);
-            } else {
-                push('/app');
+            
+            if (response.requiresTotp) {
+                requiresTotp = true;
+                return;
             }
+
+            finishLogin(response);
         } catch (e) {
             error = "Hibás email vagy jelszó!";
         }
     }
 
-    async function goToRegister() {
-        push('/register');
+    async function handleTotpLogin() {
+        try {
+            const response = await loginWithTotpAsync({ email, password, totpToken });
+            finishLogin(response);
+        } catch (e) {
+            error = "Érvénytelen TOTP token!";
+        }
     }
 
+    function finishLogin(response: any) {
+        login(response.token, response.refreshToken, {
+            userId: response.userId,
+            email: response.email,
+            displayName: response.displayName,
+            isTotpEnabled: response.isTotpEnabled ?? false
+        });
+
+        const pendingToken = localStorage.getItem('pendingInviteToken');
+        if (pendingToken) {
+            localStorage.removeItem('pendingInviteToken');
+            push(`/invite/${pendingToken}`);
+        } else {
+            push('/app');
+        }
+    }
 </script>
 
 <div class="auth-container">
     <div class="auth-card">
-        <h1>Bejelentkezés</h1>
-        <form on:submit|preventDefault={handleLogin}>
-            <input type="email" placeholder="Email" bind:value={email}/>
-            <input type="password" placeholder="Jelszó" bind:value={password}/>
-            {#if error}
-                <p id="failed">{error}</p>
-            {/if}
-            <button type="submit">Bejelentkezés</button>
-        </form>
-        <div class="divider">
-            <span>vagy</span>
-        </div>
-        <button class="secondary-btn" on:click={() => push('/register')}>
-            Még nincs fiókod? Regisztrálj!
-        </button>
+        {#if !requiresTotp}
+            <h1>Bejelentkezés</h1>
+            <form on:submit|preventDefault={handleLogin}>
+                <input type="email" placeholder="Email" bind:value={email}/>
+                <input type="password" placeholder="Jelszó" bind:value={password}/>
+                {#if error}
+                    <p id="failed">{error}</p>
+                {/if}
+                <button type="submit">Bejelentkezés</button>
+            </form>
+            <div class="divider">
+                <span>vagy</span>
+            </div>
+            <button class="secondary-btn" on:click={() => push('/register')}>
+                Még nincs fiókod? Regisztrálj!
+            </button>
+        {:else}
+            <h1>Kétfaktoros hitelesítés</h1>
+            <p>Add meg a Google Authenticator kódot!</p>
+            <form on:submit|preventDefault={handleTotpLogin}>
+                <input 
+                    type="text" 
+                    placeholder="6 jegyű kód" 
+                    bind:value={totpToken}
+                    maxlength="6"
+                    autocomplete="one-time-code"
+                />
+                {#if error}
+                    <p id="failed">{error}</p>
+                {/if}
+                <button type="submit">Megerősítés</button>
+            </form>
+            <button class="secondary-btn" on:click={() => { requiresTotp = false; error = ''; }}>
+                Vissza
+            </button>
+        {/if}
     </div>
 </div>
 

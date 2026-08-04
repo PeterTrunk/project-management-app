@@ -196,7 +196,8 @@ namespace ProjectManager.API.Services.Auth
             {
                 DisplayName = user.DisplayName,
                 Email = user.Email,
-                UserId = user.Id
+                UserId = user.Id,
+                IsTotpEnabled = user.IsTotpEnabled
             };
         }
 

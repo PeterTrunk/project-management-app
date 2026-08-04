@@ -93,13 +93,15 @@
     async function loadCurrentUser() {
         try {
             const user = await meAsync();
+            console.log('meAsync response:', user);
             login(
                 localStorage.getItem('token') ?? '',
                 localStorage.getItem('refreshToken') ?? '',
                 {
                     userId: user.userId,
                     email: user.email,
-                    displayName: user.displayName
+                    displayName: user.displayName,
+                    isTotpEnabled: user.isTotpEnabled ?? false  // ← hozzáadva
                 }
             );
         } catch (e) {
