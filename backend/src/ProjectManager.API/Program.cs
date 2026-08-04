@@ -249,6 +249,32 @@ while (retries > 0)
     }
 }
 
+//Meglévő plain text WebhookSecret-ek titkosítása (egyszer futó migráció)
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+
+    var integrations = await context.Integrations.ToListAsync();
+    foreach (var integration in integrations)
+    {
+        try
+        {
+            //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
+            encryption.Decrypt(integration.WebhookSecret);
+        }
+        catch
+        {
+            //Ha Decrypt hibát dob,akkor még plain text, titkosítjuk
+            integration.WebhookSecret = encryption.Encrypt(integration.WebhookSecret);
+            Console.WriteLine($"Migrated integration {integration.Id} WebhookSecret to encrypted format.");
+        }
+    }
+
+    await context.SaveChangesAsync();
+    Console.WriteLine("WebhookSecret migration completed.");
+}
+
 if (app.Environment.IsDevelopment())
 {
     //Middleware hozzáadás ami development specifikus
