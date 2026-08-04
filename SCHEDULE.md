@@ -1892,6 +1892,9 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
   - 2FA kikapcsolás ConfirmModal-lal
   - Státusz jelző (zöld ha aktív)
   - authStore frissítése TOTP enable/disable után
+- Login.svelte: TOTP második lépés képernyő ha requiresTotp: true
+- Regisztrációkor felugró 2FA beállítási folyamat (prompt -> setup -> verify -> success lépések)
+- Bezárható banner ha 2FA nincs beállítva (userId alapú localStorage perzisztencia)
 
 #### Email Verification & Password Reset (tervezett) 
 
@@ -1926,6 +1929,19 @@ EMAIL_FROM=noreply@yourdomain.com
 Scope-on kívül a jelenleg projektben. Az `ENCRYPTION_KEY` és egyéb szenzitív env var-ok megfelelő biztonságot nyújtanak production skálán. Vault integráció csak akkor indokolt ha több szolgáltatás, több környezet és audit log igény merül fel. (Valamiféle audit vagy logololás általánosan még szóba jöhet viszont könnyebb menedzsment érdekében)
 
 ### Implementációs sorrend
+
+1. EncryptionService implementáció (IEncryptionService, AES-256-GCM)
+2. Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
+3. IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
+4. GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
+5. Migration: meglévő plain text secret-ek titkosítása (egyszer futó migráció script)
+6. User modell: TotpSecret, IsTotpEnabled mezők + migration
+7. Otp.NET csomag telepítése
+8. TOTP endpointok implementálása
+9. Login endpoint módosítása
+10. Frontend: login TOTP lépés, UserSettings tab, authStore frissítés
+11. Regisztrációkor TOTP felugró kérdés (prompt/setup/verify/success flow)
+12. Bezárható 2FA banner AppLayout-ban (userId alapú localStorage)
 
 **Elvégzett:**
 EncryptionService implementáció (IEncryptionService, AES-256-GCM)
