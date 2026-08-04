@@ -17,6 +17,7 @@ using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
@@ -81,6 +82,9 @@ var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
 
 var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? throw new InvalidOperationException("DATABASE_URL nincs beállítva!");
+
+var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
+    ?? throw new InvalidOperationException("ENCRYPTION_KEY nincs beállítva!");
 
 // Service Registration (DI Container)
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -198,6 +202,9 @@ builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddSingleton<ILexorankService, LexorankService>();
 builder.Services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
+
+builder.Services.AddSingleton<IEncryptionService>(
+    new EncryptionService(encryptionKey));
 
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
