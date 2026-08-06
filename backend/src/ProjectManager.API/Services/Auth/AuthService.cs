@@ -6,6 +6,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EmailService;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -16,12 +17,17 @@ namespace ProjectManager.API.Services.Auth
     {
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IEmailService _emailService;
 
 
-        public AuthService(AppDbContext context, ICurrentUserService currentUserService)
+        public AuthService(
+            AppDbContext context, 
+            ICurrentUserService currentUserService, 
+            IEmailService emailService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _emailService = emailService;
         }
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {   
@@ -120,7 +126,12 @@ namespace ProjectManager.API.Services.Auth
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+
+            var verificationToken = Guid.NewGuid().ToString("N");
+            user.EmailVerificationToken = verificationToken;
             await _context.SaveChangesAsync();
+
+            await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
 
             return new AuthResponseDto
             {
@@ -346,6 +357,33 @@ namespace ProjectManager.API.Services.Auth
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             return user?.IsTotpEnabled ?? false;
+        }
+        
+        public async Task VerifyEmailAsync(string token)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+            if (user == null)
+                throw new Exception("Érvénytelen vagy lejárt token!");
+
+            user.IsEmailVerified = true;
+            user.EmailVerificationToken = null;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ResendVerificationEmailAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+            if (user.IsEmailVerified)
+                throw new Exception("Az email cím már megerősítve!");
+
+            var verificationToken = Guid.NewGuid().ToString("N");
+            user.EmailVerificationToken = verificationToken;
+            await _context.SaveChangesAsync();
+
+            await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
         }
     }
 }

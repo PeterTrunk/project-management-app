@@ -201,13 +201,48 @@ namespace ProjectManager.API.Controllers
         }
 
         //TOTP login - második lépés
+        //Itt nem kell Authorize, mivel csak ez után kapja meg az engedélyt!
         [HttpPost("totp/login")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<AuthResponseDto>> LoginWithTotp([FromBody] LoginWithTotpDto dto)
         {
             try
             {
                 var result = await _authService.LoginWithTotpAsync(dto);
                 return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("verify-email")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> VerifyEmail([FromQuery] string token)
+        {
+            try
+            {
+                await _authService.VerifyEmailAsync(token);
+                return Ok("Email sikeresen megerősítve!");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("resend-verification")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> ResendVerification([FromBody] ResendVerificationDto dto)
+        {
+            try
+            {
+                await _authService.ResendVerificationEmailAsync(dto.Email);
+                return Ok("Megerősítő email elküldve!");
             }
             catch (Exception ex)
             {
