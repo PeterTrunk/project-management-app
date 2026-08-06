@@ -17,6 +17,7 @@ using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EmailService;
 using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.GitService;
@@ -29,6 +30,7 @@ using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
 using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
+using Resend;
 using StackExchange.Redis;
 using System.Reflection;
 using System.Text;
@@ -85,6 +87,10 @@ var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
 
 var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
     ?? throw new InvalidOperationException("ENCRYPTION_KEY nincs beállítva!");
+
+var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY");
+
+var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
 
 // Service Registration (DI Container)
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -182,6 +188,28 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
+
+//EmailService
+if (!string.IsNullOrEmpty(resendApiKey))
+{
+    builder.Services.AddResend(options =>
+    {
+        options.ApiToken = resendApiKey;
+    });
+    builder.Services.AddSingleton<IEmailService>(sp =>
+        new ResendEmailService(
+            sp.GetRequiredService<IResend>(),
+            emailFrom,
+            frontendUrl
+        )
+    );
+    Console.WriteLine("#Email: Resend service aktív");
+}
+else
+{
+    builder.Services.AddSingleton<IEmailService>(new ConsoleEmailService());
+    Console.WriteLine("#Email: Console service aktív (fejlesztői mód)");
+}
 
 //RBAC - Role Based Access Control
 builder.Services.AddHttpContextAccessor();
