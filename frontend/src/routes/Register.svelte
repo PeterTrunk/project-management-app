@@ -4,12 +4,12 @@
     import { validateDisplayName, validatePassword, validateEmail } from '../lib/validators'
 
     import { setupTotpAsync, verifyTotpAsync } from '../lib/api/authApi';
-    import { Copy, Check, ShieldCheck } from 'lucide-svelte';
+    import { Copy, Check, ShieldCheck, Mail } from 'lucide-svelte';
     import { login } from '../lib/stores/authStore';
     import QRCode from 'qrcode';
 
     let showTotpPrompt = false;
-    let totpStep: 'prompt' | 'setup' | 'verify' | 'success' = 'prompt';
+    let totpStep: 'emailNotice' | 'prompt' | 'setup' | 'verify' | 'success' = 'emailNotice';
     let totpQrCode = '';
     let totpSetupUri = '';
     let totpToken = '';
@@ -60,7 +60,8 @@
                 userId: response.userId,
                 email: response.email,
                 displayName: response.displayName,
-                isTotpEnabled: false
+                isTotpEnabled: false,
+                isEmailVerified: false
             });
 
             // TOTP prompt megjelenítése
@@ -141,7 +142,22 @@
         {/if}
         {#if showTotpPrompt}
             <h1>Sikeres regisztráció!</h1>
-            {#if totpStep === 'prompt'}
+
+            {#if totpStep === 'emailNotice'}
+            <div class="totp-prompt">
+                <p class="totp-desc">
+                    <Mail size={32} color="var(--accent-blue)" />
+                </p>
+                <p class="totp-desc">
+                    Küldtünk egy megerősítő emailt a(z) <strong>{email}</strong> címre. 
+                    Kérjük erősítsd meg az email címed!
+                </p>
+                <button type="button" class="primary-btn" on:click={() => totpStep = 'prompt'}>
+                    Tovább
+                </button>
+            </div>
+
+            {:else if totpStep === 'prompt'}
                 <div class="totp-prompt">
                     <p class="totp-desc">Szeretnél extra biztonságot a fiókodhoz? Állíts be kétfaktoros hitelesítést most!</p>
                     <button type="button" class="primary-btn" on:click={handleSetupTotp}>
