@@ -5,12 +5,14 @@
   import AppLayout from './routes/AppLayout.svelte';
   import InvitePage from './routes/InvitePage.svelte';
   import { themeStore } from './lib/stores/themeStore';
+    import VerifyEmail from './routes/VerifyEmail.svelte';
   
   const routes = {
     '/': Login,
     '/register': Register,
     '/app': AppLayout,
     '/invite/:token': InvitePage,
+    '/verify-email': VerifyEmail,
     '*': Login  // ismeretlen route: login
   };
 

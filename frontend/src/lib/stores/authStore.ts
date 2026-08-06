@@ -6,6 +6,7 @@ interface User {
     email: string;
     displayName: string;
     isTotpEnabled: boolean;
+    isEmailVerified: boolean;
 }
 
 interface AuthState {

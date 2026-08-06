@@ -38,6 +38,7 @@ interface AuthResponse {
     displayName: string;
     requiresTotp?: boolean;
     isTotpEnabled?: boolean;
+    isEmailVerified: boolean;
 }
 
 interface TotpSetupResponse {
@@ -103,3 +104,6 @@ export async function loginWithTotpAsync(data: LoginWithTotpRequest): Promise<Au
     return response.data;
 }
 
+export async function resendVerificationAsync(email: string): Promise<void> {
+    await apiClient.post('/auth/resend-verification', { email });
+}

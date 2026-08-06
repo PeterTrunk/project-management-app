@@ -2,7 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { signalRService } from '../lib/services/signalRService';
     import { push } from 'svelte-spa-router';
-    import { meAsync } from '../lib/api/authApi';
+    import { meAsync, resendVerificationAsync } from '../lib/api/authApi';
     import { login } from '../lib/stores/authStore';
     import { authStore, logout } from '../lib/stores/authStore';
     import { getProjectsAsync } from '../lib/api/projectApi';
@@ -40,7 +40,7 @@
         LayoutDashboard, Kanban, Timer, Users, ChartNoAxesColumn, 
         FolderOpen, GitBranch, Settings, LogOut, ChevronLeft, 
         ChevronRight, Plus, FileText, User, Archive, ShieldAlert,
-        X, Sun, Moon
+        X, Sun, Moon, Mail 
     } from 'lucide-svelte';
 
     //Ideiglenes Theme Váltó Toggle
@@ -51,6 +51,9 @@
     themeStore.subscribe(t => currentTheme = t);
 
     let totpBannerDismissed = false;
+
+    let emailBannerDismissed = false;
+    let resendSent = false;
 
     let sidebarCollapsed = false;
 
@@ -85,6 +88,12 @@
                 `totpBannerDismissed_${state.user.userId}`
             ) === 'true';
         }
+
+        //Emailverify dismissed banner dismissed állapot frissítése user váltáskor
+        if (state.user?.userId) {
+            totpBannerDismissed = localStorage.getItem(`totpBannerDismissed_${state.user.userId}`) === 'true';
+            emailBannerDismissed = localStorage.getItem(`emailBannerDismissed_${state.user.userId}`) === 'true';
+        }
     });
 
     function dismissTotpBanner() {
@@ -92,6 +101,23 @@
         const userId = $authStore.user?.userId;
         if (userId) {
             localStorage.setItem(`totpBannerDismissed_${userId}`, 'true');
+        }
+    }
+
+    function dismissEmailBanner() {
+        emailBannerDismissed = true;
+        const userId = $authStore.user?.userId;
+        if (userId) {
+            localStorage.setItem(`emailBannerDismissed_${userId}`, 'true');
+        }
+    }
+
+    async function handleResendVerification() {
+        try {
+            await resendVerificationAsync($authStore.user?.email ?? '');
+            resendSent = true;
+        } catch (e) {
+            console.error('Hiba az email újraküldésekor!');
         }
     }
 
@@ -118,7 +144,8 @@
                     userId: user.userId,
                     email: user.email,
                     displayName: user.displayName,
-                    isTotpEnabled: user.isTotpEnabled ?? false  // ← hozzáadva
+                    isTotpEnabled: user.isTotpEnabled ?? false,
+                    isEmailVerified: user.isEmailVerified ?? false
                 }
             );
         } catch (e) {
@@ -304,6 +331,7 @@
             {/each}
         </nav>
 
+         <!-- Bannerek -->
         {#if activeProject?.isArchived}
             <div class="archived-banner">
                 <Archive size={16} />
@@ -319,6 +347,22 @@
                     Beállítás
                 </button>
                 <button class="totp-banner-close" on:click={dismissTotpBanner}>
+                    <X size={14} />
+                </button>
+            </div>
+        {/if}
+
+        {#if !$authStore.user?.isEmailVerified && !emailBannerDismissed}
+            <div class="email-banner">
+                <Mail size={16} />
+                <span>Erősítsd meg az email címed a teljes hozzáféréshez!</span>
+                <button 
+                    class="email-banner-resend" 
+                    on:click={handleResendVerification}
+                    disabled={resendSent}>
+                    {resendSent ? 'Elküldve!' : 'Újraküldés'}
+                </button>
+                <button class="email-banner-close" on:click={dismissEmailBanner}>
                     <X size={14} />
                 </button>
             </div>
@@ -727,6 +771,48 @@
     }
 
     .totp-banner-close:hover {
+        opacity: 0.7;
+    }
+
+    .email-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: var(--accent-blue-bg);
+        color: var(--accent-blue);
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--accent-blue);
+        flex-shrink: 0;
+    }
+
+    .email-banner-resend {
+        margin-left: 0.5rem;
+        background: transparent;
+        border: 1px solid var(--accent-blue);
+        color: var(--accent-blue);
+        border-radius: 4px;
+        padding: 0.1rem 0.5rem;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .email-banner-resend:hover {
+        opacity: 0.8;
+    }
+
+    .email-banner-close {
+        margin-left: auto;
+        background: transparent;
+        border: none;
+        color: var(--accent-blue);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        padding: 0.1rem;
+    }
+
+    .email-banner-close:hover {
         opacity: 0.7;
     }
 </style>
