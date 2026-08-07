@@ -386,5 +386,55 @@ namespace ProjectManager.API.Services.Auth
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
         }
+
+        public async Task ForgotPasswordAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            //Biztonsági okokból ne jelezzük ha nem létezik a user
+            if (user == null) return;
+
+            //Régi tokenek érvénytelenítése
+            var oldTokens = await _context.PasswordResetTokens
+                .Where(t => t.UserId == user.Id && !t.IsUsed)
+                .ToListAsync();
+            foreach (var oldToken in oldTokens)
+                oldToken.IsUsed = true;
+
+            var token = Guid.NewGuid().ToString("N");
+            var resetToken = new PasswordResetToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Token = token,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+                IsUsed = false
+            };
+
+            await _context.PasswordResetTokens.AddAsync(resetToken);
+            await _context.SaveChangesAsync();
+
+            await _emailService.SendPasswordResetAsync(user.Email, user.DisplayName, token);
+        }
+
+        public async Task ResetPasswordAsync(string token, string newPassword)
+        {
+            var resetToken = await _context.PasswordResetTokens
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.Token == token && !t.IsUsed);
+
+            if (resetToken == null)
+                throw new Exception("Érvénytelen vagy lejárt token!");
+
+            if (resetToken.ExpiresAt < DateTime.UtcNow)
+            {
+                resetToken.IsUsed = true;
+                await _context.SaveChangesAsync();
+                throw new Exception("A token lejárt!");
+            }
+
+            resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            resetToken.IsUsed = true;
+            await _context.SaveChangesAsync();
+        }
     }
 }
