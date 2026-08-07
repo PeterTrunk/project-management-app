@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ProjectManager.API.Data;
@@ -11,9 +12,11 @@ using ProjectManager.API.Data;
 namespace ProjectManager.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804170425_AddTotpFieldsToUser")]
+    partial class AddTotpFieldsToUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -385,32 +388,6 @@ namespace ProjectManager.API.Migrations
                     b.HasIndex("LabelId");
 
                     b.ToTable("LabelTasks");
-                });
-
-            modelBuilder.Entity("ProjectManager.API.Model.PasswordResetToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsUsed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.PrLink", b =>
@@ -850,16 +827,10 @@ namespace ProjectManager.API.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
-                    b.Property<string>("EmailVerificationToken")
-                        .HasColumnType("text");
-
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
-
-                    b.Property<bool>("IsEmailVerified")
-                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsTotpEnabled")
                         .HasColumnType("boolean");
@@ -1042,17 +1013,6 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("Label");
 
                     b.Navigation("ProjectTask");
-                });
-
-            modelBuilder.Entity("ProjectManager.API.Model.PasswordResetToken", b =>
-                {
-                    b.HasOne("ProjectManager.API.Model.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.PrLink", b =>

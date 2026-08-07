@@ -1,9 +1,12 @@
 ﻿using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OtpNet;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
+using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EmailService;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -13,10 +16,18 @@ namespace ProjectManager.API.Services.Auth
     public class AuthService : IAuthService
     {
         private readonly AppDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IEmailService _emailService;
 
-        public AuthService(AppDbContext context)
+
+        public AuthService(
+            AppDbContext context, 
+            ICurrentUserService currentUserService, 
+            IEmailService emailService)
         {
             _context = context;
+            _currentUserService = currentUserService;
+            _emailService = emailService;
         }
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {   
@@ -25,6 +36,18 @@ namespace ProjectManager.API.Services.Auth
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             {
                 throw new Exception("Hibás email vagy jelszó!");
+            }
+
+            //Ha TOTP aktív akkor ne adjunk JWT-t, csak jelezzük hogy kell a TOTP token
+            if (user.IsTotpEnabled)
+            {
+                return new AuthResponseDto
+                {
+                    RequiresTotp = true,
+                    Email = user.Email,
+                    UserId = user.Id,
+                    DisplayName = user.DisplayName
+                };
             }
 
             //Token előállítás
@@ -103,7 +126,12 @@ namespace ProjectManager.API.Services.Auth
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+
+            var verificationToken = Guid.NewGuid().ToString("N");
+            user.EmailVerificationToken = verificationToken;
             await _context.SaveChangesAsync();
+
+            await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
 
             return new AuthResponseDto
             {
@@ -179,7 +207,9 @@ namespace ProjectManager.API.Services.Auth
             {
                 DisplayName = user.DisplayName,
                 Email = user.Email,
-                UserId = user.Id
+                UserId = user.Id,
+                IsTotpEnabled = user.IsTotpEnabled,
+                IsEmailVerified = user.IsEmailVerified
             };
         }
 
@@ -211,6 +241,200 @@ namespace ProjectManager.API.Services.Auth
                 Email = user.Email,
                 UserId = user.Id
             };
+        }
+
+        public async Task<TotpSetupResponseDto> SetupTotpAsync()
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+            //Random 20 byte-os secret generálás
+            var secretKey = KeyGeneration.GenerateRandomKey(20);
+            var base32Secret = Base32Encoding.ToString(secretKey);
+
+            //Ideiglenesen tároljuk (még nincs aktiválva)
+            user.TotpSecret = base32Secret;
+            await _context.SaveChangesAsync();
+
+            //otpauth:// URI generálás Google Authenticator számára
+            var otpAuthUri = $"otpauth://totp/ProjectManager:{Uri.EscapeDataString(user.Email)}" +
+                             $"?secret={base32Secret}&issuer=ProjectManager&algorithm=SHA1&digits=6&period=30";
+
+            return new TotpSetupResponseDto
+            {
+                SecretKey = base32Secret,
+                OtpAuthUri = otpAuthUri
+            };
+        }
+
+        public async Task<bool> VerifyAndEnableTotpAsync(string token)
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+            if (string.IsNullOrEmpty(user.TotpSecret))
+                throw new Exception("TOTP nincs beállítva!");
+
+            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var totp = new Totp(secretKey);
+
+            var isValid = totp.VerifyTotp(
+                token,
+                out _,
+                VerificationWindow.RfcSpecifiedNetworkDelay
+            );
+
+            if (!isValid)
+                return false;
+
+            user.IsTotpEnabled = true;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task DisableTotpAsync()
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+
+            user.TotpSecret = null;
+            user.IsTotpEnabled = false;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+                throw new Exception("Hibás email vagy jelszó!");
+
+            if (!user.IsTotpEnabled || string.IsNullOrEmpty(user.TotpSecret))
+                throw new Exception("TOTP nincs bekapcsolva ennél a felhasználónál!");
+
+            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var totp = new Totp(secretKey);
+
+            var isValid = totp.VerifyTotp(
+                dto.TotpToken,
+                out _,
+                VerificationWindow.RfcSpecifiedNetworkDelay
+            );
+
+            if (!isValid)
+                throw new Exception("Érvénytelen TOTP token!");
+
+            var token = CreateToken(user);
+
+            var refreshTokenEntry = new RefreshToken
+            {
+                Token = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            await _context.RefreshTokens.AddAsync(refreshTokenEntry);
+            await _context.SaveChangesAsync();
+
+            return new AuthResponseDto
+            {
+                Token = token,
+                UserId = user.Id,
+                Email = user.Email,
+                DisplayName = user.DisplayName,
+                RefreshToken = refreshTokenEntry.Token,
+                IsTotpEnabled = true
+            };
+        }
+
+        public async Task<bool> IsTotpRequiredAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            return user?.IsTotpEnabled ?? false;
+        }
+        
+        public async Task VerifyEmailAsync(string token)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+            if (user == null)
+                throw new Exception("Érvénytelen vagy lejárt token!");
+
+            user.IsEmailVerified = true;
+            user.EmailVerificationToken = null;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ResendVerificationEmailAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                throw new Exception("Felhasználó nem található!");
+            if (user.IsEmailVerified)
+                throw new Exception("Az email cím már megerősítve!");
+
+            var verificationToken = Guid.NewGuid().ToString("N");
+            user.EmailVerificationToken = verificationToken;
+            await _context.SaveChangesAsync();
+
+            await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
+        }
+
+        public async Task ForgotPasswordAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            //Biztonsági okokból ne jelezzük ha nem létezik a user
+            if (user == null) return;
+
+            //Régi tokenek érvénytelenítése
+            var oldTokens = await _context.PasswordResetTokens
+                .Where(t => t.UserId == user.Id && !t.IsUsed)
+                .ToListAsync();
+            foreach (var oldToken in oldTokens)
+                oldToken.IsUsed = true;
+
+            var token = Guid.NewGuid().ToString("N");
+            var resetToken = new PasswordResetToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Token = token,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+                IsUsed = false
+            };
+
+            await _context.PasswordResetTokens.AddAsync(resetToken);
+            await _context.SaveChangesAsync();
+
+            await _emailService.SendPasswordResetAsync(user.Email, user.DisplayName, token);
+        }
+
+        public async Task ResetPasswordAsync(string token, string newPassword)
+        {
+            var resetToken = await _context.PasswordResetTokens
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.Token == token && !t.IsUsed);
+
+            if (resetToken == null)
+                throw new Exception("Érvénytelen vagy lejárt token!");
+
+            if (resetToken.ExpiresAt < DateTime.UtcNow)
+            {
+                resetToken.IsUsed = true;
+                await _context.SaveChangesAsync();
+                throw new Exception("A token lejárt!");
+            }
+
+            resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            resetToken.IsUsed = true;
+            await _context.SaveChangesAsync();
         }
     }
 }
