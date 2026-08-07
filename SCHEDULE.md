@@ -1007,20 +1007,20 @@ Statistics view with ECharts visualizations: task status distribution (pie chart
 
 #### Backend
 
-**TaskStatusHistory tábla — CFD alapja:**
+**TaskStatusHistory tábla - CFD alapja:**
 - `TaskId`, `ColumnId` (nullable = Backlog), `Status`, `CreatedAt`
 - `MoveTaskAsync`-ban minden oszlopváltásnál bejegyzés létrehozva
-- History bejegyzések NEM törlődnek sprint lezáráskor — visszamenőleges statisztika megőrzése
+- History bejegyzések NEM törlődnek sprint lezáráskor - visszamenőleges statisztika megőrzése
 - `ClosedAt` alapú védelem megakadályozza az újabb bejegyzések keletkezését lezárt taskoknál
 - Migration: `AddTaskStatusHistory`
 
 **ClosedAt alapú task védelem:**
-- `MoveTaskAsync`: `ClosedAt != null` -> exception — lezárt sprint taskja nem mozgatható
-- Konzisztens history megőrzés — lezárt sprint után nem keletkezhet új bejegyzés
+- `MoveTaskAsync`: `ClosedAt != null` -> exception - lezárt sprint taskja nem mozgatható
+- Konzisztens history megőrzés - lezárt sprint után nem keletkezhet új bejegyzés
 
 **TaskMoved Activity Log:**
 - Csak az utolsó oszlopba kerüléskor logolunk (`Action: "Completed"`)
-- Közbülső mozgatások nem logolódnak — túl frequent esemény
+- Közbülső mozgatások nem logolódnak - túl frequent esemény
 - `isLastColumn` flag alapján döntés a `SaveChangesAsync` után
 
 **IStatisticsService / StatisticsService:**
@@ -1058,7 +1058,7 @@ Statistics view with ECharts visualizations: task status distribution (pie chart
 - `GET /api/projects/{projectId}/statistics/cumulative-flow?dateFrom=&dateTo=`
 
 **Döntések:**
-- Burnup eltávolítva mint külön endpoint — ugyanaz az adat mint burndown, frontend kezeli
+- Burnup eltávolítva mint külön endpoint - ugyanaz az adat mint burndown, frontend kezeli
 - DateTime UTC konverzió szükséges a CFD és burndown endpointoknál (PostgreSQL timestamp with time zone)
 - Sprint + projekt szintű szűrés opcionális `sprintId` query paraméterrel
 
@@ -1076,11 +1076,11 @@ Statistics view with ECharts visualizations: task status distribution (pie chart
 - `getCumulativeFlowAsync(projectId, dateFrom, dateTo)`
 
 **Chart komponensek:**
-- `TaskStatusPieChart.svelte` — donut chart, legend jobb oldalon vertikálisan, hash alapú szín generálás ismeretlen státuszokhoz
-- `SprintBurndownChart.svelte` — burndown/burnup mód toggle, ideális vonal, ResizeObserver
-- `TeamWorkloadChart.svelte` — gradient bar chart, felső label
-- `VelocityChart.svelte` — gradient bar chart, átlag velocity vonal
-- `CumulativeFlowChart.svelte` — stacked area chart, hash alapú szín generálás
+- `TaskStatusPieChart.svelte` - donut chart, legend jobb oldalon vertikálisan, hash alapú szín generálás ismeretlen státuszokhoz
+- `SprintBurndownChart.svelte` - burndown/burnup mód toggle, ideális vonal, ResizeObserver
+- `TeamWorkloadChart.svelte` - gradient bar chart, felső label
+- `VelocityChart.svelte` - gradient bar chart, átlag velocity vonal
+- `CumulativeFlowChart.svelte` - stacked area chart, hash alapú szín generálás
 
 **StatisticsView.svelte:**
 - Sprint szűrő (task-status, burndown, workload)
@@ -1091,9 +1091,9 @@ Statistics view with ECharts visualizations: task status distribution (pie chart
 - 2 oszlopos layout (pie + workload), teljes szélességű sorok (burndown, velocity, CFD)
 
 **Technikai döntések:**
-- Store nem szükséges — statisztikák csak StatisticsView-ban használtak
-- ResizeObserver minden chart komponensben — reszponzív átméretezés
-- `echarts.dispose()` onDestroy-ban — memory leak megelőzés
+- Store nem szükséges - statisztikák csak StatisticsView-ban használtak
+- ResizeObserver minden chart komponensben - reszponzív átméretezés
+- `echarts.dispose()` onDestroy-ban - memory leak megelőzés
 - Hash alapú szín generálás: ismeretlen státuszokhoz
 
 ### Jövőbeli fejlesztési lehetőség:
@@ -1160,14 +1160,14 @@ Task search and filtering on the board (by assignee, priority, keyword, label). 
 - Label szűrő (projectStore.labels alapján)
 - Határidő szűrő (lejárt / hamarosan lejár)
 - Szűrők törlése gomb (csak aktív szűrő esetén látszik)
-- Frontend only — nincs új backend endpoint
+- Frontend only - nincs új backend endpoint
 - Reaktív `filteredTasks` számítás AND logikával
 - `distributeTasks(filteredTasks)` reaktív blokk
 
 **Overdue / Due Soon / Completed vizuális jelzés:**
-- `isOverdue` — piros border-left
-- `isDueSoon` — sárga border-left
-- `isCompleted` — zöld border-left + ikon
+- `isOverdue` - piros border-left
+- `isDueSoon` - sárga border-left
+- `isCompleted` - zöld border-left + ikon
 - Implementálva: `TaskCard.svelte`, `BacklogTaskCard.svelte`
 - Dátum megjelenítés: dátum + óra:perc formátum
 
@@ -1192,13 +1192,13 @@ Task search and filtering on the board (by assignee, priority, keyword, label). 
 - Recent Activity szekció (ActivityFeed komponens újrafelhasználás)
   - Scrollolható szekció
 - SignalR: TaskMoved, TaskCreated, TaskUpdated, TaskDeleted, SprintUpdated events
-- Frontend only — meglévő store-ok alapján
+- Frontend only - meglévő store-ok alapján
 
 **UI Strukturális változások:**
-- `ProjectSettings.svelte` — füles navigáció: Általános / Labelek / Git, veszélyzóna szekció
-- `TaskDetailModal.svelte` — füles navigáció: Részletek / Csatolmányok / Git / Kommentek, scrollolható szerkesztő mód, min-height az összeugrás ellen
-- `UserSettingsModal.svelte` — témaváltó gomb sidebar aljára, aktív nézet kiemelése
-- `SprintsView.svelte` / `ProjectBacklog.svelte` — összecsukható szekciók ChevronDown/ChevronRight ikonnal
+- `ProjectSettings.svelte` - füles navigáció: Általános / Labelek / Git, veszélyzóna szekció
+- `TaskDetailModal.svelte` - füles navigáció: Részletek / Csatolmányok / Git / Kommentek, scrollolható szerkesztő mód, min-height az összeugrás ellen
+- `UserSettingsModal.svelte` - témaváltó gomb sidebar aljára, aktív nézet kiemelése
+- `SprintsView.svelte` / `ProjectBacklog.svelte` - összecsukható szekciók ChevronDown/ChevronRight ikonnal
 
 **AppLayout megújítás:**
 - Lucide ikonok a sidebar és topbar navigációban
@@ -1209,11 +1209,11 @@ Task search and filtering on the board (by assignee, priority, keyword, label). 
 - Reszponzív sidebar: 220px -> 180px (1366px) -> 60px (768px)
 
 **Theme System:**
-- `themeStore.ts` — dark/light toggle, localStorage mentés
-- `global.css` — CSS variables dark/light témához
-- `App.svelte` — theme class alkalmazása `<html>` tagre
-- `UserSettingsModal` — Megjelenés szekció dark/light toggle gombokkal
-- `cssVars.ts` — utility helper ECharts CSS variable olvasáshoz
+- `themeStore.ts` - dark/light toggle, localStorage mentés
+- `global.css` - CSS variables dark/light témához
+- `App.svelte` - theme class alkalmazása `<html>` tagre
+- `UserSettingsModal` - Megjelenés szekció dark/light toggle gombokkal
+- `cssVars.ts` - utility helper ECharts CSS variable olvasáshoz
 - ECharts komponensek: `getChartColors()` + `themeStore` reaktivitás témaváltáskor
 
 **Responsive Design alapozás:**
@@ -1233,7 +1233,7 @@ Task search and filtering on the board (by assignee, priority, keyword, label). 
 - Alap tipográfia (h1-h4)
 
 **Technikai döntések:**
-- Szűrések frontend only ahol lehetséges (BoardView) — nincs extra backend load
+- Szűrések frontend only ahol lehetséges (BoardView) - nincs extra backend load
 - Reaktív `distributeTasks` blokk: `$: distributeTasks(filteredTasks)`
 - `cssVars.ts`: ECharts nem fér hozzá CSS variable-okhoz direkten (mert az echarts options-ön keresztüli stílust használ) -> DOM API-n keresztül olvassuk
 - Reszponzív CSS variables: csak `global.css` módosítás szükséges, később a teljes reszponzív designhoz
@@ -1261,7 +1261,7 @@ Unit tests for critical service layer components (xUnit). Bug fixes for known is
 
 #### Unit Tesztek (xUnit)
 
-**LexorankService tesztek — KRITIKUS:**
+**LexorankService tesztek - KRITIKUS:**
 Tesztelendő metódusok:
 
 - GetMiddle: bucket öröklés prevPosition-ből
@@ -1390,7 +1390,7 @@ Elkészült:
 - CompleteSprintAsync: bejegyzés befejezetlen taskok backlogba kerülésekor
 
 **TaskStatusHistory refactor:**
-- Status mező eltávolítva — Column navigation property alapján számított
+- Status mező eltávolítva - Column navigation property alapján számított
 - Konzisztens adatok oszlop státusz változásakor
 - Törölt oszlopok adatai megmaradnak a CFD-ben
 
@@ -1484,7 +1484,7 @@ Hetzner VPS alapú production deployment Dokploy PaaS platformon. Cloudflare DNS
 - **PaaS:** Dokploy (self-hosted, Docker Compose alapú)
 
 **Cloudflare konfiguráció:**
-- Proxy: BE (Orange Cloud) — DDoS védelem, IP elrejtés
+- Proxy: BE (Orange Cloud) - DDoS védelem, IP elrejtés
 - SSL mód: Full Strict
 - Dokploy automatikusan kezeli a Let's Encrypt tanúsítványt
 
@@ -1517,7 +1517,7 @@ services:
 - api:          # ASP.NET Core production build
 - db:           # PostgreSQL production konfiguráció
 - minio:        # MinIO object storage
-- Nginx és Certbot NEM kell — Dokploy Traefik kezeli
+- Nginx és Certbot NEM kell - Dokploy Traefik kezeli
 
 **Environment Variables production értékek:**
 - JWT
@@ -1642,8 +1642,8 @@ Megoldás:
 - Production fájlok közvetlenül a szerveren hozandók létre
 
 **Docker fájlok:**
-- `backend/Dockerfile` — ASP.NET Core production build
-- `frontend/Dockerfile` — Svelte production build + static serving
+- `backend/Dockerfile` - ASP.NET Core production build
+- `frontend/Dockerfile` - Svelte production build + static serving
 
 #### Ismert gotchák és megoldások
 
@@ -1692,7 +1692,7 @@ Centralized SignalR event handling at AppLayout level. Direct store updates from
 - joinBoard / leaveBoard Hub metódusok eltávolítva
 - TaskCreated projekt szintű broadcast + position mező hozzáadva
 - TaskMoved payload kiegészítve (boardId, sprintId, completedAt)
-- TaskUpdated payload csak módosítható mezőket tartalmaz (title, description, priority, dueDate, estimateInMinutes) — teljes DTO helyett kompakt payload, mivel label/assignee/attachment változások saját dedikált eventeken érkeznek
+- TaskUpdated payload csak módosítható mezőket tartalmaz (title, description, priority, dueDate, estimateInMinutes) - teljes DTO helyett kompakt payload, mivel label/assignee/attachment változások saját dedikált eventeken érkeznek
 - Összes service payload standardizálva (BoardUpdated description, ColumnCreated WipLimit, CommentAdded createdById, TaskLabelAdded/Removed labelId, SprintCreated teljes payload, stb.)
 - ProjectDeleted broadcast hozzáadva
 
@@ -1712,13 +1712,13 @@ Centralized SignalR event handling at AppLayout level. Direct store updates from
 - Program.cs: REDIS_CONNECTION env var jelenlétében aktiválódik az AddStackExchangeRedis()
 - ChannelPrefix: "ProjectManager" (több app ugyanazon Redis-en)
 - Microsoft.AspNetCore.SignalR.StackExchangeRedis NuGet csomag telepítve
-- Fejlesztésben nem szükséges — csak production horizontális skálázásnál
+- Fejlesztésben nem szükséges - csak production horizontális skálázásnál
 
 ---
 
 #### Frontend változások
 
-**Architektúra döntés — Store alapú megközelítés event store-ok helyett:**
+**Architektúra döntés - Store alapú megközelítés event store-ok helyett:**
 
 Eredetileg külön event store-ok lettek tervezve (taskEventStore, sprintEventStore stb.) 
 mint közvetítő réteget a SignalR és a meglévő store-ok között. 
@@ -1743,7 +1743,7 @@ Végül ezt a réteget implementáció közben feleslegesen komplexnek találtam
 - MemberRemoved speciális kezelés: bejelentkezett user eltávolításakor navigáció
 - AppLayout csak registerSignalREvents() / unregisterSignalREvents() hívásokat tartalmaz
 
-**AppLayout — Centralizált event kezelés:**
+**AppLayout - Centralizált event kezelés:**
 - Összes SignalR event az AppLayout-ban regisztrálva (signalRClientService.registerSignalREvents metódussal)
 - Komponensek (Nagyrészt) NEM regisztrálnak SignalR eventeket
 - signalRClientService.registerSignalREvents() az onMount-ban
@@ -1835,21 +1835,21 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 **Cél:** A webhook secret-ek plain text helyett titkosítva kerüljenek az adatbázisba. (Minimális védelem)
 
 **Implementáció:**
-- IEncryptionService + EncryptionService — AES-256-GCM alapú titkosítás
+- IEncryptionService + EncryptionService - AES-256-GCM alapú titkosítás
 - Minden Encrypt hívás random 12 byte nonce-t generál
 - Visszatérési formátum: `nonce || ciphertext || authTag` (base64 string)
 - `ENCRYPTION_KEY` env var: pontosan 32 byte, base64 kódolt
   - Soha nem kerül git-be
   - Soha nem kerül ugyanabba a backupba mint a DB
 - App induláskor fail-fast validáció: ha kulcs nem pontosan 32 byte -> app nem indul el
-- `System.Security.Cryptography.AesGcm` — .NET beépített implementáció, nincs extra dependency
+- `System.Security.Cryptography.AesGcm` - .NET beépített implementáció, nincs extra dependency
 
 **IntegrationService:**
 - CreateIntegrationAsync: WebhookSecret mentése előtt Encrypt()
 - ResetWebhookSecretAsync: WebhookSecret mentése előtt Encrypt()
 - Decrypt hibakezelés: AuthTag validáció bukásakor explicit exception (nem silent fail)
 - Migration script: app induláskor egyszer fut, meglévő plain text secret-eket titkosítja
-  - Detektálás: Decrypt() hívással — ha sikeres már titkosított, ha hibát dob plain text
+  - Detektálás: Decrypt() hívással - ha sikeres már titkosított, ha hibát dob plain text
 
 **GitWebhookService:**
 - HMAC validáció előtt Decrypt() hívás
@@ -1902,22 +1902,39 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 
 **Email infrastruktúra:**
 - **Production:** Resend (https://resend.com) - ingyenes tier 3000 email/hó, nem kell hitelkártya
-- **Fejlesztés (opcionális):** Mailhog Docker konténer — fake SMTP szerver, web UI-on láthatók a küldött emailek, valódi email nem kerül ki
+- **Fejlesztés (opcionális):** Mailhog Docker konténer - fake SMTP szerver, web UI-on láthatók a küldött emailek, valódi email nem kerül ki
+
+- IEmailService interface - provider-független absztrakció (könnyen cserélhető SendGrid, Mailgun stb.-re)
+- ResendEmailService - production email küldés Resend API-n keresztül
+- ConsoleEmailService - fejlesztői mód, konzolra írja az email tartalmát, nem küld valódi emailt (Pozitívum hogy nagyon egyszerűvé teszi a dolgokat, viszont az email HTML felépítését később kellhet finomhangolni amennyiben nem felel meg)
+- RESEND_API_KEY env var jelenléte alapján aktiválódik a Resend - ha nincs beállítva, Console service fut
+- Resend domain verification: SPF + DKIM DNS rekordok Cloudflare Autoconfigure-rel beállítva
+- Mailhog (opcionális, tervezett): fake SMTP szerver lokális fejlesztéshez
 
 **Email megerősítés:**
 - User modell: IsEmailVerified, EmailVerificationToken mezők + migration
-- Regisztrációkor: token generálás -> email küldés verification linkkel
-- Új endpoint: GET /api/auth/verify-email?token=... -> IsEmailVerified = true
-- Bejelentkezés csak verified usernél működik
-- Resend email link a frontend /verify-email route-ra mutat
-- Frontend: /verify-email oldal, resend verification email gomb
+- RegisterAsync: token generálás + SendEmailVerificationAsync() hívás
+- GET /api/auth/verify-email?token=... -> IsEmailVerified = true, token törlése
+- POST /api/auth/resend-verification -> új token generálás + email újraküldés
+- Lazább megközelítés: nem verified user is be tud lépni, de banner figyelmeztet
+- Frontend:
+  - /verify-email route: loading/success/error állapotok Lucide ikonokkal
+  - Regisztrációkor emailNotice lépés a TOTP prompt előtt
+  - Email verification banner AppLayout-ban (kék, bezárható, userId alapú localStorage)
+  - UserSettings Biztonság tab: email státusz + resend gomb
+  - Modal megnyitáskor meAsync() hívás -> friss adatok a backendről
 
 **Elfelejtett jelszó:**
-- PasswordResetTokens tábla: token, userId, expiresAt (1 óra)
-- Új endpointok:
-  - POST /api/auth/forgot-password -> token generálás + email küldés
-  - POST /api/auth/reset-password -> token validálás + jelszó frissítés + token érvénytelenítés
-- Frontend: "Elfelejtett jelszó" link login oldalon -> email megadása -> reset oldal
+- PasswordResetToken modell: Id, UserId, Token, ExpiresAt (1 óra), IsUsed + migration
+- ForgotPasswordAsync: régi tokenek érvénytelenítése, új token generálás, email küldés
+  - Biztonsági okokból mindig OK választ ad (nem deríthető ki hogy létezik-e az email)
+- ResetPasswordAsync: token validálás + lejárat ellenőrzés + jelszó frissítés + token érvénytelenítés
+- POST /api/auth/forgot-password -> email küldés (public endpoint)
+- POST /api/auth/reset-password -> jelszó frissítés (public endpoint)
+- Frontend:
+  - ForgotPassword.svelte: email input + elküldve visszajelzés
+  - ResetPassword.svelte: jelszó validáció + sikeres visszajelzés + automatikus átirányítás
+  - link Login oldalon a jelszó input alatt
 
 **Env vars:**
 RESEND_API_KEY=re_xxxxxxxxxxxx
@@ -1930,40 +1947,30 @@ Scope-on kívül a jelenleg projektben. Az `ENCRYPTION_KEY` és egyéb szenzití
 
 ### Implementációs sorrend
 
-1. EncryptionService implementáció (IEncryptionService, AES-256-GCM)
-2. Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
-3. IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
-4. GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
-5. Migration: meglévő plain text secret-ek titkosítása (egyszer futó migráció script)
-6. User modell: TotpSecret, IsTotpEnabled mezők + migration
-7. Otp.NET csomag telepítése
-8. TOTP endpointok implementálása
-9. Login endpoint módosítása
-10. Frontend: login TOTP lépés, UserSettings tab, authStore frissítés
+**Elvégzett:**
+1.  EncryptionService implementáció (IEncryptionService, AES-256-GCM)
+2.  Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
+3.  IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
+4.  GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
+5.  Migration script: meglévő plain text secret-ek titkosítása
+6.  User modell: TotpSecret, IsTotpEnabled mezők + migration
+7.  Otp.NET csomag telepítése
+8.  TOTP endpointok implementálása
+9.  Login endpoint módosítása (requiresTotp flag)
+10. Frontend: login TOTP lépés, UserSettings Biztonság tab, authStore frissítés
 11. Regisztrációkor TOTP felugró kérdés (prompt/setup/verify/success flow)
 12. Bezárható 2FA banner AppLayout-ban (userId alapú localStorage)
-
-**Elvégzett:**
-EncryptionService implementáció (IEncryptionService, AES-256-GCM)
-Program.cs: ENCRYPTION_KEY betöltés, fail-fast validáció, DI regisztráció
-IntegrationService: Encrypt mentéskor, Decrypt olvasáskor
-GitWebhookService: Decrypt + FixedTimeEquals HMAC validáció
-Migration script: meglévő plain text secret-ek titkosítása
-User modell: TotpSecret, IsTotpEnabled mezők + migration
-Otp.NET csomag telepítése
-TOTP endpointok implementálása
-Login endpoint módosítása (requiresTotp flag)
-Frontend: login TOTP lépés, UserSettings tab, authStore frissítés
-
-**Tervezett:**
-Resend integráció (IEmailService, ResendEmailService)
-User modell: IsEmailVerified, EmailVerificationToken + migration
-Email verification endpoint + email küldés regisztrációkor
-PasswordResetTokens tábla + migration
-Forgot-password + reset-password endpointok
-Frontend: verify-email oldal, forgot-password oldal, reset-password oldal
-Login: elfelejtett jelszó link
-Register: email verification tájékoztató
+13. IEmailService + ResendEmailService + ConsoleEmailService
+14. Resend domain verification (Cloudflare Autoconfigure)
+15. User modell: IsEmailVerified, EmailVerificationToken + migration
+16. Email verification endpointok (verify-email, resend-verification)
+17. Email küldés regisztrációkor
+18. PasswordResetToken modell + migration
+19. Forgot-password + reset-password endpointok
+20. Frontend: verify-email oldal, forgot-password oldal, reset-password oldal
+21. Login: "Elfelejtett jelszó?" link
+22. Register: emailNotice lépés + email verification banner AppLayout-ban
+23. UserSettings Biztonság tab: email státusz + resend gomb
 
 ## Team & Project Improvements
 Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks).
@@ -1976,24 +1983,24 @@ PR body-based task matching in addition to title matching. GitLab webhook full s
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
 
 ## Git View Sprint Overview
-Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks — no new backend endpoints required.
+Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
 ## Git Intelligence – Branches & Insights
 
-Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads — no access token required.
+Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads - no access token required.
 
 ### Tervezett implementáció
 
 #### Branches
 
 **Cél:**
-Átlátható képet adni arról melyik branch-en folyik munka és az melyik taskhoz tartozik — anélkül hogy a GitHubon vagy GitLaben kellene keresgélni.
+Átlátható képet adni arról melyik branch-en folyik munka és az melyik taskhoz tartozik - anélkül hogy a GitHubon vagy GitLaben kellene keresgélni.
 
 **Új modell: Branch**
 Id, ProjectId, IntegrationId, Name, TaskId (null = unmatched), LastPushedBy, LastPushedAt, CreatedAt
 
 **Stale detektálás:**
-Lekérdezéskor számított — nem tárolt State mező (Nem a pontos statisztika a lényeg, a PM tudja hogy miért nem volt Kód feltöltve a csapata által, egy figyelem felhívó metrika)
+Lekérdezéskor számított - nem tárolt State mező (Nem a pontos statisztika a lényeg, a PM tudja hogy miért nem volt Kód feltöltve a csapata által, egy figyelem felhívó metrika)
 Threshold: LastPushedAt + X nap (projekt szinten konfigurálható)
 Alapértelmezett: 5 nap
 Stale + task Done státusz -> külön kiemelés ("branch cleanup szükséges")
@@ -2010,7 +2017,7 @@ ref_type == "branch" -> Branch record soft delete / Deleted state
 ref_type == "tag" -> ignorálva
 Merged state meghatározása: volt-e merge-elt PR ehhez a branch-hez?
 
-**UI — Git View Branches tab:**
+**UI - Git View Branches tab:**
 
 Branch lista: név, kapcsolódó task, utolsó push, fejlesztő
 Stale branchek kiemelve (sárga jelzés)
@@ -2039,7 +2046,7 @@ Könnyen bővíthető: Bitbucket, Gitea stb.
 #### Insights
 
 **Cél:**
-Objektív, git aktivitáson alapuló sprint analitika — automatikus, nem manipulálható manuálisan.
+Objektív, git aktivitáson alapuló sprint analitika - automatikus, nem manipulálható manuálisan.
 
 **Nincs új modell szükséges:**
 CommitLink: TaskId, AuthorName, CommittedAt -> fejlesztői aktivitás
@@ -2071,13 +2078,13 @@ GetMostActiveTasksAsync(projectId, sprintId):
 -> Legtöbb commitot kapott taskok
 -> Segít a jövőbeli sprint planning becslésekben
 
-**Sprint összehasonlítás (később — min. 3-4 sprint adat szükséges):**
+**Sprint összehasonlítás (később - min. 3-4 sprint adat szükséges):**
 -> PR cycle time trend sprintről sprintre
 -> Stale task arány változása
 -> Csapat git aktivitás változása
 -> Csak akkor jelenik meg ha elegendő historikus adat áll rendelkezésre
 
-**UI — Git View Insights tab:**
+**UI - Git View Insights tab:**
 Sprint szűrő selector
 Fejlesztői szűrő (adott fejlesztő aktivitása)
 Megjelenítés:
@@ -2092,7 +2099,7 @@ Legtöbb aktivitást kapott taskok listája
 
 ### Közös technikai megjegyzések
 
-- Minden adat kizárólag webhook payloadokból — access token nem szükséges
+- Minden adat kizárólag webhook payloadokból - access token nem szükséges
 - Branch-task matching: TaskKey a branch névben (pl. feature/GTP-1-login)
 - "Fejlesztő" azonosítása: commit/PR author mező alapján Opcionálisan összeköthető a saját user rendszerrel
 - Insights adatok nem real-time: webhook feldolgozáskor frissülnek
