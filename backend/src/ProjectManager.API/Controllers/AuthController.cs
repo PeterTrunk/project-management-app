@@ -249,5 +249,38 @@ namespace ProjectManager.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpPost("forgot-password")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+        {
+            try
+            {
+                await _authService.ForgotPasswordAsync(dto.Email);
+                // Mindig OK-t adunk vissza biztonsági okokból (ne derüljön ki hogy létezik-e az email)
+                return Ok("Ha az email cím regisztrált, küldtünk egy jelszó visszaállítási linket!");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("reset-password")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+        {
+            try
+            {
+                await _authService.ResetPasswordAsync(dto.Token, dto.NewPassword);
+                return Ok("Jelszó sikeresen megváltoztatva!");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

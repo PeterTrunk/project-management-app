@@ -107,3 +107,11 @@ export async function loginWithTotpAsync(data: LoginWithTotpRequest): Promise<Au
 export async function resendVerificationAsync(email: string): Promise<void> {
     await apiClient.post('/auth/resend-verification', { email });
 }
+
+export async function forgotPasswordAsync(email: string): Promise<void> {
+    await apiClient.post('/auth/forgot-password', { email });
+}
+
+export async function resetPasswordAsync(token: string, newPassword: string): Promise<void> {
+    await apiClient.post('/auth/reset-password', { token, newPassword });
+}

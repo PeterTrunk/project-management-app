@@ -38,7 +38,8 @@
             userId: response.userId,
             email: response.email,
             displayName: response.displayName,
-            isTotpEnabled: response.isTotpEnabled ?? false
+            isTotpEnabled: response.isTotpEnabled ?? false,
+            isEmailVerified: response.isEmailVerified ?? false
         });
 
         const pendingToken = localStorage.getItem('pendingInviteToken');
@@ -58,6 +59,11 @@
             <form on:submit|preventDefault={handleLogin}>
                 <input type="email" placeholder="Email" bind:value={email}/>
                 <input type="password" placeholder="Jelszó" bind:value={password}/>
+                <div class="forgot-password">
+                    <button type="button" class="link-btn" on:click={() => push('/forgot-password')}>
+                        Elfelejtett jelszó?
+                    </button>
+                </div>
                 {#if error}
                     <p id="failed">{error}</p>
                 {/if}
@@ -186,6 +192,25 @@
     .secondary-btn:hover {
         border-color: var(--text-muted);
         color: var(--text-primary);
+    }
+
+    .forgot-password {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .link-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 0.8rem;
+        padding: 0;
+        text-decoration: underline;
+    }
+
+    .link-btn:hover {
+        color: var(--text-secondary);
     }
 
     #failed { color: var(--accent-red); white-space: pre-line; }
