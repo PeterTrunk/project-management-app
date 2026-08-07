@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.IntegrationService;
 using System.Text.Json;
@@ -11,11 +12,16 @@ namespace ProjectManager.API.Controllers
     {
         private readonly IGitWebhookService _gitWebhookService;
         private readonly IIntegrationService _integrationService;
+        private readonly IEncryptionService _encryptionService;
 
-        public WebhookController(IGitWebhookService gitWebhookService, IIntegrationService integrationService)
+        public WebhookController(
+            IGitWebhookService gitWebhookService, 
+            IIntegrationService integrationService,
+            IEncryptionService encryptionService)
         {
             _gitWebhookService = gitWebhookService;
             _integrationService = integrationService;
+            _encryptionService = encryptionService;
         }
 
         [HttpPost("{webhookToken}")]
@@ -36,7 +42,7 @@ namespace ProjectManager.API.Controllers
             var integration = await _integrationService.GetByWebhookTokenAsync(webhookToken);
             if (integration == null)
                 return Unauthorized("Érvénytelen webhook token!");
-            
+
             //Provider alapján validáció
             if (integration.Provider == "GitHub")
             {
@@ -44,7 +50,8 @@ namespace ProjectManager.API.Controllers
                 if (string.IsNullOrEmpty(signature))
                     return Unauthorized("Hiányzó GitHub signature!");
 
-                if (!_gitWebhookService.ValidateGitHubSignature(payload, signature, integration.WebhookSecret))
+                var decryptedSecret = _encryptionService.Decrypt(integration.WebhookSecret);
+                if (!_gitWebhookService.ValidateGitHubSignature(payload, signature, decryptedSecret))
                     return Unauthorized("Érvénytelen GitHub signature!");
             }
             else if (integration.Provider == "GitLab")
@@ -53,7 +60,8 @@ namespace ProjectManager.API.Controllers
                 if (string.IsNullOrEmpty(token))
                     return Unauthorized("Hiányzó GitLab token!");
 
-                if (!_gitWebhookService.ValidateGitLabSignature(token))
+                var decryptedSecret = _encryptionService.Decrypt(integration.WebhookSecret);
+                if (!_gitWebhookService.ValidateGitLabSignature(token, decryptedSecret))
                     return Unauthorized("Érvénytelen GitLab token!");
             }
 

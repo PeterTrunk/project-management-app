@@ -1,15 +1,21 @@
 <script lang="ts">
     import { authStore, login } from '../stores/authStore';
-    import { changePasswordAsync, updateProfileAsync } from '../api/authApi';
+    import { changePasswordAsync, updateProfileAsync, resendVerificationAsync, meAsync } from '../api/authApi';
     import { validateDisplayName, validatePassword } from '../validators';
+    import { setupTotpAsync, verifyTotpAsync, disableTotpAsync } from '../api/authApi';
+    import ConfirmModal from './ConfirmModal.svelte';
 
     import { themeStore, toggleTheme } from '../stores/themeStore';
-    import { X, User, KeyRound, Pencil, Sun, Moon } from 'lucide-svelte';
+    import { X, User, KeyRound, Pencil, Sun, Moon, ShieldCheck, Copy, Check, ShieldAlert } from 'lucide-svelte';
+    import QRCode from 'qrcode';
 
     let currentTheme = 'dark';
     themeStore.subscribe(t => currentTheme = t);
 
     export let isUserSettingsOpen = false;
+    let isDisableTotpConfirmOpen = false;
+
+    let resendSent = false;
 
     let error = '';
     let success = '';
@@ -23,11 +29,25 @@
 
     let email = '';
 
-    let activeView = 'profile'; // 'profile' | 'password' | 'changeprofile'
+    let activeView = 'profile'; // 'profile' | 'password' | 'changeprofile' | 'totp'
+
+    let isTotpEnabled = false;
+    let isEmailVerified = false;
+    let totpSetupUri = '';
+    let totpQrCode = '';
+    let totpToken = '';
+    let totpStep: 'idle' | 'setup' | 'verify' = 'idle';
+    let copied = false;
+
+    $: if (isUserSettingsOpen) {
+        refreshUserProfile();
+    }
 
     authStore.subscribe(state => {
         displayName = state.user?.displayName ?? '';
         email = state.user?.email ?? '';
+        isTotpEnabled = state.user?.isTotpEnabled ?? false;
+        isEmailVerified = state.user?.isEmailVerified ?? false;
     });
 
     function switchView(view: string) {
@@ -71,7 +91,9 @@
             login(token, refreshToken, {
                 userId: response.userId,
                 email: response.email,
-                displayName: response.displayName
+                displayName: response.displayName,
+                isTotpEnabled: isTotpEnabled,
+                isEmailVerified: $authStore.user?.isEmailVerified ?? false
             });
             success = 'Profil frissítve!';
         } catch (e) {
@@ -79,6 +101,85 @@
         }
     }
 
+    async function handleSetupTotp() {
+        error = '';
+        try {
+            const response = await setupTotpAsync();
+            totpSetupUri = response.otpAuthUri;
+            totpQrCode = await QRCode.toDataURL(response.otpAuthUri);
+            totpStep = 'setup';
+        } catch (e) {
+            error = 'Hiba történt a 2FA beállításakor!';
+        }
+    }
+
+    async function handleVerifyTotp() {
+        error = '';
+        try {
+            await verifyTotpAsync(totpToken);
+            isTotpEnabled = true;
+            const token = localStorage.getItem('token') ?? '';
+            const refreshToken = localStorage.getItem('refreshToken') ?? '';
+            login(token, refreshToken, {
+                userId: $authStore.user?.userId ?? '',
+                email: $authStore.user?.email ?? '',
+                displayName: $authStore.user?.displayName ?? '',
+                isTotpEnabled: true,
+                isEmailVerified: $authStore.user?.isEmailVerified ?? false
+            });
+            totpStep = 'idle';
+            totpToken = '';
+            success = '2FA sikeresen aktiválva!';
+        } catch (e) {
+            error = 'Érvénytelen TOTP token!';
+        }
+    }
+
+    async function handleDisableTotp() {
+        error = '';
+        try {
+            await disableTotpAsync();
+            isTotpEnabled = false;
+            const token = localStorage.getItem('token') ?? '';
+            const refreshToken = localStorage.getItem('refreshToken') ?? '';
+            login(token, refreshToken, {
+                userId: $authStore.user?.userId ?? '',
+                email: $authStore.user?.email ?? '',
+                displayName: $authStore.user?.displayName ?? '',
+                isTotpEnabled: false,
+                isEmailVerified: $authStore.user?.isEmailVerified ?? false
+            });
+            success = '2FA kikapcsolva!';
+        } catch (e) {
+            error = 'Hiba történt a 2FA kikapcsolásakor!';
+        }
+    }
+
+    async function handleResendVerification() {
+        try {
+            await resendVerificationAsync(email);
+            resendSent = true;
+        } catch (e) {
+            error = 'Hiba az email újraküldésekor!';
+        }
+    }
+
+    async function refreshUserProfile() {
+        try {
+            const user = await meAsync();
+            const token = localStorage.getItem('token') ?? '';
+            const refreshToken = localStorage.getItem('refreshToken') ?? '';
+            login(token, refreshToken, {
+                userId: user.userId,
+                email: user.email,
+                displayName: user.displayName,
+                isTotpEnabled: user.isTotpEnabled ?? false,
+                isEmailVerified: user.isEmailVerified ?? false
+            });
+        } catch (e) {
+            console.error('Hiba a profil frissítésekor!');
+        }
+    }
 
 </script>
 
@@ -98,6 +199,9 @@
                 </button>
                 <button class:active={activeView === 'password'} on:click={() => switchView('password')}>
                     <KeyRound size={15} /> Jelszó változtatás
+                </button>
+                <button class:active={activeView === 'totp'} on:click={() => switchView('totp')}>
+                    <ShieldCheck size={15} /> Biztonság
                 </button>
                 <button class="icon-btn" on:click={toggleTheme} title="Téma váltás">
                     {#if currentTheme === 'dark'}
@@ -144,11 +248,100 @@
                         {/if}
                         <button>Mentés</button>
                     </form>
+                {:else if activeView === 'totp'}
+                    <h1>Biztonság</h1>
+                    <div class="security-section">
+                        <!-- Email verification státusz -->
+                        <h3>Email megerősítés</h3>
+                        {#if $authStore.user?.isEmailVerified}
+                            <p class="totp-status enabled">
+                                <ShieldCheck size={15} /> Email megerősítve
+                            </p>
+                        {:else}
+                            <p class="totp-status disabled">
+                                <ShieldAlert size={15} /> Email nincs megerősítve
+                            </p>
+                            <button class="secondary-btn" on:click={handleResendVerification}>
+                                Megerősítő email újraküldése
+                            </button>
+                        {/if}
+
+                        <div class="section-divider"></div>
+
+                        <!-- TOTP 2FA szekció -->
+                        <h3>Kétfaktoros hitelesítés</h3>
+                        {#if isTotpEnabled}
+                            <p class="totp-status enabled"><ShieldCheck size={15} /> 2FA aktív</p>
+                            <button class="danger-btn" on:click={() => isDisableTotpConfirmOpen = true}>
+                                2FA kikapcsolása
+                            </button>
+                        {:else if totpStep === 'idle'}
+                            <p class="totp-status disabled">2FA nincs bekapcsolva</p>
+                            <button on:click={handleSetupTotp}>
+                                2FA beállítása
+                            </button>
+                        {:else if totpStep === 'setup'}
+                            <p>Scanneld be a QR kódot a Google Authenticatorral!</p>
+                            {#if totpQrCode}
+                                <img src={totpQrCode} alt="TOTP QR kód" class="qrImg" />
+                            {/if}
+                            <p class="hint">Manuális kód:</p>
+                            <div class="copy-row">
+                                <input type="text" readonly value={totpSetupUri} />
+                                <button type="button" on:click={() => {
+                                    navigator.clipboard.writeText(totpSetupUri);
+                                    copied = true;
+                                    setTimeout(() => copied = false, 2000);
+                                }}>
+                                    {#if copied}
+                                        <Check size={14} />
+                                    {:else}
+                                        <Copy size={14} />
+                                    {/if}
+                                </button>
+                            </div>
+                            <button on:click={() => totpStep = 'verify'}>
+                                Tovább a megerősítéshez
+                            </button>
+                        {:else if totpStep === 'verify'}
+                            <p>Add meg a Google Authenticator által generált 6 jegyű kódot!</p>
+                            <form on:submit|preventDefault={handleVerifyTotp}>
+                                <input 
+                                    type="text" 
+                                    placeholder="6 jegyű kód"
+                                    bind:value={totpToken}
+                                    maxlength="6"
+                                    autocomplete="one-time-code"
+                                />
+                                <button type="submit">Megerősítés</button>
+                            </form>
+                            <button class="secondary-btn" on:click={() => totpStep = 'setup'}> 
+                                Vissza
+                            </button>
+                        {/if}
+
+                        {#if error}
+                            <p id="failed">{error}</p>
+                        {/if}
+                        {#if success}
+                            <p id="success">{success}</p>
+                        {/if}
+                    </div>
                 {/if}
             </div>
         </div>
     </div>
 </div>
+
+{#if isDisableTotpConfirmOpen}
+    <ConfirmModal
+        bind:isOpen={isDisableTotpConfirmOpen}
+        title="2FA kikapcsolása"
+        message="Biztosan kikapcsolod a kétfaktoros hitelesítést? Fiókod kevésbé lesz biztonságos!"
+        confirmText="Kikapcsolás"
+        onConfirm={handleDisableTotp}
+    />
+{/if}
 
 <style>
     .modal-overlay {
@@ -169,8 +362,8 @@
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: 8px;
-        width: 700px;
-        height: 450px;
+        width: 1200px;
+        height: 800px;
         display: flex;
         overflow: hidden;
     }
@@ -306,6 +499,61 @@
         margin-top: 0.5rem;
     }
 
+    .qrImg {
+        width: 100%; 
+        max-width: 500px; 
+        height: auto;
+        margin: auto;
+    }
+
+    .copy-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .copy-row input {
+        flex: 1;
+        font-size: 0.8rem;
+    }
+
+    .totp-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: bold;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        width: fit-content;
+    }
+
+    .totp-status.enabled {
+        color: var(--accent-green);
+        background: var(--accent-green-bg);
+    }
+
+    .totp-status.disabled {
+        color: var(--text-muted);
+        background: var(--bg-hover);
+    }
+
+    .security-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .section-divider {
+        border-top: 1px solid var(--border-subtle);
+        margin: 0.5rem 0;
+    }
+
+    h3 {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+    
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; }
 </style>

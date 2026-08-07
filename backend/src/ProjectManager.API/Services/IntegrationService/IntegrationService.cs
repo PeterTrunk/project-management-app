@@ -6,6 +6,7 @@ using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EncryptionService;
 
 namespace ProjectManager.API.Services.IntegrationService
 {
@@ -15,16 +16,23 @@ namespace ProjectManager.API.Services.IntegrationService
         private readonly ICurrentUserService _currentUserService;
         private readonly IActivityService _activityService;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly IEncryptionService _encryptionService;
 
         public string baseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
                 ?? "http://localhost:5178";
 
-        public IntegrationService(AppDbContext context, ICurrentUserService currentUserService, IActivityService activityService, IHubContext<ProjectHub> hubContext)
+        public IntegrationService(
+            AppDbContext context, 
+            ICurrentUserService currentUserService, 
+            IActivityService activityService, 
+            IHubContext<ProjectHub> hubContext,
+            IEncryptionService encryptionService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _activityService = activityService;
             _hubContext = hubContext;
+            _encryptionService = encryptionService;
         }
 
         public async Task<IntegrationResponseDto> CreateIntegrationAsync(Guid projectId, CreateIntegrationDto dto)
@@ -49,7 +57,7 @@ namespace ProjectManager.API.Services.IntegrationService
                 Provider = dto.Provider,
                 RepoFullName = dto.RepoFullName,
                 AccessToken = dto.AccessToken,
-                WebhookSecret = dto.WebhookSecret,
+                WebhookSecret = _encryptionService.Encrypt(dto.WebhookSecret),
                 WebhookToken = Guid.NewGuid().ToString("N"),
                 IsEnabled = true,
                 CreatedAt = DateTime.UtcNow,
@@ -220,7 +228,7 @@ namespace ProjectManager.API.Services.IntegrationService
             if (integration == null)
                 throw new Exception("Integráció nem található");
 
-            integration.WebhookSecret = newSecret;
+            integration.WebhookSecret = _encryptionService.Encrypt(newSecret);
             integration.IsVerified = false;
             await _context.SaveChangesAsync();
 

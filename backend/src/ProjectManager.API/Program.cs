@@ -17,6 +17,8 @@ using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EmailService;
+using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
@@ -28,6 +30,7 @@ using ProjectManager.API.Services.ProjectTaskService;
 using ProjectManager.API.Services.SprintService;
 using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
+using Resend;
 using StackExchange.Redis;
 using System.Reflection;
 using System.Text;
@@ -81,6 +84,13 @@ var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
 
 var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? throw new InvalidOperationException("DATABASE_URL nincs beállítva!");
+
+var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
+    ?? throw new InvalidOperationException("ENCRYPTION_KEY nincs beállítva!");
+
+var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY");
+
+var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
 
 // Service Registration (DI Container)
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -179,6 +189,28 @@ builder.Services.AddCors(options =>
     });
 });
 
+//EmailService
+if (!string.IsNullOrEmpty(resendApiKey))
+{
+    builder.Services.AddResend(options =>
+    {
+        options.ApiToken = resendApiKey;
+    });
+    builder.Services.AddSingleton<IEmailService>(sp =>
+        new ResendEmailService(
+            sp.GetRequiredService<IResend>(),
+            emailFrom,
+            frontendUrl
+        )
+    );
+    Console.WriteLine("#Email: Resend service aktív");
+}
+else
+{
+    builder.Services.AddSingleton<IEmailService>(new ConsoleEmailService());
+    Console.WriteLine("#Email: Console service aktív (fejlesztői mód)");
+}
+
 //RBAC - Role Based Access Control
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
@@ -198,6 +230,9 @@ builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddSingleton<ILexorankService, LexorankService>();
 builder.Services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
+
+builder.Services.AddSingleton<IEncryptionService>(
+    new EncryptionService(encryptionKey));
 
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
@@ -240,6 +275,32 @@ while (retries > 0)
         if (retries == 0) throw;
         await Task.Delay(3000);
     }
+}
+
+//Meglévő plain text WebhookSecret-ek titkosítása (egyszer futó migráció)
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+
+    var integrations = await context.Integrations.ToListAsync();
+    foreach (var integration in integrations)
+    {
+        try
+        {
+            //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
+            encryption.Decrypt(integration.WebhookSecret);
+        }
+        catch
+        {
+            //Ha Decrypt hibát dob,akkor még plain text, titkosítjuk
+            integration.WebhookSecret = encryption.Encrypt(integration.WebhookSecret);
+            Console.WriteLine($"Migrated integration {integration.Id} WebhookSecret to encrypted format.");
+        }
+    }
+
+    await context.SaveChangesAsync();
+    Console.WriteLine("WebhookSecret migration completed.");
 }
 
 if (app.Environment.IsDevelopment())

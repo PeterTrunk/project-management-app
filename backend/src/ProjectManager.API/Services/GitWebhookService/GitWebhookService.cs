@@ -306,9 +306,8 @@ namespace ProjectManager.API.Services.GitWebhookService
             );
         }
 
-        public bool ValidateGitLabSignature(string token)
+        public bool ValidateGitLabSignature(string token, string secret)
         {
-            var secret = Environment.GetEnvironmentVariable("GIT_WEBHOOK_SECRET");
             if (string.IsNullOrEmpty(secret)) return false;
             return CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(secret),
