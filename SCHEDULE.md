@@ -1986,7 +1986,7 @@ Invitation management in TeamView (list, copy, delete invites). Team Workload sp
 - DELETE /api/projects/{id}/members/invites/{token} endpoint (ProjectAdmin jogosultság)
 
 **Frontend:**
-- InviteCard komponens: meghívó URL link, másolás (copy→check ikon), törlés ConfirmModal-lal
+- InviteCard komponens: meghívó URL link, másolás (copy->check ikon), törlés ConfirmModal-lal
   - Lejárt/limit elért badge megjelenítés (zöld/piros/sárga)
   - Szürke megjelenítés lejárt meghívóknál
 - TeamView toolbar: Meghívás gomb mellé "Meghívók" toggle gomb
@@ -2010,8 +2010,115 @@ Az aktív sprint tagonkénti terhelés megjelenítése és a backlog összesíte
 - A továbbvitt taskok (carried over) nyomon követése backend támogatást igényel
 - A Multi-Sprint Analytics fejezet úgyis tervez historikus sprint adatokat
 
-## File Upload Improvements
-Configurable file size limits via environment variables. Explicit content-type allowlist. Chunked upload or presigned URL approach for large files.
+## Scalability & Concurrency
+Optimistic and pessimistic concurrency control for concurrent modifications. Presigned URL approach for instance-independent file uploads. Horizontal scaling with multiple backend instances behind Nginx load balancer.
+
+### Tervezett implementáció
+
+#### Concurrency Control
+
+**Optimistic Concurrency (EF Core RowVersion):**
+
+Azon entitásoknál ahol több felhasználó egyszerre interaktálhat:
+- Task -> mozgatás, frissítés, assignee/label változás
+- Column -> átrendezés, WIP limit változás
+- Sprint -> státusz változás
+- Board -> frissítés
+
+[Timestamp]
+public byte[] RowVersion { get; set; } = null!;
+
+Működés:
+- Minden módosításnál EF Core ellenőrzi hogy a RowVersion egyezik-e
+- Ha más instance már módosított -> DbUpdateConcurrencyException
+- Backend 409 Conflict-et ad vissza
+- Frontend újratölti az érintett adatot és megmutatja a friss állapotot
+
+**Pesszimista Lock (Serializable tranzakció):**
+
+Kritikus műveleteknél ahol üzleti szabály sérülhet:
+- Lexorank rebalance -> oszlop összes taskjának position frissítése
+  - Amíg fut, más nem mozgathat taskot ugyanabba az oszlopba
+- Sprint aktiválás -> egyszerre csak egy aktív sprint lehet projektenként
+  - Serializable tranzakció garantálja hogy nem keletkezhet két aktív sprint
+
+---
+
+#### Presigned URL File Upload
+
+**Probléma a jelenlegi megközelítéssel:**
+- File stream az API instance memóriáján megy át
+- Nagy fájloknál memory spike
+- Párhuzamos feltöltések memory exhaustion-t okozhatnak
+- Nem skálázható több instance esetén
+
+**Presigned URL flow:**
+1. Client -> API: "Szeretnék feltölteni egy fájlt"
+2. API -> MinIO: Generálj presigned URL-t (15 percre)
+3. API -> Client: presigned URL visszaadása
+3. Client -> MinIO: Direkt feltöltés (bypass-olja az API-t!)
+4. Client -> API: "Kész, itt a storage key"
+5. API -> DB: Attachment rekord létrehozása
+
+Előnyök:
+- API instance nem látja a file adatokat
+- Nincs memory spike
+- MinIO kezeli közvetlenül a nagy fájlokat
+- Több instance esetén is működik
+
+---
+
+#### Horizontális Skálázás
+
+**Jelenlegi architektúra:**
+- Internet -> Cloudflare -> Nginx -> 1x Backend
+- PostgreSQL
+- MinIO
+- Redis
+
+**Skálázott architektúra:**
+- Internet -> Cloudflare -> Nginx (load balancer) -> Backend instance 1
+- Backend instance 2
+- Backend instance N
+- PostgreSQL (közös)
+- MinIO (közös)
+- Redis (közös, SignalR backplane)
+
+**Ami már kész a skálázáshoz:**
+- Redis backplane -> SignalR stateless
+- PostgreSQL -> közös adatbázis
+- MinIO -> közös fájltárolás
+- JWT -> stateless autentikáció
+
+**Nginx load balancer konfiguráció:**
+upstream backend {
+    least_conn;
+    ... -- instance-ok
+}
+
+**Dokploy replika beállítás:**
+deploy:
+  replicas: 3
+
+---
+
+### Implementációs sorrend
+1. RowVersion mező hozzáadása: Task, Column, Sprint, Board + migration
+2. DbUpdateConcurrencyException kezelés az érintett service metódusokban
+3. Serializable tranzakció: Lexorank rebalance
+4. Serializable tranzakció: Sprint aktiválás
+5. Presigned URL implementáció MinIO-val
+6. Nginx load balancer konfiguráció
+7. Dokploy replika beállítás (replicas: 3)
+8. Tesztelés: több instance párhuzamos kérésekkel
+
+### Várható előnyök
+- Konkurens módosítások biztonságosan kezelve
+- Horizontálisan skálázható backend
+- File upload instance-független
+- Production-ready architektúra
+
+---
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
@@ -2021,7 +2128,6 @@ Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate 
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
 ## Git Intelligence – Branches & Insights
-
 Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads - no access token required.
 
 ### Tervezett implementáció
@@ -2090,46 +2196,46 @@ Sprint + Task kapcsolat -> sprint szintű szűrés
 
 **InsightsService metódusok:**
 GetSprintGitActivityAsync(projectId, sprintId):
--> Hány taskhoz érkezett legalább egy commit
--> Hány task van nulla git aktivitással (stale taskok)
--> Git aktivitás nélküli taskok listája
+- Hány taskhoz érkezett legalább egy commit
+- Hány task van nulla git aktivitással (stale taskok)
+- Git aktivitás nélküli taskok listája
 GetDeveloperActivityAsync(projectId, sprintId):
--> Fejlesztőnként commit szám
--> Fejlesztőnként érintett taskok száma
--> Fejlesztőnként PR szám
+- Fejlesztőnként commit szám
+- Fejlesztőnként érintett taskok száma
+- Fejlesztőnként PR szám
 GetPrAnalyticsAsync(projectId, sprintId):
--> Merged PR-ok átlagos cycle time (CreatedAt -> MergedAt)
--> Closed PR-ok száma és aránya (visszautasítási arány)
--> Nyitott PR-ok száma
+- Merged PR-ok átlagos cycle time (CreatedAt -> MergedAt)
+- Closed PR-ok száma és aránya (visszautasítási arány)
+- Nyitott PR-ok száma
 GetSprintSummaryAsync(projectId, sprintId):
--> Összes commit a sprintben
--> Merged PR-ek száma
--> Closed (visszautasított) PR-ek száma
--> Legtöbbet commitoló fejlesztő
--> Legtöbb aktivitást kapott task
--> Stale taskok száma (nyitva + nulla git aktivitás)
--> Átlagos PR cycle time
+- Összes commit a sprintben
+- Merged PR-ek száma
+- Closed (visszautasított) PR-ek száma
+- Legtöbbet commitoló fejlesztő
+- Legtöbb aktivitást kapott task
+- Stale taskok száma (nyitva + nulla git aktivitás)
+- Átlagos PR cycle time
 GetMostActiveTasksAsync(projectId, sprintId):
--> Legtöbb commitot kapott taskok
--> Segít a jövőbeli sprint planning becslésekben
+- Legtöbb commitot kapott taskok
+- Segít a jövőbeli sprint planning becslésekben
 
 **Sprint összehasonlítás (később - min. 3-4 sprint adat szükséges):**
--> PR cycle time trend sprintről sprintre
--> Stale task arány változása
--> Csapat git aktivitás változása
--> Csak akkor jelenik meg ha elegendő historikus adat áll rendelkezésre
+- PR cycle time trend sprintről sprintre
+- Stale task arány változása
+- Csapat git aktivitás változása
+- Csak akkor jelenik meg ha elegendő historikus adat áll rendelkezésre
 
 **UI - Git View Insights tab:**
 Sprint szűrő selector
 Fejlesztői szűrő (adott fejlesztő aktivitása)
 Megjelenítés:
 
-Sprint Git Activity kártya (committal rendelkező vs stale taskok)
-Fejlesztői aktivitás táblázat (commit szám, érintett taskok, PR-ok)
-PR Analytics kártya (cycle time, merged/closed arány)
-Sprint Summary blokk (exportálható/megosztható)
-Stale taskok listája (nyitva + nulla git aktivitás)
-Legtöbb aktivitást kapott taskok listája
+**Sprint Git Activity kártya** (committal rendelkező vs stale taskok)
+- Fejlesztői aktivitás táblázat (commit szám, érintett taskok, PR-ok)
+- PR Analytics kártya (cycle time, merged/closed arány)
+- Sprint Summary blokk (exportálható/megosztható)
+- Stale taskok listája (nyitva + nulla git aktivitás)
+- Legtöbb aktivitást kapott taskok listája
 ---
 
 ### Közös technikai megjegyzések
