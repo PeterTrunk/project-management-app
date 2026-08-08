@@ -85,5 +85,39 @@ namespace ProjectManager.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("invites")]
+        [Authorize(Policy = "ProjectAdmin")]
+        [ProducesResponseType(typeof(List<InviteLinkResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<List<InviteLinkResponseDto>>> GetInvitationsAsync(Guid projectId)
+        {
+            try
+            {
+                var response = await _teamService.GetInvitationsAsync(projectId);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("invites/{token}")]
+        [Authorize(Policy = "ProjectAdmin")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult> DeleteInvitationAsync(Guid projectId, string token)
+        {
+            try
+            {
+                await _teamService.DeleteInvitationAsync(projectId, token);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

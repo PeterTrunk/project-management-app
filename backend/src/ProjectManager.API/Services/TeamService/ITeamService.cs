@@ -9,5 +9,7 @@ namespace ProjectManager.API.Services.TeamService
         Task<ProjectMemberResponseDto> UpdateMemberRoleAsync(Guid projectId, Guid userId, UpdateMemberRoleDto dto);
         Task<InviteLinkResponseDto> GenerateInviteLinkAsync(Guid projectId, GenerateInviteLinkDto dto);
         Task<ProjectMemberResponseDto> JoinProjectAsync(string token);
+        Task<List<InviteLinkResponseDto>> GetInvitationsAsync(Guid projectId);
+        Task DeleteInvitationAsync(Guid projectId, string token);
     }
 }

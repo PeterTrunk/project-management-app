@@ -255,5 +255,36 @@ namespace ProjectManager.API.Services.TeamService
                 JoinedAt = member.JoinedAt
             };
         }
+
+        public async Task<List<InviteLinkResponseDto>> GetInvitationsAsync(Guid projectId)
+        {
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
+
+            var invites = await _context.ProjectInvites
+                .Where(i => i.ProjectId == projectId)
+                .OrderByDescending(i => i.CreatedAt)
+                .ToListAsync();
+
+            return invites.Select(i => new InviteLinkResponseDto
+            {
+                Token = i.Token,
+                ExpiresAt = i.ExpiresAt,
+                MaxUses = i.MaxUses,
+                UseCount = i.UseCount,
+                InviteUrl = $"{frontendUrl}/#/invite/{i.Token}"
+            }).ToList();
+        }
+
+        public async Task DeleteInvitationAsync(Guid projectId, string token)
+        {
+            var invite = await _context.ProjectInvites
+                .FirstOrDefaultAsync(i => i.ProjectId == projectId && i.Token == token);
+
+            if (invite == null)
+                throw new Exception("Meghívó nem található!");
+
+            _context.ProjectInvites.Remove(invite);
+            await _context.SaveChangesAsync();
+        }
     }
 }
