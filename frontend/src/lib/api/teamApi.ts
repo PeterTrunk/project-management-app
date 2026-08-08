@@ -48,3 +48,12 @@ export async function joinProjectAsync(token: string): Promise<MemberResponse> {
     const response = await apiClient.post(`/projects/join/${token}`);
     return response.data;
 }
+
+export async function getInvitationsAsync(projectId: string): Promise<InviteLinkResponse[]> {
+    const response = await apiClient.get(`/projects/${projectId}/members/invites`);
+    return response.data;
+}
+
+export async function deleteInvitationAsync(projectId: string, token: string): Promise<void> {
+    await apiClient.delete(`/projects/${projectId}/members/invites/${token}`);
+}

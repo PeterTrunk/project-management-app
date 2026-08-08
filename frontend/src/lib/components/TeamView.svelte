@@ -1,12 +1,14 @@
 <script lang="ts">
-    import { type MemberResponse } from '../api/teamApi';
+    import { type MemberResponse, type InviteLinkResponse, getInvitationsAsync, deleteInvitationAsync } from '../api/teamApi';
     import { authStore } from '../stores/authStore';
     import { teamStore  } from '../stores/teamStore';
     import MemberCard from './MemberCard.svelte';
     import InviteModal from './InviteModal.svelte';
     import ActivityFeed from './ActivityFeed.svelte';
+    import InviteCard from './InviteCard.svelte';
+    import ConfirmModal from './ConfirmModal.svelte';
 
-    import { UserPlus, ChartNoAxesColumn } from 'lucide-svelte';
+    import { UserPlus, ChartNoAxesColumn, ChevronRight, ChevronDown, RefreshCw } from 'lucide-svelte';
 
     export let projectId: string;
 
@@ -16,6 +18,13 @@
     let isInviteModalOpen = false;
     let error = '';
     let loading = false;
+
+    let invitesCollapsed = true;
+    let invites: InviteLinkResponse[] = [];
+    let invitesLoaded = false;
+    let invitesLoading = false;
+    let isConfirmOpen = false;
+    let pendingDeleteToken = '';
 
     authStore.subscribe(state => {
         currentUserId = state.user?.userId ?? '';
@@ -44,18 +53,93 @@
         if (aOrder !== bOrder) return aOrder - bOrder;
         return a.displayName.localeCompare(b.displayName);
     });
+
+    async function toggleInvites() {
+        invitesCollapsed = !invitesCollapsed;
+        if (!invitesCollapsed && !invitesLoaded) {
+            invitesLoading = true;
+            try {
+                invites = await getInvitationsAsync(projectId);
+                invitesLoaded = true;
+            } catch (e) {
+                console.error('Hiba a meghívók lekérésekor!');
+            } finally {
+                invitesLoading = false;
+            }
+        }
+    }
+
+    async function handleDeleteInvite(token: string) {
+        try {
+            await deleteInvitationAsync(projectId, token);
+            invites = invites.filter(i => i.token !== token);
+        } catch (e) {
+            console.error('Hiba a meghívó törlésekor!');
+        }
+    }
+
+    async function refreshInvites() {
+        invitesLoading = true;
+        try {
+            invites = await getInvitationsAsync(projectId);
+        } catch (e) {
+            console.error('Hiba a meghívók frissítésekor!');
+        } finally {
+            invitesLoading = false;
+        }
+    }
+
+    function requestDelete(token: string) {
+        pendingDeleteToken = token;
+        isConfirmOpen = true;
+    }
 </script>
 
 <div class="team-container">
     <!-- Toolbar -->
     <div class="team-toolbar">
-        <h2>Csapattagok ({members.length})</h2>
+    <h2>Csapattagok ({members.length})</h2>
         {#if canInvite}
-            <button class="invite-btn" on:click={() => isInviteModalOpen = true}>
-                <UserPlus size={15} /> Meghívás
-            </button>
+            <div class="toolbar-actions">
+                <button class="invite-btn" on:click={() => isInviteModalOpen = true}>
+                    <UserPlus size={15} /> Meghívás
+                </button>
+                <button class="invite-btn" on:click={toggleInvites}>
+                    {#if invitesCollapsed}
+                        <ChevronDown size={15} /> Meghívók
+                    {:else}
+                        <ChevronRight size={15} /> Meghívók
+                    {/if}
+                </button>
+            </div>
         {/if}
     </div>
+
+    <!-- InviteList -->
+    {#if canInvite && !invitesCollapsed}
+        <div class="invites-section">
+            <div class="invites-header">
+                <span class="invites-title">Aktív meghívók {invitesLoaded ? `(${invites.length})` : ''}</span>
+                <button class="refresh-btn" on:click={refreshInvites} title="Frissítés">
+                    <RefreshCw size={14}  /> 
+                </button>
+            </div>
+            {#if invitesLoading}
+                <p class="loading">Betöltés...</p>
+            {:else if invites.length === 0}
+                <p class="empty">Nincsenek aktív meghívók</p>
+            {:else}
+                <div class="invites-list">
+                    {#each invites as invite (invite.token)}
+                        <InviteCard
+                            {invite}
+                            onDelete={() => requestDelete(invite.token)}
+                        />
+                    {/each}
+                </div>
+            {/if}
+        </div>
+    {/if}
 
     <!-- Tagok listája -->
     <div class="members-section">
@@ -91,6 +175,16 @@
         bind:isInviteModalOpen={isInviteModalOpen}
         {projectId}
         onClose={() => isInviteModalOpen = false}
+    />
+{/if}
+
+{#if isConfirmOpen}
+    <ConfirmModal
+        bind:isOpen={isConfirmOpen}
+        title="Meghívó törlése"
+        message="Biztosan törölni szeretnéd ezt a meghívót? A link ezután nem lesz használható!"
+        confirmText="Törlés"
+        onConfirm={async () => await handleDeleteInvite(pendingDeleteToken)}
     />
 {/if}
 
@@ -174,5 +268,51 @@
         padding: 1rem;
         color: var(--accent-red);
         font-size: 0.9rem;
+    }
+
+    .toolbar-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .invites-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .invites-title {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .refresh-btn {
+        background: transparent;
+        border: 1px solid var(--border-hover);
+        color: var(--text-secondary);
+        border-radius: 6px;
+        padding: 0.3rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+    }
+
+    .refresh-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--text-muted);
+    }
+
+    .invites-section {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .invites-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
     }
 </style>
