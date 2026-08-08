@@ -44,6 +44,10 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
+            var currentlyActive = await _context.Sprints.AnyAsync(s => s.State == "Active");
+            if (currentlyActive)
+                throw new Exception("Már van Aktív sprint!");
+
             sprint.State = "Active";
 
             var sprintTasks = await _context.ProjectTasks
