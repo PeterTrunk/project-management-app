@@ -163,6 +163,7 @@
     async function handleLogout() {
         unregisterSignalREvents();
         await signalRService.disconnect();
+        signalRConnected = false;
         logout();
         push('/');
     }

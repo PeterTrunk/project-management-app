@@ -1975,6 +1975,41 @@ Scope-on kívül a jelenleg projektben. Az `ENCRYPTION_KEY` és egyéb szenzití
 ## Team & Project Improvements
 Invitation management in TeamView (list, copy, delete invites). Team Workload split: active load (tasks in active sprint on board) vs planned load (sprint-assigned or backlog tasks).
 
+### Elvégzett implementáció
+
+#### Invitation Management
+
+**Backend:**
+- GetInvitationsAsync: meghívók listázása projekt alapján, csökkenő létrehozási sorrendben
+- DeleteInvitationAsync: meghívó törlése token alapján
+- GET /api/projects/{id}/members/invites endpoint (ProjectAdmin jogosultság)
+- DELETE /api/projects/{id}/members/invites/{token} endpoint (ProjectAdmin jogosultság)
+
+**Frontend:**
+- InviteCard komponens: meghívó URL link, másolás (copy→check ikon), törlés ConfirmModal-lal
+  - Lejárt/limit elért badge megjelenítés (zöld/piros/sárga)
+  - Szürke megjelenítés lejárt meghívóknál
+- TeamView toolbar: Meghívás gomb mellé "Meghívók" toggle gomb
+- Lazy load: meghívók csak első megnyitáskor töltődnek le
+- Frissítés gomb a meghívók szekciójában
+- Csak Admin/Owner felhasználóknak látható
+
+#### Bugfix
+- SignalR újracsatlakozás bug javítva: signalRConnected flag resetelése logout-kor 
+(Ez egy az utóbbi fejezetek alatt érzékelt probléma volt azonban nem volt biztosan beazonosítva hogy mikor jön elő, ezért csak most lett javítva, a bug maga valószínüleg a SignalR Architecture Refactor fejezet alatt jöhetett létre - amikor a teljes rendszer új megoldásra váltott a kapcsolatok terén)
+  - Symptom: második bejelentkezés (két külön felhasználóval egymás után) után üres/szürke képernyő, F5 szükséges
+  - Fix: handleLogout-ban signalRConnected = false
+
+---
+
+### Halasztott implementáció
+
+#### Team Workload (Multi-Sprint Analytics fejezetbe)
+Az aktív sprint tagonkénti terhelés megjelenítése és a backlog összesített statisztikák halasztva, mivel:
+- Completed sprint statisztikák helyesen csak sprint snapshot-tal valósíthatók meg
+- A továbbvitt taskok (carried over) nyomon követése backend támogatást igényel
+- A Multi-Sprint Analytics fejezet úgyis tervez historikus sprint adatokat
+
 ## File Upload Improvements
 Configurable file size limits via environment variables. Explicit content-type allowlist. Chunked upload or presigned URL approach for large files.
 
@@ -2126,3 +2161,9 @@ Legtöbb aktivitást kapott taskok listája
 
 ## Multi-Sprint Analytics
 Sprint comparison charts after minimum 3-4 sprints of data. PR cycle time trends, stale task ratios, and team git activity over time.
+
+#### Team Workload (Team & Project Improvements fejezetből áthozva)
+Az aktív sprint tagonkénti terhelés megjelenítése és a backlog összesített statisztikák halasztva, mivel:
+- Completed sprint statisztikák helyesen csak sprint snapshot-tal valósíthatók meg
+- A továbbvitt taskok (carried over) nyomon követése backend támogatást igényel
+- A Multi-Sprint Analytics fejezet úgyis tervez historikus sprint adatokat
