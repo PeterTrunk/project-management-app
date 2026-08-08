@@ -255,6 +255,7 @@
                     onDeleteTask={handleDeleteTask}
                     onAssignToSprint={handleAssignToSprint}
                     onBoardAssigned={async () => {}}
+                    activeSprint={activeSprint}
                 />
             {/each}
         {/if}

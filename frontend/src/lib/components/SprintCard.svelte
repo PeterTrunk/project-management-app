@@ -24,6 +24,7 @@
     export let onDeleteTask: (taskId: string) => void = () => {};
     export let onLoadTasks: ((sprintId: string) => Promise<void>) | null = null;
     export let tasksLoaded: boolean = true;
+    export let activeSprint: SprintResponse | null = null;
 
     let isTaskDetailOpen = false;
 
@@ -101,8 +102,17 @@
                 <button on:click|stopPropagation={() => onEdit(sprint)}>
                     <Pencil size={14} /> Szerkesztés
                 </button>
-                <button class="activate-btn" on:click={() => onActivate(sprint.id)}>
-                    <Play size={14} /> Aktiválás
+                <button 
+                    class="activate-btn" 
+                    on:click={() => { if (!activeSprint) onActivate(sprint.id); }}
+                    disabled={!!activeSprint}
+                >
+                    
+                    {#if activeSprint}
+                        Már van aktív sprint
+                    {:else}
+                        <Play size={14} /> Aktiválás
+                    {/if}
                 </button>
                 <button class="danger-btn" on:click|stopPropagation={() => onDelete(sprint.id)}>
                     <Trash2 size={14} /> Törlés
@@ -142,7 +152,7 @@
                         />
                     {/each}
                     {#if boardTasks.length === 0}
-                        <p class="empty">↓ Húzz ide taskot</p>
+                        <p class="empty">Húzz ide taskot</p>
                     {/if}
                 </div>
             </div>
@@ -292,5 +302,10 @@
         flex-direction: column;
         gap: 0.25rem;
         margin-top: 0.25rem;
+    }
+
+    .activate-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 </style>
