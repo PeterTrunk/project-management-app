@@ -11,5 +11,6 @@
         public string State { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public byte[]? RowVersion { get; set; }
     }
 }

@@ -12,6 +12,6 @@ namespace ProjectManager.API.DTOs.ProjectTask
         /// Task cél-oszlopa áthelyezés esetén
         /// </summary>
         public Guid? ColumnId { get; set; }
-        public byte[]? RowVersion { get; set; }
+        public byte[] RowVersion { get; set; } = null!;
     }
 }

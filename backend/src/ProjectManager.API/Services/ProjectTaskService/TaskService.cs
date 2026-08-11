@@ -160,7 +160,16 @@ namespace ProjectManager.API.Services.ProjectTaskService
             // — konfigurálva: OnModelCreating Fluent API DeleteBehavior.Cascade
             
             _context.ProjectTasks.Remove(task);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{task.ProjectId}")
                 .SendAsync("TaskDeleted", new
@@ -300,8 +309,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            if (dto.RowVersion != null)
-                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
 
             if (task.ClosedAt.HasValue)
                 throw new Exception("Lezárt sprint taskja nem mozgatható!");
@@ -510,8 +518,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            if (dto.RowVersion != null)
-                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
@@ -600,8 +607,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Task nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            if (dto.RowVersion != null)
-                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
 
             if (!dto.BoardId.HasValue)
             {

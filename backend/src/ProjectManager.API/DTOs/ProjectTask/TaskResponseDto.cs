@@ -24,7 +24,7 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public string? Priority { get; set; }
         public string Position { get; set; } = string.Empty;
         public int? EstimateInMinutes { get; set; }
-        public byte[]? RowVersion { get; set; }
+        public byte[] RowVersion { get; set; } = null!;
         public DateTime? DueDate { get; set; }
         public DateTime? ClosedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
