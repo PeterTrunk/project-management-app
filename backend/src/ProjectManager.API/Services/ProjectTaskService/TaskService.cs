@@ -9,7 +9,7 @@ using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LexorankService;
-
+using System.Data;
 
 namespace ProjectManager.API.Services.ProjectTaskService
 {
@@ -120,7 +120,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.EstimateInMinutes,
                     task.Position,
                     task.CreatedAt,
-                    task.CompletedAt
+                    task.CompletedAt,
+                    task.RowVersion
                 });
 
             try
@@ -157,7 +158,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             // Cascade delete automatikusan törli a kapcsolódó entitásokat
             // (TaskAssignment, LabelTask, Comment, Attachment, Activity)
             // — konfigurálva: OnModelCreating Fluent API DeleteBehavior.Cascade
-
+            
             _context.ProjectTasks.Remove(task);
             await _context.SaveChangesAsync();
             await _hubContext.Clients
@@ -298,6 +299,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new Exception("Feladat nem található");
 
+            //RowVersion beállítása az optimistic concurrency-hez
+            if (dto.RowVersion != null)
+                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+
             if (task.ClosedAt.HasValue)
                 throw new Exception("Lezárt sprint taskja nem mozgatható!");
 
@@ -426,7 +431,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.CompletedAt = null;
             }
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+            }
 
             await _hubContext.Clients
                 .Group($"project-{task.ProjectId}")
@@ -438,7 +450,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     sprintId = task.SprintId,
                     position = task.Position,
                     completedAt = task.CompletedAt,
-                    triggeredBy = task.CreatedById
+                    triggeredBy = task.CreatedById,
+                    task.RowVersion
                 });
 
             if (isLastColumn)
@@ -496,19 +509,31 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new Exception("Feladat nem található");
 
+            //RowVersion beállítása az optimistic concurrency-hez
+            if (dto.RowVersion != null)
+                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
             if (dto.Title != null) task.Title = dto.Title;
-            if(dto.Description != null) task.Description = dto.Description;
-            if(dto.BoardId != null) task.BoardId = dto.BoardId.Value;
-            if(dto.SprintId != null) task.SprintId = dto.SprintId;
-            if(dto.Priority != null) task.Priority = dto.Priority;
+            if (dto.Description != null) task.Description = dto.Description;
+            if (dto.BoardId != null) task.BoardId = dto.BoardId.Value;
+            if (dto.SprintId != null) task.SprintId = dto.SprintId;
+            if (dto.Priority != null) task.Priority = dto.Priority;
             if (dto.EstimateInMinutes.HasValue) task.EstimateInMinutes = dto.EstimateInMinutes.Value;
             if (dto.DueDate != null) task.DueDate = dto.DueDate;
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{task.ProjectId}")
                 .SendAsync("TaskUpdated", new
@@ -518,7 +543,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     description = task.Description,
                     priority = task.Priority,
                     dueDate = task.DueDate,
-                    estimateInMinutes = task.EstimateInMinutes
+                    estimateInMinutes = task.EstimateInMinutes,
+                    task.RowVersion
                 });
 
             try
@@ -573,6 +599,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new Exception("Task nem található");
 
+            //RowVersion beállítása az optimistic concurrency-hez
+            if (dto.RowVersion != null)
+                _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+
             if (!dto.BoardId.HasValue)
             {
                 task.BoardId = null;
@@ -589,7 +619,26 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     CreatedAt = DateTime.UtcNow
                 });
 
-                await _context.SaveChangesAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                }
+
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskUpdated", new
+                    {
+                        taskId = task.Id,
+                        boardId = (Guid?)null,
+                        columnId = (Guid?)null,
+                        position = task.Position,
+                        task.RowVersion
+                    });
+
             }
             else
             {
@@ -665,7 +714,16 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     task.ColumnId = backlogColumn.Id;
                     task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
                 }
-                await _context.SaveChangesAsync();
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                }
+
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
                     .SendAsync("TaskUpdated", new
@@ -673,7 +731,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         taskId = task.Id,
                         boardId = task.BoardId,
                         columnId = task.ColumnId,
-                        position = task.Position
+                        position = task.Position,
+                        task.RowVersion
                     });
 
                 try
@@ -720,40 +779,54 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
         private async Task RebalanceColumnAsync(Guid columnId, string position)
         {
-            var column = await _context.ColumnDefinitions
-                .Include(c => c.Board)
-                .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
-
-            var bucket = _lexorankService.GetBucket(position);
-            var nextBucket = _lexorankService.GetNextBucket(bucket);
-
-            var allTasksInColumn = await _context.ProjectTasks
-                .Where(t => t.ColumnId == columnId)
-                .OrderBy(t => t.Position)
-                .ToListAsync();
-
-            if (allTasksInColumn.Count == 0)
-                return;
-
-            var newPositions = _lexorankService.RebalancePositions(
-                allTasksInColumn.Count,
-                nextBucket
-            );
-
-            for (int i = 0; i < allTasksInColumn.Count; i++)
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            try
             {
-                allTasksInColumn[i].Position = newPositions[i];
-            }
+                var column = await _context.ColumnDefinitions
+                    .Include(c => c.Board)
+                    .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
 
-            await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{column!.Board.ProjectId}")
-                .SendAsync("TasksRebalanced", new
+                var bucket = _lexorankService.GetBucket(position);
+                var nextBucket = _lexorankService.GetNextBucket(bucket);
+
+                var allTasksInColumn = await _context.ProjectTasks
+                    .Where(t => t.ColumnId == columnId)
+                    .OrderBy(t => t.Position)
+                    .ToListAsync();
+
+                if (allTasksInColumn.Count == 0)
                 {
-                    boardId = column.BoardId,
-                    columnId,
-                    tasks = allTasksInColumn.Select(t => new { t.Id, t.Position })
-                });
+                    await transaction.RollbackAsync();
+                    return;
+                }
+
+                var newPositions = _lexorankService.RebalancePositions(
+                    allTasksInColumn.Count,
+                    nextBucket
+                );
+
+                for (int i = 0; i < allTasksInColumn.Count; i++)
+                {
+                    allTasksInColumn[i].Position = newPositions[i];
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                await _hubContext.Clients
+                    .Group($"project-{column!.Board.ProjectId}")
+                    .SendAsync("TasksRebalanced", new
+                    {
+                        boardId = column.BoardId,
+                        columnId,
+                        tasks = allTasksInColumn.Select(t => new { t.Id, t.Position, t.RowVersion })
+                    });
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
@@ -912,6 +985,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
+                RowVersion = t.RowVersion,
                 DueDate = t.DueDate,
                 ClosedAt = t.ClosedAt,
                 CompletedAt = t.CompletedAt,
