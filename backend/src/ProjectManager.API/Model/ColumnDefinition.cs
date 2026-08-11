@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.Model
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ProjectManager.API.Model
 {
     public class ColumnDefinition
     {
@@ -10,6 +12,9 @@
         public int Position {  get; set; }
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = null!;
 
         public Board Board { get; set; } = null!;
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();
