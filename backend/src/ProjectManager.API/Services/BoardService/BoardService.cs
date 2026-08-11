@@ -133,7 +133,16 @@ namespace ProjectManager.API.Services.BoardService
                 throw new Exception("Board nem található");
             
             _context.Boards.Remove(board);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A board időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("BoardDeleted", new { boardId });
@@ -206,7 +215,9 @@ namespace ProjectManager.API.Services.BoardService
             if (board == null)
                 throw new Exception("Board nem található");
 
-            if(dto.Name != null) board.Name = dto.Name;
+            _context.Entry(board).OriginalValues["RowVersion"] = dto.RowVersion;
+
+            if (dto.Name != null) board.Name = dto.Name;
             if(dto.Description != null) board.Description = dto.Description;
             if (dto.IsDefault != null)
             {
@@ -224,8 +235,16 @@ namespace ProjectManager.API.Services.BoardService
                     }
                 }
             }
-            
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A board időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("BoardUpdated", new
@@ -233,7 +252,8 @@ namespace ProjectManager.API.Services.BoardService
                     boardId = board.Id,
                     board.Name,
                     board.Description,
-                    board.IsDefault
+                    board.IsDefault,
+                    rowVersion = board.RowVersion
                 });
 
             try
@@ -262,6 +282,21 @@ namespace ProjectManager.API.Services.BoardService
                 UpdatedAt = board.UpdatedAt
             };
             return response;
+        }
+
+        private BoardResponseDto MapToDto(Board board)
+        {
+            return new BoardResponseDto
+            {
+                Id = board.Id,
+                ProjectId = board.ProjectId,
+                Name = board.Name,
+                Description = board.Description,
+                IsDefault = board.IsDefault,
+                CreatedAt = board.CreatedAt,
+                UpdatedAt = board.UpdatedAt,
+                RowVersion = board.RowVersion
+            };
         }
     }
 }
