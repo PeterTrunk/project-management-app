@@ -343,7 +343,7 @@ namespace ProjectManager.API.Services.SprintService
 
             var sprints = await query.ToListAsync();
 
-            return sprints.Select(s => MapToDto(s)).ToList();
+            return sprints.Select(MapToDto).ToList();
         }
 
         public async Task<List<TaskResponseDto>> GetUnfinishedTasksAsync(Guid projectId, Guid sprintId)
