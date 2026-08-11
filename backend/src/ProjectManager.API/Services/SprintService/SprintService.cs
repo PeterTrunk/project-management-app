@@ -42,8 +42,7 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
-            using var transaction = await _context.Database
-                .BeginTransactionAsync(IsolationLevel.Serializable);
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
                 // Tranzakción belül ellenőrzünk - csak az adott projekt aktív sprintjét nézi!
@@ -487,6 +486,8 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
+            _context.Entry(sprint).OriginalValues["RowVersion"] = dto.RowVersion;
+
             if (dto.Name != null) sprint.Name = dto.Name;
             if (dto.Goal != null) sprint.Goal = dto.Goal;
             if (dto.StartDate != null) sprint.StartDate = dto.StartDate;
@@ -532,7 +533,7 @@ namespace ProjectManager.API.Services.SprintService
             return MapToDto(sprint);
         }
 
-        public async Task AssignTaskToSprintAsync(Guid projectId, Guid taskId, Guid? sprintId)
+        public async Task<TaskResponseDto> AssignTaskToSprintAsync(Guid projectId, Guid sprintId, Guid taskId, AssignTaskToSprintDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
@@ -542,85 +543,39 @@ namespace ProjectManager.API.Services.SprintService
             if (task == null)
                 throw new Exception("Task nem található");
 
-            
+            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
 
-            if (sprintId.HasValue)
+            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            if (sprint == null)
+                throw new Exception("Sprint nem található");
+
+            if (task.BoardId.HasValue && sprint.State == SprintState.Active)
             {
-                var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
-                if (sprint == null)
-                    throw new Exception("Sprint nem található");
+                var firstColumn = await _context.ColumnDefinitions
+                    .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)
+                    .OrderBy(c => c.Position)
+                    .FirstOrDefaultAsync();
 
-                if (task.BoardId.HasValue)
+                if (firstColumn != null)
                 {
-                    if (sprint?.State == SprintState.Active)
-                    {
-                        var firstColumn = await _context.ColumnDefinitions
-                            .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)
-                            .OrderBy(c => c.Position)
-                            .FirstOrDefaultAsync();
+                    var lastTask = await _context.ProjectTasks
+                        .Where(t => t.ColumnId == firstColumn.Id)
+                        .OrderBy(t => t.Position)
+                        .LastOrDefaultAsync();
 
-                        if (firstColumn != null)
-                        {
-                            var lastTask = await _context.ProjectTasks
-                                .Where(t => t.ColumnId == firstColumn.Id)
-                                .OrderBy(t => t.Position)
-                                .LastOrDefaultAsync();
+                    task.ColumnId = firstColumn.Id;
+                    task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
 
-                            task.ColumnId = firstColumn.Id;
-                            task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
-
-                            _context.TaskStatusHistories.Add(new TaskStatusHistory
-                            {
-                                Id = Guid.NewGuid(),
-                                TaskId = task.Id,
-                                ColumnId = firstColumn.Id,
-                                CreatedAt = DateTime.UtcNow
-                            });
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Backlogba visszarakás
-                if (task.BoardId.HasValue)
-                {
-                    var backlogColumn = await _context.ColumnDefinitions
-                        .FirstOrDefaultAsync(c => c.BoardId == task.BoardId && c.Position == 0);
-
-                    if (backlogColumn != null)
-                    {
-                        var lastTask = await _context.ProjectTasks
-                            .Where(t => t.ColumnId == backlogColumn.Id)
-                            .OrderBy(t => t.Position)
-                            .LastOrDefaultAsync();
-
-                        task.ColumnId = backlogColumn.Id;
-                        task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
-
-                        _context.TaskStatusHistories.Add(new TaskStatusHistory
-                        {
-                            Id = Guid.NewGuid(),
-                            TaskId = task.Id,
-                            ColumnId = backlogColumn.Id,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                    }
-                }
-                task.CompletedAt = null;
-                //TaskStatusHistory hozzáadása ha nincs board
-                if (!task.BoardId.HasValue)
-                {
                     _context.TaskStatusHistories.Add(new TaskStatusHistory
                     {
                         Id = Guid.NewGuid(),
                         TaskId = task.Id,
-                        ColumnId = null,
+                        ColumnId = firstColumn.Id,
                         CreatedAt = DateTime.UtcNow
                     });
                 }
             }
-            // null = vissza Backlogba
+
             task.SprintId = sprintId;
 
             try
@@ -636,11 +591,11 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{task.ProjectId}")
                 .SendAsync("TaskUpdated", new
                 {
-                    task.Id,
-                    task.SprintId,
-                    task.ColumnId,
-                    task.Position,
-                    task.RowVersion
+                    taskId = task.Id,
+                    sprintId = task.SprintId,
+                    columnId = task.ColumnId,
+                    position = task.Position,
+                    rowVersion = task.RowVersion
                 });
 
             try
@@ -650,9 +605,114 @@ namespace ProjectManager.API.Services.SprintService
                     "Task",
                     task.Id,
                     "SprintAssigned",
-                    task.SprintId.HasValue
-                        ? $"{_currentUserService.DisplayName} sprinthez rendelte a {task.TaskKey} taskot"
-                        : $"{_currentUserService.DisplayName} visszatette a {task.TaskKey} taskot a backlogba"
+                    $"{_currentUserService.DisplayName} sprinthez rendelte a {task.TaskKey} taskot"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
+            var assignments = await _context.TaskAssignments
+                .Where(ta => ta.TaskId == task.Id)
+                .ToListAsync();
+
+            var labels = await _context.LabelTasks
+                .Where(lt => lt.TaskId == task.Id)
+                .Include(lt => lt.Label)
+                .ToListAsync();
+
+            var commitLinks = await _context.CommitLinks
+                .Where(cl => cl.TaskId == task.Id)
+                .ToListAsync();
+
+            var prLinks = await _context.PrLinks
+                .Where(pl => pl.TaskId == task.Id)
+                .ToListAsync();
+
+            var attachments = await _context.Attachments
+                .Where(a => a.TaskId == task.Id)
+                .Include(a => a.UploadedBy)
+                .ToListAsync();
+
+            return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
+        }
+
+        public async Task RemoveTaskFromSprintAsync(Guid projectId, Guid taskId, AssignTaskToSprintDto dto)
+        {
+            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            if (task == null)
+                throw new Exception("Task nem található");
+
+            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+
+            if (task.BoardId.HasValue)
+            {
+                var backlogColumn = await _context.ColumnDefinitions
+                    .FirstOrDefaultAsync(c => c.BoardId == task.BoardId && c.Position == 0);
+
+                if (backlogColumn != null)
+                {
+                    var lastTask = await _context.ProjectTasks
+                        .Where(t => t.ColumnId == backlogColumn.Id)
+                        .OrderBy(t => t.Position)
+                        .LastOrDefaultAsync();
+
+                    task.ColumnId = backlogColumn.Id;
+                    task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                    _context.TaskStatusHistories.Add(new TaskStatusHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = task.Id,
+                        ColumnId = backlogColumn.Id,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            task.CompletedAt = null;
+            task.SprintId = null;
+
+            if (!task.BoardId.HasValue)
+            {
+                _context.TaskStatusHistories.Add(new TaskStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = task.Id,
+                    ColumnId = null,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+            }
+
+            await _hubContext.Clients
+                .Group($"project-{task.ProjectId}")
+                .SendAsync("TaskUpdated", new
+                {
+                    taskId = task.Id,
+                    sprintId = (Guid?)null,
+                    columnId = task.ColumnId,
+                    position = task.Position,
+                    rowVersion = task.RowVersion
+                });
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    task.ProjectId,
+                    "Task",
+                    task.Id,
+                    "SprintAssigned",
+                    $"{_currentUserService.DisplayName} visszatette a {task.TaskKey} taskot a backlogba"
                 );
                 await _hubContext.Clients
                     .Group($"project-{task.ProjectId}")

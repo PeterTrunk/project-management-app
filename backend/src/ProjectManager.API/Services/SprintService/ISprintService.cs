@@ -13,6 +13,7 @@ namespace ProjectManager.API.Services.SprintService
         Task<SprintResponseDto> CompleteSprintAsync(Guid projectId, Guid sprintId, Guid? targetSprintId);
         Task<SprintResponseDto> PlanSprintAsync(Guid projectId, Guid sprintId);
         Task<List<TaskResponseDto>> GetUnfinishedTasksAsync(Guid projectId, Guid sprintId);
-        Task AssignTaskToSprintAsync(Guid projectId, Guid taskId, Guid? sprintId);
+        Task<TaskResponseDto> AssignTaskToSprintAsync(Guid projectId, Guid taskId, Guid sprintId, AssignTaskToSprintDto dto);
+        Task RemoveTaskFromSprintAsync(Guid projectId, Guid taskId, AssignTaskToSprintDto dto);
     }
 }
