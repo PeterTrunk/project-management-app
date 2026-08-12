@@ -49,6 +49,7 @@ export function handleSprintUpdated(payload: {
     state?: string;
     startDate?: string | null;
     endDate?: string | null;
+    rowVersion?: string;
 }) {
     sprintStore.update(state => {
         const { sprintId, ...rest } = payload;

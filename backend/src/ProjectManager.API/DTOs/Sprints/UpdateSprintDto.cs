@@ -13,5 +13,6 @@
         public string? Goal { get; set; }
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
+        public byte[] RowVersion { get; set; } = null!;
     }
 }

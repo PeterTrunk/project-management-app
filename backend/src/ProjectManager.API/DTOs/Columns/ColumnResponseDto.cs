@@ -8,5 +8,6 @@
         public string MapsToStatus { get; set; } = string.Empty;
         public int? WipLimit { get; set; }
         public int Position { get; set; }
+        public byte[] RowVersion { get; set; } = null!;
     }
 }

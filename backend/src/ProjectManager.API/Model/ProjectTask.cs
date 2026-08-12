@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.Model
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ProjectManager.API.Model
 {
     public class ProjectTask
     {
@@ -19,6 +21,9 @@
         public DateTime? CompletedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = null!;
 
         public Project Project { get; set; } = null!;
         public Board Board { get; set; } = null!;

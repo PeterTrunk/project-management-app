@@ -6,6 +6,7 @@ using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
+using System.Data;
 
 namespace ProjectManager.API.Services.ColumnService
 {
@@ -107,8 +108,16 @@ namespace ProjectManager.API.Services.ColumnService
             //Soft delete
             column.IsDeleted = true;
             column.DeletedAt = DateTime.UtcNow;
-            
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ColumnDeleted", new { columnId, boardId });
@@ -143,15 +152,7 @@ namespace ProjectManager.API.Services.ColumnService
                 .Where(c => c.BoardId == boardId && !c.IsDeleted)
                 .ToListAsync();
 
-            return columns.Select(c => new ColumnResponseDto
-            {
-                Id = c.Id,
-                BoardId = c.BoardId,
-                Name = c.Name,
-                MapsToStatus = c.MapsToStatus,
-                WipLimit = c.WipLimit,
-                Position = c.Position
-            }).ToList();
+            return columns.Select(MapToDto).ToList();
         }
 
         public async Task<List<ColumnResponseDto>> OrderColumnsAsync(Guid projectId, Guid boardId, List<ColumnOrderDto> order)
@@ -176,36 +177,39 @@ namespace ProjectManager.API.Services.ColumnService
             if (backlogColumn != null && order.Any(o => o.Id == backlogColumn.Id && o.Position != 0))
                 throw new Exception("A Backlog oszlop pozíciója nem változtatható!");
 
-            // Először -1-re állítjuk
-            foreach (var col in columns)
-                col.Position = -1;
-            await _context.SaveChangesAsync();
-
-            // Majd beállítjuk a tényleges order pozíciókat
-            foreach (var item in order)
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            try
             {
-                var col = columns.First(c => c.Id == item.Id);
-                col.Position = item.Position;
+                // Először -1-re állítjuk
+                foreach (var col in columns)
+                    col.Position = -1;
+                await _context.SaveChangesAsync();
+
+                // Majd beállítjuk a tényleges order pozíciókat
+                foreach (var item in order)
+                {
+                    var col = columns.First(c => c.Id == item.Id);
+                    col.Position = item.Position;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
 
-            await _context.SaveChangesAsync();
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ColumnsReordered", new
                 {
                     boardId,
-                    columns = columns.Select(c => new { c.Id, c.Position })
+                    columns = columns.Select(c => new { c.Id, c.Position, c.RowVersion })
                 });
 
-            return columns.Select(c => new ColumnResponseDto
-            {
-                Id = c.Id,
-                BoardId = c.BoardId,
-                Name = c.Name,
-                MapsToStatus = c.MapsToStatus,
-                WipLimit = c.WipLimit,
-                Position = c.Position
-            }).ToList();
+            return columns.Select(MapToDto).ToList();
         }
 
         public async Task<ColumnResponseDto> UpdateColumnAsync(Guid projectId, Guid boardId, Guid columnId, UpdateColumnDto dto)
@@ -222,20 +226,31 @@ namespace ProjectManager.API.Services.ColumnService
             if (column == null)
                 throw new Exception("Oszlop nem található");
 
-            if(dto.Name != null) column.Name = dto.Name;
+            _context.Entry(column).OriginalValues["RowVersion"] = dto.RowVersion;
+
+            if (dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;
             if(dto.WipLimit != null) column.WipLimit = dto.WipLimit;
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
+            }
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ColumnUpdated", new
                 {
-                    columnId = column.Id,
-                    boardId = column.BoardId,
+                    column.Id,
+                    column.BoardId,
                     column.Name,
                     column.MapsToStatus,
-                    column.WipLimit
+                    column.WipLimit,
+                    column.RowVersion
                 });
 
             try
@@ -263,6 +278,20 @@ namespace ProjectManager.API.Services.ColumnService
                 Position = column.Position
             };
             return response;
+        }
+
+        private ColumnResponseDto MapToDto(ColumnDefinition column)
+        {
+            return new ColumnResponseDto
+            {
+                Id = column.Id,
+                BoardId = column.BoardId,
+                Name = column.Name,
+                MapsToStatus = column.MapsToStatus,
+                WipLimit = column.WipLimit,
+                Position = column.Position,
+                RowVersion = column.RowVersion
+            };
         }
     }
 }

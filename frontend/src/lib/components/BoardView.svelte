@@ -109,7 +109,10 @@
         members = state.members;
     });
     
-    $: distributeTasks(filteredTasks);
+    $: {
+        columns; //columns változásra is reagáljon
+        distributeTasks(filteredTasks);
+    }
 
     let sprints: SprintResponse[] = [];
     let boards: BoardResponse[] = [];
@@ -183,7 +186,8 @@
         // Reorder API hívás
         const order = visibleColumns.map((col, index) => ({
             id: col.id,
-            position: index + 1 
+            position: index + 1,
+            rowVersion: col.rowVersion ?? ''
             //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
             //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
@@ -216,10 +220,13 @@
             ? columnTasks[columnId][movedIndex - 1].id
             : null;
 
+        const movedTask = tasks.find(t => t.id === movedTaskId);
+
         try {
             const response = await moveTaskAsync(activeProjectId, movedTaskId, {
                 columnId,
-                afterTaskId
+                afterTaskId,
+                rowVersion: movedTask?.rowVersion ?? ''
             });
 
             // Store frissítés a backend válasszal
@@ -255,6 +262,7 @@
         isTaskDetailOpen = true;
     }
 </script>
+
 <div class="board-toolbar">
     <div class="dropdown">
         <button class="toolbar-btn" on:click={toggleDropdown}>

@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.Model
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ProjectManager.API.Model
 {
     public class Board
     {
@@ -9,6 +11,9 @@
         public bool IsDefault { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = null!;
 
         public Project Project { get; set; } = null!;
         public ICollection<ColumnDefinition> ColumnDefinitions { get; set; } = new List<ColumnDefinition>();

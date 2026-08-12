@@ -24,5 +24,6 @@
         /// Opcionális Task határidő
         /// </summary>
         public DateTime? DueDate { get; set; }
+        public byte[] RowVersion { get; set; } = null!;
     }
 }

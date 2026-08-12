@@ -158,16 +158,20 @@ namespace ProjectManager.API.Controllers
             }
         }
 
-        [HttpPost("{sprintId}/tasks/{taskId}")]
+        [HttpPost("tasks/{taskId}")]
         [Authorize(Policy = "ProjectMember")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> AssignTaskToSprintAsync(Guid projectId, Guid sprintId, Guid taskId)
+        public async Task<ActionResult<TaskResponseDto>> AssignTaskToSprintAsync(
+            Guid projectId,
+            Guid sprintId,
+            Guid taskId,
+            [FromBody] AssignTaskToSprintDto dto)
         {
             try
             {
-                await _sprintService.AssignTaskToSprintAsync(projectId, taskId, sprintId);
-                return Ok();
+                var response = await _sprintService.AssignTaskToSprintAsync(projectId, taskId, sprintId, dto);
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -179,11 +183,11 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = "ProjectMember")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> RemoveTaskFromSprintAsync(Guid projectId, Guid sprintId, Guid taskId)
+        public async Task<ActionResult> RemoveTaskFromSprintAsync(Guid projectId, Guid sprintId, Guid taskId, [FromBody] AssignTaskToSprintDto dto)
         {
             try
             {
-                await _sprintService.AssignTaskToSprintAsync(projectId, taskId, null);
+                await _sprintService.RemoveTaskFromSprintAsync(projectId, taskId, dto);
                 return NoContent();
             }
             catch (Exception ex)

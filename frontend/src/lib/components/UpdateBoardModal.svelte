@@ -65,7 +65,12 @@
         if (errorOccured) return;
 
         try {
-            const response = await updateBoardAsync(projectId, activeBoard!.id, { name, description, isDefault });
+            const response = await updateBoardAsync(projectId, activeBoard!.id, { 
+                name, 
+                description, 
+                isDefault,
+                rowVersion: activeBoard!.rowVersion ?? ''
+            });
             success = 'Board módosítva!';
             setActiveBoard(response);
             const boards = await getBoardsAsync(projectId);

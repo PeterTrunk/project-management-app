@@ -136,7 +136,7 @@
     async function loadCurrentUser() {
         try {
             const user = await meAsync();
-            console.log('meAsync response:', user);
+            
             login(
                 localStorage.getItem('token') ?? '',
                 localStorage.getItem('refreshToken') ?? '',

@@ -71,11 +71,12 @@
             ordered.splice(insertAfterIndex + 1, 0, newColumn);
             
             const order = ordered
-            .filter(c => c.position > 0)
-            .map((col, index) => ({
-                id: col.id,
-                position: index + 1
-            }));
+                .filter(c => c.position > 0)
+                .map((col, index) => ({
+                    id: col.id,
+                    position: index + 1,
+                    rowVersion: col.rowVersion ?? ''
+                }));
             try {
                 await reorderColumnsAsync(projectId, boardId, order);
                 success = success + 'Rendezés sikeres!';
@@ -90,6 +91,7 @@
     }
 
     export let onClose: () => void = () => {};
+
     function closeModal() {
         isColumnCreationOpen = false;
         onClose();

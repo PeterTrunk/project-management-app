@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.Model
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ProjectManager.API.Model
 {
     public class Sprint
     {
@@ -11,6 +13,9 @@
         public string State { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = null!;
 
         public Project Project { get; set; } = null!;
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();

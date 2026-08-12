@@ -48,7 +48,8 @@
                 name,
                 goal: goal || null,
                 startDate: startDate ? new Date(startDate) : null,
-                endDate: endDate ? new Date(endDate) : null
+                endDate: endDate ? new Date(endDate) : null,
+                rowVersion: sprint.rowVersion ?? ''
             });
             success = 'Sprint módosítva!';
         } catch (e) {
