@@ -11,6 +11,7 @@ export interface SprintResponse {
     state: string;
     createdAt: Date;
     updatedAt: Date;
+    rowVersion: string | null;
 }
 
 interface CreateSprintRequest {
@@ -27,6 +28,7 @@ interface UpdateSprintRequest {
     goal: string | null;
     startDate: Date | null;
     endDate: Date | null;
+    rowVersion: string;
 }
 
 export async function getSprintsAsync(projectId: string, scope?: string): Promise<SprintResponse[]> {
@@ -70,10 +72,17 @@ export async function completeSprintAsync(projectId: string, sprintId: string, t
     return response.data;
 }
 
-export async function assignTaskToSprintAsync(projectId: string, sprintId: string, taskId: string) {
-    const response = await apiClient.post("/projects/"+ projectId +"/sprints/" + sprintId + "/tasks/" + taskId);
+export async function assignTaskToSprintAsync(projectId: string, sprintId: string, taskId: string, rowVersion: string): Promise<TaskResponse> {
+    const response = await apiClient.post(
+        `/projects/${projectId}/sprints/${sprintId}/tasks/${taskId}`,
+        { rowVersion }
+    );
+    return response.data;
 }
 
-export async function removeTaskFromSprintAsync(projectId: string, sprintId: string, taskId: string) {
-    const response = await apiClient.delete("/projects/"+ projectId +"/sprints/" + sprintId + "/tasks/" + taskId);
+export async function removeTaskFromSprintAsync(projectId: string, sprintId: string, taskId: string, rowVersion: string): Promise<void> {
+    await apiClient.delete(
+        `/projects/${projectId}/sprints/${sprintId}/tasks/${taskId}`,
+        { data: { rowVersion } }
+    );
 }

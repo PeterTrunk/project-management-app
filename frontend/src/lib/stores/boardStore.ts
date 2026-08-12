@@ -51,16 +51,17 @@ export function handleBoardUpdated(payload: {
     name: string;
     description: string | null;
     isDefault: boolean;
+    rowVersion?: string;
 }) {
     boardStore.update(state => ({
         ...state,
         boards: state.boards.map(b =>
             b.id === payload.boardId
-                ? { ...b, name: payload.name, description: payload.description ?? '', isDefault: payload.isDefault }
+                ? { ...b, name: payload.name, description: payload.description ?? '', isDefault: payload.isDefault, rowVersion: payload.rowVersion ?? b.rowVersion }
                 : b
         ),
         activeBoard: state.activeBoard?.id === payload.boardId
-            ? { ...state.activeBoard, name: payload.name, description: payload.description ?? '', isDefault: payload.isDefault }
+            ? { ...state.activeBoard, name: payload.name, description: payload.description ?? '', isDefault: payload.isDefault, rowVersion: payload.rowVersion ?? state.activeBoard.rowVersion }
             : state.activeBoard
     }));
 }
@@ -96,12 +97,13 @@ export function handleColumnUpdated(payload: {
     name: string;
     mapsToStatus: string;
     wipLimit: number | null;
+    rowVersion?: string;
 }) {
     boardStore.update(state => ({
         ...state,
         columns: state.columns.map(c =>
             c.id === payload.columnId
-                ? { ...c, name: payload.name, mapsToStatus: payload.mapsToStatus, wipLimit: payload.wipLimit }
+                ? { ...c, name: payload.name, mapsToStatus: payload.mapsToStatus, wipLimit: payload.wipLimit, rowVersion: payload.rowVersion ?? c.rowVersion }
                 : c
         )
     }));
@@ -116,13 +118,13 @@ export function handleColumnDeleted(payload: { columnId: string; boardId: string
 
 export function handleColumnsReordered(payload: {
     boardId: string;
-    columns: { id: string; position: number }[];
+    columns: { id: string; position: number; rowVersion: string }[];
 }) {
     boardStore.update(state => ({
         ...state,
         columns: state.columns.map(c => {
             const reordered = payload.columns.find(r => r.id === c.id);
-            return reordered ? { ...c, position: reordered.position } : c;
+            return reordered ? { ...c, position: reordered.position, rowVersion: reordered.rowVersion } : c;
         })
     }));
 }

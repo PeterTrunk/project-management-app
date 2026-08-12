@@ -11,12 +11,14 @@ interface CreateColumnRequest {
 interface ColumnOrderRequest {
     id: string;
     position: number;
+    rowVersion: string;
 }
 
 interface UpdateColumnRequest {
     name: string | null;
     mapsToStatus: string | null;
     wipLimit: number | null;
+    rowVersion: string;
 }
 
 export interface ColumnResponse {
@@ -26,6 +28,7 @@ export interface ColumnResponse {
     mapsToStatus: string;
     wipLimit: number | null;
     position: number;
+    rowVersion: string | null;
 }
 
 export async function getColumnsAsync(projectId: string, boardId: string): Promise<ColumnResponse[]> {

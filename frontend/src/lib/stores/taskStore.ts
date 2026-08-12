@@ -73,6 +73,7 @@ export function handleTaskUpdated(payload: {
     columnId?: string | null;
     position?: string;
     sprintId?: string | null;
+    rowVersion?: string;
 }) {
     const { taskId, ...rest } = payload;
     taskStore.update(state => ({
@@ -92,6 +93,7 @@ export function handleTaskMoved(payload: {
     sprintId: string | null;
     position: string;
     completedAt: string | null;
+    rowVersion?: string;
 }) {
     taskStore.update(state => ({
         ...state,
@@ -102,7 +104,8 @@ export function handleTaskMoved(payload: {
                     columnId: payload.columnId ?? t.columnId,
                     sprintId: payload.sprintId,
                     position: payload.position,
-                    completedAt: payload.completedAt ? new Date(payload.completedAt) : null
+                    completedAt: payload.completedAt ? new Date(payload.completedAt) : null,
+                    rowVersion: payload.rowVersion ?? t.rowVersion
                   } as unknown as TaskResponse
                 : t
         )
@@ -119,13 +122,13 @@ export function handleTaskDeleted(payload: { taskId: string }) {
 export function handleTasksRebalanced(payload: {
     boardId: string;
     columnId: string;
-    tasks: { id: string; position: string }[];
+    tasks: { id: string; position: string; rowVersion: string }[];
 }) {
     taskStore.update(state => ({
         ...state,
         tasks: state.tasks.map(t => {
             const rebalanced = payload.tasks.find(r => r.id === t.id);
-            return rebalanced ? { ...t, position: rebalanced.position } : t;
+            return rebalanced ? { ...t, position: rebalanced.position, rowVersion: rebalanced.rowVersion } : t;
         })
     }));
 }
