@@ -93,17 +93,17 @@
             // Backlogba visszarakás
             const task = allTasks.find(t => t.id === taskId);
             if (task?.sprintId) {
-                await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, task.rowVersion ?? '');
+                await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, task.rowVersion ?? 0);
             }
         } else {
             const task = allTasks.find(t => t.id === taskId);
-            await assignTaskToSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? '');
+            await assignTaskToSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
         }
     }
 
     async function handleRemoveFromSprint(taskId: string, sprintId: string) {
         const task = allTasks.find(t => t.id === taskId);
-        await removeTaskFromSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? '');
+        await removeTaskFromSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
     }
 
     function openEditSprint(sprint: SprintResponse) {

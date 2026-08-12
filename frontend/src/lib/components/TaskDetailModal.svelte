@@ -136,7 +136,7 @@
                     priority: editPriority !== '' ? editPriority : null, 
                     estimateInMinutes: editEstimateInMinutes ?? null,
                     dueDate: editDueDate ? new Date(editDueDate) : null,
-                    rowVersion: task.rowVersion ?? ''
+                    rowVersion: task.rowVersion ?? 0
                 });
             success = "Módosítva";
             setActiveTask(response);

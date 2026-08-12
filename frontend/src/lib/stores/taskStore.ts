@@ -73,7 +73,7 @@ export function handleTaskUpdated(payload: {
     columnId?: string | null;
     position?: string;
     sprintId?: string | null;
-    rowVersion?: string;
+    rowVersion?: number;
 }) {
     const { taskId, ...rest } = payload;
     taskStore.update(state => ({
@@ -93,7 +93,7 @@ export function handleTaskMoved(payload: {
     sprintId: string | null;
     position: string;
     completedAt: string | null;
-    rowVersion?: string;
+    rowVersion?: number;
 }) {
     taskStore.update(state => ({
         ...state,
@@ -122,7 +122,7 @@ export function handleTaskDeleted(payload: { taskId: string }) {
 export function handleTasksRebalanced(payload: {
     boardId: string;
     columnId: string;
-    tasks: { id: string; position: string; rowVersion: string }[];
+    tasks: { id: string; position: string; rowVersion: number }[];
 }) {
     taskStore.update(state => ({
         ...state,

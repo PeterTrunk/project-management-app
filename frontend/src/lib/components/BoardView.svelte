@@ -114,6 +114,9 @@
         distributeTasks(filteredTasks);
     }
 
+    let isDraggingColumns = false;
+    let isDropdownOpen = false;
+
     let sprints: SprintResponse[] = [];
     let boards: BoardResponse[] = [];
     let activeBoard: BoardResponse | null = null;
@@ -139,13 +142,6 @@
     }
     
     // store figyelése
-    boardStore.subscribe(state => {
-        boards = state.boards;
-        activeBoard = state.activeBoard;
-        columns = state.columns;
-        //distributeTasks(tasks);
-    });
-
     sprintStore.subscribe(state => {
         sprints = state.sprints;
         activeSprint = state.activeSprint;
@@ -169,30 +165,37 @@
         //}
     });
 
-    let isDropdownOpen = false;
+    //DND action
+    let isReordering = false;
+    function handleColumnConsider(e: CustomEvent) {
+        isDraggingColumns = true;
+        columns = e.detail.items;
+    }
 
     function toggleDropdown() {
         isDropdownOpen = !isDropdownOpen;
     }
 
-    //DND action
-    let isReordering = false;
-    function handleColumnConsider(e: CustomEvent) {
-        columns = e.detail.items;
-    }
+    boardStore.subscribe(state => {
+        boards = state.boards;
+        activeBoard = state.activeBoard;
+        if (!isDraggingColumns) {
+            columns = state.columns;
+        }
+    });
 
     async function handleColumnFinalize(e: CustomEvent) {
         columns = e.detail.items;
+        isDraggingColumns = false;
         // Reorder API hívás
         const order = visibleColumns.map((col, index) => ({
             id: col.id,
             position: index + 1,
-            rowVersion: col.rowVersion ?? ''
+            rowVersion: col.rowVersion ?? 0
             //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
             //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
         await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
-        setColumns(columns);
     }
 
     function handleTaskConsider(e: CustomEvent, columnId: string) {
@@ -226,7 +229,7 @@
             const response = await moveTaskAsync(activeProjectId, movedTaskId, {
                 columnId,
                 afterTaskId,
-                rowVersion: movedTask?.rowVersion ?? ''
+                rowVersion: movedTask?.rowVersion ?? 0
             });
 
             // Store frissítés a backend válasszal

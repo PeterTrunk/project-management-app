@@ -51,7 +51,7 @@ export function handleBoardUpdated(payload: {
     name: string;
     description: string | null;
     isDefault: boolean;
-    rowVersion?: string;
+    rowVersion?: number;
 }) {
     boardStore.update(state => ({
         ...state,
@@ -97,7 +97,7 @@ export function handleColumnUpdated(payload: {
     name: string;
     mapsToStatus: string;
     wipLimit: number | null;
-    rowVersion?: string;
+    rowVersion?: number;
 }) {
     boardStore.update(state => ({
         ...state,
@@ -118,13 +118,15 @@ export function handleColumnDeleted(payload: { columnId: string; boardId: string
 
 export function handleColumnsReordered(payload: {
     boardId: string;
-    columns: { id: string; position: number; rowVersion: string }[];
+    columns: { id: string; position: number; rowVersion: number }[];
 }) {
     boardStore.update(state => ({
         ...state,
-        columns: state.columns.map(c => {
-            const reordered = payload.columns.find(r => r.id === c.id);
-            return reordered ? { ...c, position: reordered.position, rowVersion: reordered.rowVersion } : c;
-        })
+        columns: state.columns
+            .map(c => {
+                const reordered = payload.columns.find(r => r.id === c.id);
+                return reordered ? { ...c, position: reordered.position, rowVersion: reordered.rowVersion } : c;
+            })
+            .sort((a, b) => a.position - b.position)
     }));
 }

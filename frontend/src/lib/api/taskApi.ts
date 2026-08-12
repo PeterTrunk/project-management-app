@@ -15,7 +15,7 @@ interface CreateTaskRequest {
 interface MoveTaskRequest {
     columnId: string;
     afterTaskId: string | null;
-    rowVersion: string;
+    rowVersion: number;
 }
 
 interface UpdateTaskRequest {
@@ -24,12 +24,12 @@ interface UpdateTaskRequest {
     priority: string | null;
     estimateInMinutes: number | null;
     dueDate: Date | null;
-    rowVersion: string;
+    rowVersion: number;
 }
 
 interface AssignTaskToBoardRequest {
     boardId: string | null;
-    rowVersion: string;
+    rowVersion: number;
 }
 
 export interface CommitLinkResponse {
@@ -77,7 +77,7 @@ export interface TaskResponse {
     completedAt: Date;
     createdAt: Date;
     updatedAt: Date;
-    rowVersion: string | null;
+    rowVersion: number | null;
 }
 
 export async function getTaskByIdAsync(projectId: string, taskId: string): Promise<TaskResponse> {

@@ -12,7 +12,7 @@ interface UpdateBoardRequest {
     name: string | null;
     description: string | null;
     isDefault: boolean | null;
-    rowVersion: string;
+    rowVersion: number;
 }
 
 export interface BoardResponse {
@@ -24,7 +24,7 @@ export interface BoardResponse {
     createdAt: Date;
     updatedAt: Date;
     columns?: ColumnResponse[];
-    rowVersion: string | null;
+    rowVersion: number;
 }
 
 export async function getBoardsAsync(projectId: string, scope?: string): Promise<BoardResponse[]> {

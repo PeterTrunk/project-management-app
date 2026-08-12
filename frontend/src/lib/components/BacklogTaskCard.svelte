@@ -53,7 +53,7 @@
         try {
             const response = await assignTaskToBoardAsync(projectId, task.id, {
                 boardId: selectedBoardId === '' ? null : selectedBoardId,
-                rowVersion: task.rowVersion ?? ''
+                rowVersion: task.rowVersion ?? 0
             });
             await onBoardAssigned();
         } catch (e: any) {
