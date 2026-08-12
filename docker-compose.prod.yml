@@ -111,7 +111,7 @@ services:
     container_name: pm-frontend
     restart: unless-stopped
     depends_on:
-      - api
+      - pm-api
     networks:
       - dokploy-network
       - pma-internal
