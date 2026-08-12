@@ -61,6 +61,7 @@
                 name: editName,
                 mapsToStatus: editMapsToStatus,
                 wipLimit: hasWip ? editWipLimit : null,
+                rowVersion: column.rowVersion ?? ''
             });
             success = 'Oszlop módosítva!';
             isEditing = false;

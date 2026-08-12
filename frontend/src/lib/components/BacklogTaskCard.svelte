@@ -52,9 +52,9 @@
         console.log('handleAssignToBoard called, selectedBoardId:', selectedBoardId);
         try {
             const response = await assignTaskToBoardAsync(projectId, task.id, {
-                boardId: selectedBoardId === '' ? null : selectedBoardId
+                boardId: selectedBoardId === '' ? null : selectedBoardId,
+                rowVersion: task.rowVersion ?? ''
             });
-            console.log('response:', response);
             await onBoardAssigned();
         } catch (e: any) {
             console.error('Hiba:', e.response?.data);

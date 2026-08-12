@@ -36,16 +36,15 @@
         filterDateFrom !== '' || filterDateTo !== '';
 
     $: displayedActivities = hasActiveFilter
-    ? activities
-    : [...liveActivities, ...activities]
-        .filter((a, i, arr) => arr.findIndex(b => b.id === a.id) === i);
+        ? activities
+        : [...liveActivities, ...activities]
+            .filter((a, i, arr) => arr.findIndex(b => b.id === a.id) === i);
 
     onMount(async () => {
         await loadActivities();
     });
 
     async function loadActivities() {
-        console.log('loadActivities fut:', { filterEntityType, filterActorName, filterDateFrom, filterDateTo });
         loading = true;
         activities = [];
         error = '';
@@ -58,10 +57,7 @@
                 dateFrom: filterDateFrom ? toUtcString(filterDateFrom) : undefined,
                 dateTo: filterDateTo ? toUtcString(filterDateTo) : undefined,
             });
-            console.log('API válasz:', data);
-            console.log('API válasz hossza:', data.length);
-            console.log('filterDateFrom:', filterDateFrom);
-            console.log('filterDateTo:', filterDateTo);
+
             activities = [...data];
             hasMore = data.length === PAGE_SIZE;
             page = 1;
