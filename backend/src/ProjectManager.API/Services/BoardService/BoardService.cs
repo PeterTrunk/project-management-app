@@ -88,10 +88,10 @@ namespace ProjectManager.API.Services.BoardService
                 .Group($"project-{projectId}")
                 .SendAsync("BoardCreated", new
                 {
-                    board.Id,
-                    board.Name,
-                    board.Description,
-                    board.IsDefault
+                    id = board.Id,
+                    name = board.Name,
+                    description = board.Description,
+                    isDefault = board.IsDefault
                 });
 
             try
@@ -199,9 +199,11 @@ namespace ProjectManager.API.Services.BoardService
                             Name = c.Name,
                             MapsToStatus = c.MapsToStatus,
                             Position = c.Position,
-                            WipLimit = c.WipLimit
+                            WipLimit = c.WipLimit,
+                            RowVersion = c.xmin
                         }).ToList()
-                    : null
+                    : null,
+                RowVersion = b.xmin
             }).ToList();
         }
 
@@ -215,7 +217,7 @@ namespace ProjectManager.API.Services.BoardService
             if (board == null)
                 throw new Exception("Board nem található");
 
-            _context.Entry(board).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(board).OriginalValues["xmin"] = dto.RowVersion;
 
             if (dto.Name != null) board.Name = dto.Name;
             if(dto.Description != null) board.Description = dto.Description;
@@ -250,10 +252,10 @@ namespace ProjectManager.API.Services.BoardService
                 .SendAsync("BoardUpdated", new
                 {
                     boardId = board.Id,
-                    board.Name,
-                    board.Description,
-                    board.IsDefault,
-                    rowVersion = board.RowVersion
+                    name = board.Name,
+                    description = board.Description,
+                    isDefault = board.IsDefault,
+                    rowVersion = board.xmin
                 });
 
             try
@@ -271,17 +273,7 @@ namespace ProjectManager.API.Services.BoardService
             }
             catch { }
 
-            var response = new BoardResponseDto
-            {
-                Id = board.Id,
-                ProjectId = board.ProjectId,
-                Name = board.Name,
-                Description = board.Description,
-                IsDefault = board.IsDefault,
-                CreatedAt = board.CreatedAt,
-                UpdatedAt = board.UpdatedAt
-            };
-            return response;
+            return MapToDto(board);
         }
 
         private BoardResponseDto MapToDto(Board board)
@@ -295,7 +287,7 @@ namespace ProjectManager.API.Services.BoardService
                 IsDefault = board.IsDefault,
                 CreatedAt = board.CreatedAt,
                 UpdatedAt = board.UpdatedAt,
-                RowVersion = board.RowVersion
+                RowVersion = board.xmin
             };
         }
     }

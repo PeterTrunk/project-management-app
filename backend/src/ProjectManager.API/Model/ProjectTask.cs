@@ -21,9 +21,7 @@ namespace ProjectManager.API.Model
         public DateTime? CompletedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-
-        [Timestamp]
-        public byte[] RowVersion { get; set; } = null!;
+        public uint xmin { get; set; }
 
         public Project Project { get; set; } = null!;
         public Board Board { get; set; } = null!;

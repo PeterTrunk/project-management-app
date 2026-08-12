@@ -12,9 +12,7 @@ namespace ProjectManager.API.Model
         public int Position {  get; set; }
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
-
-        [Timestamp]
-        public byte[] RowVersion { get; set; } = null!;
+        public uint xmin { get; set; }
 
         public Board Board { get; set; } = null!;
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();

@@ -3,6 +3,6 @@
     public class AssignTaskToBoardDto
     {
         public Guid? BoardId { get; set; }
-        public byte[] RowVersion { get; set; } = null!;
+        public uint RowVersion { get; set; }
     }
 }

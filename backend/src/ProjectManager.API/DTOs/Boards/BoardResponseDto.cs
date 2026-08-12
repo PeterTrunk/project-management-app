@@ -12,6 +12,6 @@ namespace ProjectManager.API.DTOs.Boards
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public List<ColumnResponseDto>? Columns { get; set; } // null ha scope != initial
-        public byte[] RowVersion { get; set; } = null!;
+        public uint RowVersion { get; set; }
     }
 }

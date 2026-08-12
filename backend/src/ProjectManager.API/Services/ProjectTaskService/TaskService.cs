@@ -109,19 +109,19 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .Group($"project-{projectId}")
                 .SendAsync("TaskCreated", new
                 {
-                    task.Id,
-                    task.BoardId,
-                    task.ColumnId,
-                    task.SprintId,
-                    task.TaskKey,
-                    task.Title,
-                    task.Priority,
-                    task.DueDate,
-                    task.EstimateInMinutes,
-                    task.Position,
-                    task.CreatedAt,
-                    task.CompletedAt,
-                    task.RowVersion
+                    id = task.Id,
+                    boardId = task.BoardId,
+                    columnId = task.ColumnId,
+                    sprintId = task.SprintId,
+                    taskKey = task.TaskKey,
+                    title = task.Title,
+                    priority = task.Priority,
+                    dueDate = task.DueDate,
+                    estimateInMinutes = task.EstimateInMinutes,
+                    position = task.Position,
+                    createdAt = task.CreatedAt,
+                    completedAt = task.CompletedAt,
+                    rowVersion = task.xmin
                 });
 
             try
@@ -309,7 +309,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             if (task.ClosedAt.HasValue)
                 throw new Exception("Lezárt sprint taskja nem mozgatható!");
@@ -459,7 +459,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     position = task.Position,
                     completedAt = task.CompletedAt,
                     triggeredBy = task.CreatedById,
-                    task.RowVersion
+                    rowVersion = task.xmin
                 });
 
             if (isLastColumn)
@@ -518,7 +518,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
@@ -551,7 +551,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     priority = task.Priority,
                     dueDate = task.DueDate,
                     estimateInMinutes = task.EstimateInMinutes,
-                    task.RowVersion
+                    rowVersion = task.xmin
                 });
 
             try
@@ -607,7 +607,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("Task nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             if (!dto.BoardId.HasValue)
             {
@@ -642,7 +642,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         boardId = (Guid?)null,
                         columnId = (Guid?)null,
                         position = task.Position,
-                        task.RowVersion
+                        rowVersion = task.xmin
                     });
 
             }
@@ -738,7 +738,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         boardId = task.BoardId,
                         columnId = task.ColumnId,
                         position = task.Position,
-                        task.RowVersion
+                        rowVersion = task.xmin
                     });
 
                 try
@@ -825,7 +825,11 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     {
                         boardId = column.BoardId,
                         columnId,
-                        tasks = allTasksInColumn.Select(t => new { t.Id, t.Position, t.RowVersion })
+                        tasks = allTasksInColumn.Select(t => new {
+                            id = t.Id,
+                            position = t.Position,
+                            rowVersion = t.xmin
+                        })
                     });
             }
             catch (Exception)
@@ -991,7 +995,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
-                RowVersion = t.RowVersion,
+                RowVersion = t.xmin,
                 DueDate = t.DueDate,
                 ClosedAt = t.ClosedAt,
                 CompletedAt = t.CompletedAt,

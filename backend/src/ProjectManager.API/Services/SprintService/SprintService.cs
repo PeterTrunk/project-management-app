@@ -100,9 +100,9 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{projectId}")
                 .SendAsync("SprintUpdated", new
                 {
-                    sprint.Id,
-                    sprint.State,
-                    sprint.RowVersion
+                    sprintId = sprint.Id,
+                    state = sprint.State,
+                    rowVersion = sprint.xmin
                 });
 
             try
@@ -199,9 +199,9 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{projectId}")
                 .SendAsync("SprintUpdated", new
                 {
-                    sprint.Id,
-                    sprint.State,
-                    sprint.RowVersion
+                    sprintId = sprint.Id,
+                    state = sprint.State,
+                    rowVersion = sprint.xmin
                 });
 
             try
@@ -243,14 +243,14 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{projectId}")
                 .SendAsync("SprintCreated", new
                 {
-                    sprint.Id,
-                    sprint.Name,
-                    sprint.Goal,
-                    sprint.State,
-                    sprint.StartDate,
-                    sprint.EndDate,
-                    sprint.CreatedAt,
-                    sprint.RowVersion
+                    id = sprint.Id,
+                    name = sprint.Name,
+                    goal = sprint.Goal,
+                    state = sprint.State,
+                    startDate = sprint.StartDate,
+                    endDate = sprint.EndDate,
+                    createdAt = sprint.CreatedAt,
+                    rowVersion = sprint.xmin
                 });
 
             try
@@ -453,9 +453,9 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{projectId}")
                 .SendAsync("SprintUpdated", new
                 {
-                    sprint.Id,
-                    sprint.State,
-                    sprint.RowVersion
+                    sprintId = sprint.Id,
+                    state = sprint.State,
+                    rowVersion = sprint.xmin
                 });
 
             try
@@ -506,13 +506,13 @@ namespace ProjectManager.API.Services.SprintService
                 .Group($"project-{projectId}")
                 .SendAsync("SprintUpdated", new
                 {
-                    sprint.Id,
-                    sprint.Name,
-                    sprint.Goal,
-                    sprint.StartDate,
-                    sprint.EndDate,
-                    sprint.State,
-                    sprint.RowVersion
+                    sprintId = sprint.Id,
+                    name = sprint.Name,
+                    goal = sprint.Goal,
+                    startDate = sprint.StartDate,
+                    endDate = sprint.EndDate,
+                    state = sprint.State,
+                    rowVersion = sprint.xmin
                 });
 
             try
@@ -533,7 +533,7 @@ namespace ProjectManager.API.Services.SprintService
             return MapToDto(sprint);
         }
 
-        public async Task<TaskResponseDto> AssignTaskToSprintAsync(Guid projectId, Guid sprintId, Guid taskId, AssignTaskToSprintDto dto)
+        public async Task<TaskResponseDto> AssignTaskToSprintAsync(Guid projectId, Guid taskId, Guid sprintId, AssignTaskToSprintDto dto)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
@@ -543,7 +543,7 @@ namespace ProjectManager.API.Services.SprintService
             if (task == null)
                 throw new Exception("Task nem található");
 
-            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
             if (sprint == null)
@@ -595,7 +595,7 @@ namespace ProjectManager.API.Services.SprintService
                     sprintId = task.SprintId,
                     columnId = task.ColumnId,
                     position = task.Position,
-                    rowVersion = task.RowVersion
+                    rowVersion = task.xmin
                 });
 
             try
@@ -644,7 +644,7 @@ namespace ProjectManager.API.Services.SprintService
             if (task == null)
                 throw new Exception("Task nem található");
 
-            _context.Entry(task).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             if (task.BoardId.HasValue)
             {
@@ -702,7 +702,7 @@ namespace ProjectManager.API.Services.SprintService
                     sprintId = (Guid?)null,
                     columnId = task.ColumnId,
                     position = task.Position,
-                    rowVersion = task.RowVersion
+                    rowVersion = task.xmin
                 });
 
             try
@@ -794,7 +794,7 @@ namespace ProjectManager.API.Services.SprintService
                 Priority = t.Priority,
                 Position = t.Position,
                 EstimateInMinutes = t.EstimateInMinutes,
-                RowVersion = t.RowVersion,
+                RowVersion = t.xmin,
                 DueDate = t.DueDate,
                 ClosedAt = t.ClosedAt,
                 CompletedAt = t.CompletedAt,
@@ -816,7 +816,7 @@ namespace ProjectManager.API.Services.SprintService
                 State = sprint.State,
                 CreatedAt = sprint.CreatedAt,
                 UpdatedAt = sprint.UpdatedAt,
-                RowVersion = sprint.RowVersion
+                RowVersion = sprint.xmin
             };
         }
     }

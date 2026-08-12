@@ -49,12 +49,13 @@ namespace ProjectManager.API.Services.ColumnService
                 .Group($"project-{projectId}")
                 .SendAsync("ColumnCreated", new
                 {
-                    column.Id,
-                    column.BoardId,
-                    column.Name,
-                    column.Position,
-                    column.MapsToStatus,
-                    column.WipLimit
+                    id = column.Id,
+                    boardId = column.BoardId,
+                    name = column.Name,
+                    position = column.Position,
+                    mapsToStatus = column.MapsToStatus,
+                    wipLimit = column.WipLimit,
+                    rowVersion = column.xmin
                 });
 
             try
@@ -72,16 +73,7 @@ namespace ProjectManager.API.Services.ColumnService
             }
             catch { }
 
-            var response = new ColumnResponseDto
-            {
-                Id = column.Id,
-                BoardId = column.BoardId,
-                Name = column.Name,
-                MapsToStatus = column.MapsToStatus,
-                WipLimit = column.WipLimit,
-                Position = column.Position
-            };
-            return response;
+            return MapToDto(column);
         }
         
         public async Task DeleteColumnAsync(Guid projectId, Guid boardId, Guid columnId)
@@ -180,6 +172,13 @@ namespace ProjectManager.API.Services.ColumnService
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
+                // RowVersion ellenőrzés minden oszlopra
+                foreach (var item in order)
+                {
+                    var col = columns.First(c => c.Id == item.Id);
+                    _context.Entry(col).OriginalValues["xmin"] = item.RowVersion;
+                }
+
                 // Először -1-re állítjuk
                 foreach (var col in columns)
                     col.Position = -1;
@@ -194,22 +193,30 @@ namespace ProjectManager.API.Services.ColumnService
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                var updatedColumns = await _context.ColumnDefinitions
+                    .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
+                    .ToListAsync();
+
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ColumnsReordered", new
+                    {
+                        boardId,
+                        columns = updatedColumns.Select(c => new {
+                            id = c.Id,
+                            position = c.Position,
+                            rowVersion = c.xmin
+                        })
+                    });
+
+                return updatedColumns.Select(MapToDto).ToList();
             }
             catch (Exception)
             {
                 await transaction.RollbackAsync();
                 throw;
             }
-
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ColumnsReordered", new
-                {
-                    boardId,
-                    columns = columns.Select(c => new { c.Id, c.Position, c.RowVersion })
-                });
-
-            return columns.Select(MapToDto).ToList();
         }
 
         public async Task<ColumnResponseDto> UpdateColumnAsync(Guid projectId, Guid boardId, Guid columnId, UpdateColumnDto dto)
@@ -226,7 +233,7 @@ namespace ProjectManager.API.Services.ColumnService
             if (column == null)
                 throw new Exception("Oszlop nem található");
 
-            _context.Entry(column).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(column).OriginalValues["xmin"] = dto.RowVersion;
 
             if (dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;
@@ -245,12 +252,12 @@ namespace ProjectManager.API.Services.ColumnService
                 .Group($"project-{projectId}")
                 .SendAsync("ColumnUpdated", new
                 {
-                    column.Id,
-                    column.BoardId,
-                    column.Name,
-                    column.MapsToStatus,
-                    column.WipLimit,
-                    column.RowVersion
+                    columnId = column.Id,
+                    boardId = column.BoardId,
+                    name = column.Name,
+                    mapsToStatus = column.MapsToStatus,
+                    wipLimit = column.WipLimit,
+                    rowVersion = column.xmin
                 });
 
             try
@@ -268,16 +275,7 @@ namespace ProjectManager.API.Services.ColumnService
             }
             catch { }
 
-            var response = new ColumnResponseDto
-            {
-                Id = column.Id,
-                BoardId = column.BoardId,
-                Name = column.Name,
-                MapsToStatus = column.MapsToStatus,
-                WipLimit = column.WipLimit,
-                Position = column.Position
-            };
-            return response;
+            return MapToDto(column);
         }
 
         private ColumnResponseDto MapToDto(ColumnDefinition column)
@@ -290,7 +288,7 @@ namespace ProjectManager.API.Services.ColumnService
                 MapsToStatus = column.MapsToStatus,
                 WipLimit = column.WipLimit,
                 Position = column.Position,
-                RowVersion = column.RowVersion
+                RowVersion = column.xmin
             };
         }
     }

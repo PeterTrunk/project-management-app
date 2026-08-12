@@ -13,9 +13,7 @@ namespace ProjectManager.API.Model
         public string State { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-
-        [Timestamp]
-        public byte[] RowVersion { get; set; } = null!;
+        public uint xmin { get; set; }
 
         public Project Project { get; set; } = null!;
         public ICollection<ProjectTask> ProjectTasks { get; set; } = new List<ProjectTask>();

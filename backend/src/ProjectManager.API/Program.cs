@@ -3,6 +3,7 @@ using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
@@ -94,7 +95,9 @@ var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@tru
 
 // Service Registration (DI Container)
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString)
+           .LogTo(Console.WriteLine, LogLevel.Information)
+           .EnableSensitiveDataLogging());
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

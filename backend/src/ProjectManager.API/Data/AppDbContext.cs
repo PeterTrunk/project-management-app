@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Data;
@@ -40,8 +41,7 @@ public class AppDbContext : DbContext
             property.CurrentValue = value;
         }
     }
-
-
+    
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
@@ -235,6 +235,13 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<Board>(entity =>
         {
+            entity.Property(b => b.xmin)
+                  .HasColumnName("xmin")
+                  .HasColumnType("xid")
+                  .ValueGeneratedOnAddOrUpdate()
+                  .IsConcurrencyToken()
+                  .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+
             //Constraints
             entity.Property(b => b.Name)
                   .HasMaxLength(120)
@@ -263,6 +270,13 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<ColumnDefinition>(entity =>
         {
+            entity.Property(b => b.xmin)
+                  .HasColumnName("xmin")
+                  .HasColumnType("xid")
+                  .ValueGeneratedOnAddOrUpdate()
+                  .IsConcurrencyToken()
+                  .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+
             //Constraints
             entity.Property(c => c.Name)
                   .HasMaxLength(80)
@@ -293,6 +307,13 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<Sprint>(entity =>
         {
+            entity.Property(b => b.xmin)
+                  .HasColumnName("xmin")
+                  .HasColumnType("xid")
+                  .ValueGeneratedOnAddOrUpdate()
+                  .IsConcurrencyToken()
+                  .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+
             //Constraints
             entity.Property(s => s.Name)
                   .HasMaxLength(80)
@@ -329,6 +350,13 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<ProjectTask>(entity =>
         {
+            entity.Property(b => b.xmin)
+                  .HasColumnName("xmin")
+                  .HasColumnType("xid")
+                  .ValueGeneratedOnAddOrUpdate()
+                  .IsConcurrencyToken()
+                  .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+
             //Constraints
             entity.Property(t => t.TaskKey)
                   .HasMaxLength(32)

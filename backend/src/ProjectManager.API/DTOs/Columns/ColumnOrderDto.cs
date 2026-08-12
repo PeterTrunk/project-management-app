@@ -7,5 +7,6 @@
         /// Oszlop táblán belüli poziciója, Positon 1 és 99 között ajánlott
         /// </summary>
         public int Position { get; set; }
+        public uint RowVersion { get; set; }
     }
 }

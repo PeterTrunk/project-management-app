@@ -2,6 +2,6 @@
 {
     public class AssignTaskToSprintDto
     {
-        public byte[] RowVersion { get; set; } = null!;
+        public uint RowVersion { get; set; }
     }
 }

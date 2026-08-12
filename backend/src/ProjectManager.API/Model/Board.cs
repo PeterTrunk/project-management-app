@@ -11,9 +11,7 @@ namespace ProjectManager.API.Model
         public bool IsDefault { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-
-        [Timestamp]
-        public byte[] RowVersion { get; set; } = null!;
+        public uint xmin { get; set; }
 
         public Project Project { get; set; } = null!;
         public ICollection<ColumnDefinition> ColumnDefinitions { get; set; } = new List<ColumnDefinition>();

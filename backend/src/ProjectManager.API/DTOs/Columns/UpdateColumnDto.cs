@@ -14,6 +14,6 @@
         /// Oszlop WIP limitje, null esetén nincsen limit
         /// </summary>
         public int? WipLimit { get; set; }
-        public byte[] RowVersion { get; set; } = null!;
+        public uint RowVersion { get; set; }
     }
 }

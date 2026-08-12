@@ -11,6 +11,6 @@
         /// </summary>
         public string? Description { get; set; }
         public bool? IsDefault { get; set; }
-        public byte[] RowVersion { get; set; } = null!;
+        public uint RowVersion { get; set; }
     }
 }

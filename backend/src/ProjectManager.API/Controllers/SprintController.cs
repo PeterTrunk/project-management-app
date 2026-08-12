@@ -158,7 +158,7 @@ namespace ProjectManager.API.Controllers
             }
         }
 
-        [HttpPost("tasks/{taskId}")]
+        [HttpPost("{sprintId}/tasks/{taskId}")]
         [Authorize(Policy = "ProjectMember")]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
