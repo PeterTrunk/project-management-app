@@ -144,7 +144,14 @@
     // store figyelése
     sprintStore.subscribe(state => {
         sprints = state.sprints;
-        activeSprint = state.activeSprint;
+        const newActiveSprint = state.activeSprint;
+        
+        if (newActiveSprint?.id !== activeSprint?.id) {
+            activeSprint = newActiveSprint;
+            distributeTasks(filteredTasks);
+        } else {
+            activeSprint = newActiveSprint;
+        }
     });
 
     let currentUserId = '';

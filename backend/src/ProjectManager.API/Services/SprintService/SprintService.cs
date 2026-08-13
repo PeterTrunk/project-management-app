@@ -89,6 +89,25 @@ namespace ProjectManager.API.Services.SprintService
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                foreach (var task in sprintTasks)
+                {
+                    if (task.BoardId.HasValue)
+                    {
+                        await _hubContext.Clients
+                            .Group($"project-{projectId}")
+                            .SendAsync("TaskMoved", new
+                            {
+                                taskId = task.Id,
+                                boardId = task.BoardId,
+                                columnId = task.ColumnId,
+                                sprintId = task.SprintId,
+                                position = task.Position,
+                                completedAt = task.CompletedAt,
+                                rowVersion = task.xmin
+                            });
+                    }
+                }
             }
             catch (Exception)
             {
@@ -168,8 +187,35 @@ namespace ProjectManager.API.Services.SprintService
                         foreach (var task in unfinishedTasks)
                         {
                             task.SprintId = targetSprintId;
-                            //Itt nem kell taskhistory, a sprint független a task elvégzésétől ezért bár új sprintbe lépünk,
-                            //de feladat progressionje marad. (ha in-progress volt akkor nem tesszük vissza to-do -ba stb)
+                            task.CompletedAt = null;
+
+                            // Első oszlopba rakás ha van board
+                            if (task.BoardId.HasValue)
+                            {
+                                var firstColumn = await _context.ColumnDefinitions
+                                    .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)
+                                    .OrderBy(c => c.Position)
+                                    .FirstOrDefaultAsync();
+
+                                if (firstColumn != null)
+                                {
+                                    var lastTask = await _context.ProjectTasks
+                                        .Where(t => t.ColumnId == firstColumn.Id)
+                                        .OrderBy(t => t.Position)
+                                        .LastOrDefaultAsync();
+
+                                    task.ColumnId = firstColumn.Id;
+                                    task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+
+                                    _context.TaskStatusHistories.Add(new TaskStatusHistory
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        TaskId = task.Id,
+                                        ColumnId = firstColumn.Id,
+                                        CreatedAt = DateTime.UtcNow
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -188,6 +234,38 @@ namespace ProjectManager.API.Services.SprintService
                 sprint.State = SprintState.Completed;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                foreach (var task in unfinishedTasks)
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("TaskMoved", new
+                        {
+                            taskId = task.Id,
+                            boardId = task.BoardId,
+                            columnId = task.ColumnId,
+                            sprintId = task.SprintId,
+                            position = task.Position,
+                            completedAt = task.CompletedAt,
+                            rowVersion = task.xmin
+                        });
+                }
+
+                foreach (var task in completedTasks)
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("TaskMoved", new
+                        {
+                            taskId = task.Id,
+                            boardId = task.BoardId,
+                            columnId = task.ColumnId,
+                            sprintId = task.SprintId,
+                            position = task.Position,
+                            completedAt = task.CompletedAt,
+                            rowVersion = task.xmin
+                        });
+                }
             }
             catch (Exception)
             {
@@ -427,6 +505,7 @@ namespace ProjectManager.API.Services.SprintService
 
                             task.ColumnId = backlogColumn.Id;
                             task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
+                            task.CompletedAt = null;
 
                             _context.TaskStatusHistories.Add(new TaskStatusHistory
                             {
@@ -442,6 +521,25 @@ namespace ProjectManager.API.Services.SprintService
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                foreach (var task in sprintTasks)
+                {
+                    if (task.BoardId.HasValue)
+                    {
+                        await _hubContext.Clients
+                            .Group($"project-{projectId}")
+                            .SendAsync("TaskMoved", new
+                            {
+                                taskId = task.Id,
+                                boardId = task.BoardId,
+                                columnId = task.ColumnId,
+                                sprintId = task.SprintId,
+                                position = task.Position,
+                                completedAt = task.CompletedAt,
+                                rowVersion = task.xmin
+                            });
+                    }
+                }
             }
             catch (Exception)
             {
