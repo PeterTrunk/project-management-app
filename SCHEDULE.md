@@ -2148,6 +2148,155 @@ deploy:
 
 ---
 
+## Auth Token Security
+Improve token storage security by moving refresh tokens from localStorage to HttpOnly cookies. Access tokens remain in memory (authStore) only - not persisted to localStorage. This eliminates XSS vulnerability while maintaining stateless JWT-based authentication and horizontal scaling compatibility.
+
+### Biztonsági szintek
+
+**Jelenlegi (localStorage):**
+- XSS támadással mindkét token ellopható
+
+**1. fázis - SameSite=None (tervezett):**
+- Refresh token HttpOnly cookie-ban, access token memóriában
+
+- Fő gyengeség: SameSite=None kényszermegoldás cross-subdomain miatt
+- CORS AllowCredentials kompenzálja
+
+**2. fázis - SameSite=Strict (jövőbeli):**
+- Frontend és backend ugyanazon a domainen
+
+- trunkpeter.com/ -> frontend
+- trunkpeter.com/api -> backend (Traefik path routing)
+- SameSite=Strict lehetséges -> maximális CSRF védelem
+- CORS teljesen eltűnik (same-origin)
+
+### 1. fázis implementáció (SameSite=None)
+
+#### Miért SameSite=None és nem Strict?
+Frontend: app.trunkpeter.com
+Backend: api.trunkpeter.com
+- Különböző subdomainek = cross-site kérés
+- SameSite=Strict esetén a böngésző NEM küldi el a cookie-t!
+- SameSite=None kötelező cross-subdomain esetén
+- SameSite=None + CORS AllowCredentials véd a CSRF ellen
+
+#### Cookie konfiguráció példa
+```csharp
+var isProd = app.Environment.IsProduction();
+
+new CookieOptions
+{
+    HttpOnly = true,
+    Secure = isProd,                                           // prod: HTTPS kötelező
+    SameSite = isProd ? SameSiteMode.None : SameSiteMode.Lax,  // dev: Lax elegendő
+    Domain = isProd ? ".trunkpeter.com" : null,                // prod: mindkét subdomain
+    Path = "/api/auth",                                        // csak auth endpointokhoz
+    Expires = DateTime.UtcNow.AddDays(30)                      // refresh token lejáratával egyező
+}
+```
+
+#### Backend változtatások
+
+**Login/Register:**
+- RefreshToken törlése az AuthResponseDto-ból
+- HttpOnly Cookie-ban visszaküldve a fenti konfigurációval
+
+**Refresh endpoint:**
+- [FromBody] RefreshTokenRequest törlendő
+- Request.Cookies["refreshToken"] olvasás helyette
+- Új refresh token szintén cookie-ban visszaküldve
+
+**Logout endpoint:**
+- Response.Cookies.Delete("refreshToken")
+
+**Program.cs:**
+- Cookie policy konfiguráció
+- CORS: AllowAnyOrigin() -> WithOrigins() explicit originekkel
+- CORS: AllowCredentials() hozzáadása
+- AllowAnyOrigin() + AllowCredentials() NEM kompatibilis!
+
+```csharp
+policy.WithOrigins(
+    "https://app.trunkpeter.com",
+    "http://localhost:5173",
+    "http://localhost:4173"
+)
+.AllowCredentials()
+.AllowAnyMethod()
+.AllowAnyHeader();
+```
+
+#### Frontend változtatások
+
+**authStore.ts:**
+- localStorage.setItem/getItem('refreshToken') törlendő
+- refreshToken mező törlendő az AuthState-ből
+- Access token törlendő localStorage-ból -> csak memóriában (authStore)
+- Oldal frissítéskor: refresh cookie alapján új access token automatikusan
+
+**apiClient.ts:**
+- withCredentials: true hozzáadása -> cookie automatikusan megy
+
+**authApi.ts:**
+- refreshAsync: ne küldje a refresh tokent body-ban
+- loginAsync/registerAsync: ne tárolja a tokeneket localStorage-ban
+
+**Érintett komponensek:**
+- AppLayout.svelte -> localStorage token hivatkozások törlése
+- Login.svelte -> refreshToken tárolás törlése
+- Register.svelte -> refreshToken tárolás törlése
+
+#### Cloudflare beállítások
+- SSL/TLS Full Strict mód -> Secure flag működik
+- Cache bypass: api.trunkpeter.com/api/auth/* -> ne cache-elje
+- Cookie-kat Cloudflare nem módosítja -> nem kell külön konfiguráció
+
+#### SignalR kompatibilitás
+- SignalR csak az access tokent használja (query string)
+- Access token memóriában marad -> SignalR működik
+- Access token lejártakor interceptor megújítja -> SignalR újracsatlakozik
+- Nem igényel SignalR változtatást
+
+---
+
+### 2. fázis implementáció (SameSite=Strict) - (1. fázis után meggondolandó)
+- Előfeltétel: 1. fázis teljes implementációja
+
+**Változtatások az 1. fázisra épülve:**
+- Traefik path routing: trunkpeter.com/ -> frontend, trunkpeter.com/api -> backend
+- Frontend API URL: https://api.trunkpeter.com -> /api (relatív)
+- Cookie: SameSite=None -> SameSite=Strict
+- Cookie: Domain=.trunkpeter.com -> törölhető (same-origin)
+- CORS konfiguráció törölhető (same-origin)
+- api.trunkpeter.com DNS rekord törölhető
+- SignalR URL frissítése
+- Email verification/password reset linkek frissítése
+
+---
+
+### Implementációs sorrend (1. fázis)
+- Program.cs: Cookie policy + CORS WithOrigins + AllowCredentials
+- AuthController: refresh token -> HttpOnly Cookie
+- AuthResponseDto: RefreshToken mező törlése
+- Frontend: apiClient withCredentials: true
+- Frontend: authStore localStorage cleanup
+- Frontend: komponensek frissítése
+- Cloudflare: cache bypass auth endpointokra
+- Tesztelés: login/logout/refresh flow
+
+### Biztonsági javulás
+**Előtte:**
+- Access token: localStorage <- XSS veszélyes
+- Refresh token: localStorage <- XSS veszélyes
+
+**1. fázis után:**
+- Access token: memória (authStore) <- XSS ellen védett
+- Refresh token: HttpOnly Cookie + SameSite=None + CORS <- XSS ellen védett
+
+**2. fázis után:**
+- Access token: memória (authStore) <- XSS ellen védett
+- Refresh token: HttpOnly Cookie + SameSite=Strict <- maximális védelem
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
