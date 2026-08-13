@@ -1896,7 +1896,7 @@ AES-256 encryption for WebhookSecret storage with server-side master key. TOTP 2
 - Regisztrációkor felugró 2FA beállítási folyamat (prompt -> setup -> verify -> success lépések)
 - Bezárható banner ha 2FA nincs beállítva (userId alapú localStorage perzisztencia)
 
-#### Email Verification & Password Reset (tervezett) 
+#### Email Verification & Password Reset
 
 **Cél:** Email megerősítés regisztrációkor és elfelejtett jelszó funkció.
 
@@ -2017,30 +2017,43 @@ Optimistic and pessimistic concurrency control for concurrent modifications. Pre
 
 #### Concurrency Control
 
-**Optimistic Concurrency (EF Core RowVersion):**
+**Optimistic Concurrency (PostgreSQL xmin system column):**
 
 Azon entitásoknál ahol több felhasználó egyszerre interaktálhat:
-- Task -> mozgatás, frissítés, assignee/label változás
-- Column -> átrendezés, WIP limit változás
-- Sprint -> státusz változás
-- Board -> frissítés
+- Task -> mozgatás, szerkesztés, sprint/board hozzárendelés
+- Column -> szerkesztés, átrendezés
+- Sprint -> státusz változás, szerkesztés
+- Board -> szerkesztés
 
-[Timestamp]
-public byte[] RowVersion { get; set; } = null!;
-
-Működés:
-- Minden módosításnál EF Core ellenőrzi hogy a RowVersion egyezik-e
-- Ha más instance már módosított -> DbUpdateConcurrencyException
-- Backend 409 Conflict-et ad vissza
-- Frontend újratölti az érintett adatot és megmutatja a friss állapotot
+PostgreSQL xmin system column használata concurrency token-ként:
+- Minden sornak van egy implicit xmin értéke ami automatikusan változik UPDATE-nél
+- EF Core IsConcurrencyToken() + HasColumnName("xmin") + HasColumnType("xid") konfiguráció
+- [Timestamp] attribútum NEM használható PostgreSQL-en (SQL Server specifikus)
+- Migration: AddColumn<uint>("xmin") sorokat el kell távolítani — xmin system column, nem kell létrehozni
+- uint típus a C# modellben, number a TypeScript interface-ekben
+- Frontend minden szükséges API hívásban elküldi a rowVersion-t
+- Backend OriginalValues["xmin"] beállítás -> EF Core ellenőrzi mentéskor
+- Conflict esetén: DbUpdateConcurrencyException -> 400 Bad Request -> "próbáld újra" üzenet
 
 **Pesszimista Lock (Serializable tranzakció):**
 
-Kritikus műveleteknél ahol üzleti szabály sérülhet:
-- Lexorank rebalance -> oszlop összes taskjának position frissítése
-  - Amíg fut, más nem mozgathat taskot ugyanabba az oszlopba
-- Sprint aktiválás -> egyszerre csak egy aktív sprint lehet projektenként
-  - Serializable tranzakció garantálja hogy nem keletkezhet két aktív sprint
+Kritikus műveleteknél ahol üzleti szabály sérülhet vagy több sor módosul egyszerre:
+- RebalanceColumnAsync -> oszlop összes taskjának position frissítése
+- ActivateSprintAsync -> egyszerre csak egy aktív sprint lehet projektenként
+- CompleteSprintAsync -> befejezetlen taskok áthelyezése
+- PlanSprintAsync -> taskok visszahelyezése backlogba
+- OrderColumnsAsync -> kétlépéses pozíció frissítés (-1 -> végleges)
+
+**Sprint lifecycle broadcast javítások:**
+- ActivateSprintAsync, PlanSprintAsync, CompleteSprintAsync -> TaskMoved broadcast minden érintett taskra
+- Sprint lezárásakor carry-over taskok az első oszlopból kezdenek (egységes viselkedés)
+- TaskStatusHistory bejegyzés minden sprint lifecycle változáskor
+- completedAt = null visszatervezéskor és carry-over esetén
+
+**SignalR broadcast javítások:**
+- Minden broadcast explicit rowVersion = entity.xmin névvel küldi az értéket
+- C# shorthand property syntax (entity.Xmin) helyett explicit naming szükséges
+- Frontend handleColumnsReordered position szerinti rendezést végez a store frissítéskor (kiemelne mert ez több kihívás volt mint vártam)
 
 ---
 
@@ -2089,34 +2102,49 @@ Előnyök:
 - PostgreSQL -> közös adatbázis
 - MinIO -> közös fájltárolás
 - JWT -> stateless autentikáció
-
-**Nginx load balancer konfiguráció:**
-upstream backend {
-    least_conn;
-    ... -- instance-ok
-}
+- Traefik -> automatikus round-robin load balancing
 
 **Dokploy replika beállítás:**
 deploy:
-  replicas: 3
+  replicas: 2
+
+- container_name eltávolítva (több replika esetén nem használható)
+- Traefik automatikusan észleli az új instance-okat
+- Zero downtime deploy: Traefik csak a működő instance-okra irányít
 
 ---
 
 ### Implementációs sorrend
-1. RowVersion mező hozzáadása: Task, Column, Sprint, Board + migration
-2. DbUpdateConcurrencyException kezelés az érintett service metódusokban
-3. Serializable tranzakció: Lexorank rebalance
-4. Serializable tranzakció: Sprint aktiválás
-5. Presigned URL implementáció MinIO-val
-6. Nginx load balancer konfiguráció
-7. Dokploy replika beállítás (replicas: 3)
-8. Tesztelés: több instance párhuzamos kérésekkel
+
+**Elvégzett:**
+1.  xmin system column konfiguráció: Task, Column, Sprint, Board
+2.  DbUpdateConcurrencyException kezelés minden érintett service-ben
+3.  Serializable tranzakció: RebalanceColumnAsync, OrderColumnsAsync
+4.  Serializable tranzakció: Sprint lifecycle metódusok
+5.  rowVersion propagálás minden SignalR broadcastban
+6.  Frontend API interface-ek frissítése (byte[]  -> number)
+7.  Frontend store handle metódusok rowVersion propagálással
+8.  Frontend komponensek rowVersion küldéssel
+9.  Dokploy replika beállítás (replicas: 2)
+10. Sprint lifecycle TaskMoved broadcast javítás
+11. handleColumnsReordered rendezési bug javítás
+
+**Következő:**
+12. Presigned URL file upload (MinIO presigned URL)
+13. ProjectCounter race condition fix
+14. Tesztelés: párhuzamos kérések több instance-szal
 
 ### Várható előnyök
 - Konkurens módosítások biztonságosan kezelve
 - Horizontálisan skálázható backend
 - File upload instance-független
 - Production-ready architektúra
+
+### Tanulságok
+- PostgreSQL xmin system column natív concurrency token, de EF Core migration-ben manuálisan kell kezelni
+- C# shorthand property syntax SignalR broadcast-ban helytelen névvel küldi az adatot -> explicit naming szükséges
+- [Timestamp] byte[] SQL Server specifikus, PostgreSQL-en nem működik
+- Traefik Dokploy-ban automatikusan kezeli a load balancingot, külön Nginx konfiguráció nem szükséges
 
 ---
 
