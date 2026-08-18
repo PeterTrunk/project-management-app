@@ -5,8 +5,8 @@ const apiClient = axios.create({
     baseURL: `${import.meta.env.VITE_API_URL || 'http://localhost:5178'}/api`,
     headers: {
         'Content-Type': 'application/json'
-    },
-    withCredentials: true
+    }
+    //withCredentials: true
 });
 
 // Request interceptor - minden kéréshez hozzáadja a JWT tokent
