@@ -101,9 +101,7 @@ var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@tru
 
 // Service Registration (DI Container)
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString)
-           .LogTo(Console.WriteLine, LogLevel.Information)
-           .EnableSensitiveDataLogging());
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
