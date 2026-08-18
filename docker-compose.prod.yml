@@ -49,7 +49,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     deploy:
-      replicas: 1
+      replicas: 2
     #container_name: pm-api
     restart: unless-stopped
     depends_on:
