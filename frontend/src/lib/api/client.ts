@@ -33,7 +33,7 @@ apiClient.interceptors.response.use(
                     {},
                     { withCredentials: true }
                 );
-
+                console.log('Refresh sikeres, új token:', response.data.token);
                 const newToken = response.data.token;
                 tokenStore.set(newToken);
                 
