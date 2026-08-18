@@ -53,12 +53,15 @@ namespace ProjectManager.API.Services.Auth
             //Token előállítás
             var token = CreateToken(user);
 
+            var refreshMinutes = int.Parse(
+                Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_LIFETIME")!);
+
             //Refresh Token
             var refreshTokenEntry = new RefreshToken
             {
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                ExpiresAt = DateTime.UtcNow.AddMinutes(refreshMinutes)
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
@@ -86,12 +89,16 @@ namespace ProjectManager.API.Services.Auth
             var key = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(
                 Environment.GetEnvironmentVariable("JWT_SECRET")!));
+
+            var expiryMinutes = int.Parse(
+                Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")!);
+
             //Token összerakása
             var token = new JwtSecurityToken(
                 issuer: Environment.GetEnvironmentVariable("JWT_ISSUER"),
                 audience: Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
                 claims: claims,
-                expires: DateTime.UtcNow.AddDays(7),
+                expires: DateTime.UtcNow.AddMinutes(expiryMinutes),
                 signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
             );
 
