@@ -83,6 +83,7 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
+      JWT_REFRESH_TOKEN_LIFETIME: ${JWT_REFRESH_TOKEN_LIFETIME}
     networks:
       - dokploy-network
       - pma-internal
@@ -106,8 +107,9 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${API_BASE_URL}
-        VITE_SIGNALR_KEEPALIVE_ENABLED: "true"
-        VITE_SIGNALR_KEEPALIVE_SECONDS: "15"
+        VITE_SIGNALR_KEEPALIVE_ENABLED: ${VITE_SIGNALR_KEEPALIVE_ENABLED}
+        VITE_SIGNALR_KEEPALIVE_SECONDS: ${VITE_SIGNALR_KEEPALIVE_SECONDS}
+        VITE_JWT_ACCESS_TOKEN_LIFETIME: ${JWT_EXPIRY_MINUTES}
     container_name: pm-frontend
     restart: unless-stopped
     depends_on:
