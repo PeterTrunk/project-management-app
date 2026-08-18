@@ -2165,6 +2165,59 @@ Ennél projektnél jelenleg túlzás, architektúra felkészített rá, akkor le
 
 ---
 
+#### Rate Limiting
+**Probléma több replikával:**
+
+IP/email alapú számolás instance-onként történne
+- Round-robin miatt mindkét instance külön számolja
+- 2 replika esetén duplájára nő az effektív limit
+- Megoldás: Redis alapú distributed rate limiting
+
+**Implementáció — egyedi Redis megoldás:**
+
+**RateLimitService:**
+- Redis INCR + EXPIRE kombináció
+- Ha count == 1 -> első kísérlet -> window indítása
+- Ha count > maxAttempts -> limitálva
+
+```csharp
+// IRateLimitService:
+Task<bool> IsRateLimitedAsync(string key, int maxAttempts, TimeSpan window);
+```
+
+**Limitált endpointok:**
+- Login: 5 kísérlet / 15 perc / email alapú
+- Forgot password: 3 kísérlet / 1 óra / email alapú
+- Register: 5 kísérlet / 1 óra / IP alapú
+(email helyett IP mert regisztrációkor még nincs fiók)
+
+**Miért email alapú és nem IP?**
+Login/Forgot password esetén:
+- IP alapú: VPN-nel megkerülhető
+- Email alapú: konkrét fiókot véd
+- Célzott brute force ellen hatékonyabb
+
+Register esetén:
+- Email minden kísérletnél más lehet
+- IP alapú limitálás hatékonyabb spam ellen
+
+**Redis key struktúra:**
+- login_attempts:{email}
+- forgot_password_attempts:{email}
+- register_attempts:{ip}
+
+**Implementációs sorrend:**
+- IRateLimitService + RateLimitService (Redis INCR/EXPIRE)
+- AuthService: Login + ForgotPassword rate limiting
+- AuthController: Register rate limiting (IP kinyerése)
+- Tesztelés: limit elérése után 429 visszaadása
+
+**HTTP státuszkód:**
+429 Too Many Requests + Retry-After header
+- Frontend: "Túl sok kísérlet, próbáld újra X perc múlva!"
+
+---
+
 #### Horizontális Skálázás
 
 **Jelenlegi architektúra:**
