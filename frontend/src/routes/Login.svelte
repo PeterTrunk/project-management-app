@@ -19,8 +19,8 @@
             }
 
             finishLogin(response);
-        } catch (e) {
-            error = "Hibás email vagy jelszó!";
+        } catch (e: any) {
+            error = e.response?.data ?? "Hibás email vagy jelszó!";
         }
     }
 
@@ -28,8 +28,8 @@
         try {
             const response = await loginWithTotpAsync({ email, password, totpToken });
             finishLogin(response);
-        } catch (e) {
-            error = "Érvénytelen TOTP token!";
+        } catch (e: any) {
+            error = e.response?.data ?? "Érvénytelen TOTP token!";
         }
     }
 
