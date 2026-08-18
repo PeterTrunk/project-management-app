@@ -2065,19 +2065,103 @@ Kritikus műveleteknél ahol üzleti szabály sérülhet vagy több sor módosul
 - Párhuzamos feltöltések memory exhaustion-t okozhatnak
 - Nem skálázható több instance esetén
 
-**Presigned URL flow:**
-1. Client -> API: "Szeretnék feltölteni egy fájlt"
-2. API -> MinIO: Generálj presigned URL-t (15 percre)
-3. API -> Client: presigned URL visszaadása
-3. Client -> MinIO: Direkt feltöltés (bypass-olja az API-t!)
-4. Client -> API: "Kész, itt a storage key"
-5. API -> DB: Attachment rekord létrehozása
+**Aszimmetrikus architektúra:**
 
-Előnyök:
-- API instance nem látja a file adatokat
-- Nincs memory spike
-- MinIO kezeli közvetlenül a nagy fájlokat
-- Több instance esetén is működik
+Feltöltés: Client -> MinIO (direkt, API bypass-olva)
+Letöltés: Client -> API -> MinIO (streaming proxy, friss auth-ellenőrzéssel)
+
+A két irány különböző kockázati profillal rendelkezik ezért különböző védelmi mechanizmust kap:
+- Feltöltésnél a kockázati ablak rövid életű (2 perc) és jól behatárolható
+- Letöltésnél nincs megosztható/kiszivárogtatható URL, minden kérés friss auth-ellenőrzésen megy át
+
+**Feltöltési flow:**
+1. Client -> API: fileName, contentType, fileSize
+2. API: jogosultság + fájlméret + content-type whitelist ellenőrzés
+3. API -> MinIO: presigned PUT URL generálás (2 perces TTL)
+4. API -> Client: presignedUrl, storageKey, expiresAt
+  - PresignedUrlLog DB bejegyzés létrehozása (orphan cleanup-hoz)
+5. Client -> MinIO: direkt feltöltés (bypass-olja az API-t!)
+6. Client -> API: confirm (storageKey, fileName, contentType, fileSize)
+7. API -> MinIO: StatObject -> tényleges méret/típus ellenőrzés
+  (ez a tényleges méretkorlát-kikényszerítés, presigned PUT nem támogatja)
+8. API -> DB: Attachment rekord létrehozása
+9. API -> SignalR broadcast
+
+**Letöltési flow:**
+1. Client -> API: GET /attachments/{id}/download (JWT-vel)
+2. API: friss jogosultság ellenőrzés (project tagság)
+3. API -> MinIO: stream lekérés
+4. API -> Client: chunk-onkénti streaming, Content-Disposition: attachment -> böngésző letöltésre kényszeríti (stored XSS védelem scan nélkül)
+
+**Endpoint kontraktusok:**
+
+Presigned URL generálás:
+  POST /api/projects/{projectId}/tasks/{taskId}/attachments/presigned
+  Request: { fileName, contentType, fileSize }
+  Response: { presignedUrl, storageKey, expiresAt }
+
+
+Confirm:
+  POST /api/projects/{projectId}/tasks/{taskId}/attachments/confirm
+  Request: { storageKey, fileName, contentType, fileSize }
+  Response: AttachmentResponseDto
+  Védelem: unique constraint storageKey-en + duplikált confirm ellenőrzés
+
+
+Download:
+  GET /api/projects/{projectId}/tasks/{taskId}/attachments/{id}/download
+  - Streaming proxy, sosem látja a kliens a MinIO URL-t
+  - Content-Disposition: attachment amely böngészőt letöltésre kényszeríti
+  - X-Content-Type-Options: nosniff -> MIME-sniffing védelem
+
+**MinIO CORS konfiguráció:**
+Community Edition -> csak globális CORS (nem per-bucket)
+MINIO_API_CORS_ALLOW_ORIGIN: "https://app.trunkpeter.com"
+Elegendő mert csak egy bucket van
+
+**Orphan fájlok kezelése:**
+- Cleanup job óránként fut
+- Csak azokat törli ahol expiresAt + 15 perces puffer már lejárt
+  (edge case: késett confirm hálózati döcögés esetén)
+- PresignedUrlLog.Confirmed = false + expiresAt + 15 perc < now => törlés
+
+PresignedUrlLog tábla:
+
+storageKey, expiresAt, confirmed (bool)
+Ha expiresAt lejárt + confirmed = false -> MinIO objektum törlése
+
+**Adatbázis változások:**
+Attachment tábla:
+- StorageKey: unique constraint (duplikált confirm ellen)
+
+PresignedUrlLog tábla (új):
+- StorageKey, ExpiresAt, Confirmed, CreatedAt
+
+**Ami most ki lesz hagyva (késöbb még ráépíthető):**
+- Karantén/scan workflow
+- pending_scan/approved/rejected státuszok
+- Vírusellenőrzés
+Ennél projektnél jelenleg túlzás, architektúra felkészített rá, akkor lenne ajánlott ha tényleges piacra lépésröl lenne szó!
+
+**Implementációs sorrend:**
+1. docker-compose.prod.yml: MINIO_API_CORS_ALLOW_ORIGIN
+2. PresignedUrlLog model + migration + unique constraint StorageKey-en
+3. Presigned PUT endpoint (backend)
+4. Confirm endpoint (backend)
+5. Download streaming proxy javítás (Content-Disposition: attachment)
+6. Orphan cleanup job (IHostedService)
+7. Frontend: új feltöltési flow
+8. Tesztelés
+
+**Előnyök:**
+
+- API memória nem terhelt feltöltésnél
+- Skálázható több instance esetén
+- Friss auth-ellenőrzés minden letöltésnél
+- Stored XSS védelem (Content-Disposition: attachment)
+- Duplikált confirm védelem (unique constraint + ellenőrzés)
+- Orphan fájlok cleanup-ja
+- Karantén workflow later ráépíthető
 
 ---
 
