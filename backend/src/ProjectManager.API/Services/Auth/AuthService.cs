@@ -2,11 +2,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OtpNet;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EmailService;
+using ProjectManager.API.Services.RateLimit;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -18,19 +20,28 @@ namespace ProjectManager.API.Services.Auth
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
         private readonly IEmailService _emailService;
+        private readonly IRateLimitService _rateLimitService;
 
 
         public AuthService(
             AppDbContext context, 
             ICurrentUserService currentUserService, 
-            IEmailService emailService)
+            IEmailService emailService,
+            IRateLimitService rateLimitService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _emailService = emailService;
+            _rateLimitService = rateLimitService;
         }
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
-        {   
+        {
+            //Rate limiting
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"login:{dto.Email}", 5, TimeSpan.FromMinutes(15));
+            if (isLimited)
+                throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
+
             //Db ellenörzése
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Email == dto.Email);
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
@@ -105,12 +116,17 @@ namespace ProjectManager.API.Services.Auth
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
+        public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto, string ipAddress)
         {
             if(await _context.Users.AnyAsync(u => u.Email == dto.Email))
             {
                 throw new Exception("Ez az email már foglalt!");
             }
+
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"register:{ipAddress}", 5, TimeSpan.FromHours(1));
+            if (isLimited)
+                throw new RateLimitException($"Túl sok regisztrációs kísérlet. Próbáld újra {retryAfter} másodperc múlva!");
 
             User user = new User();
             user.Email = dto.Email;
@@ -319,6 +335,11 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
         {
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"login:{dto.Email}", 5, TimeSpan.FromMinutes(15));
+            if (isLimited)
+                throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 throw new Exception("Hibás email vagy jelszó!");
@@ -396,6 +417,11 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task ForgotPasswordAsync(string email)
         {
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"forgot_password:{email}", 3, TimeSpan.FromHours(1));
+            if (isLimited)
+                throw new RateLimitException($"Meghaladtad a maximális jelszó változtatási kisérletek számát!. Próbáld újra {retryAfter} másodperc múlva!");
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             //Biztonsági okokból ne jelezzük ha nem létezik a user
             if (user == null) return;

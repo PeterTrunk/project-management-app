@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Services.Auth;
 using System.Security.Claims;
@@ -12,8 +13,7 @@ namespace ProjectManager.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
-        
-        
+
         public AuthController(IAuthService authservice)
         {
             _authService = authservice;
@@ -26,16 +26,21 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var response = await _authService.RegisterAsync(dto);
+                var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var response = await _authService.RegisterAsync(dto, ip);
                 SetRefreshTokenCookie(response.RefreshToken);
                 response.RefreshToken = null!;
                 return Created(string.Empty, response);
+            }
+            catch (RateLimitException ex)
+            {
+                return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
             }
-            
+
         }
 
         [HttpPost("login")]
@@ -52,6 +57,10 @@ namespace ProjectManager.API.Controllers
                     response.RefreshToken = null!;
                 }
                 return Ok(response);
+            }
+            catch (RateLimitException ex)
+            {
+                return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
@@ -121,7 +130,6 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
-
                 return BadRequest(ex.Message);
             }
         }
@@ -233,6 +241,10 @@ namespace ProjectManager.API.Controllers
                 result.RefreshToken = null!;
                 return Ok(result);
             }
+            catch (RateLimitException ex)
+            {
+                return StatusCode(429, ex.Message);
+            }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
@@ -281,6 +293,10 @@ namespace ProjectManager.API.Controllers
                 await _authService.ForgotPasswordAsync(dto.Email);
                 // Mindig OK-t adunk vissza biztonsági okokból (ne derüljön ki hogy létezik-e az email)
                 return Ok("Ha az email cím regisztrált, küldtünk egy jelszó visszaállítási linket!");
+            }
+            catch (RateLimitException ex)
+            {
+                return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {

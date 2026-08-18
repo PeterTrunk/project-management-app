@@ -28,6 +28,7 @@ using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectService;
 using ProjectManager.API.Services.ProjectTaskService;
+using ProjectManager.API.Services.RateLimit;
 using ProjectManager.API.Services.SprintService;
 using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
@@ -145,11 +146,18 @@ var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
 var signalRBuilder = builder.Services.AddSignalR();
 if (!string.IsNullOrEmpty(redisConnection))
 {
+    //SignalR backplane
     signalRBuilder.AddStackExchangeRedis(redisConnection, options =>
     {
         options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
     });
+
+    //Rate limiting-hez külön regisztráció multiplexerként
+    var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
+    builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
 }
+
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 builder.Services.AddSwaggerGen(options =>
 {
