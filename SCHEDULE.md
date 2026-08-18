@@ -2029,7 +2029,7 @@ PostgreSQL xmin system column használata concurrency token-ként:
 - Minden sornak van egy implicit xmin értéke ami automatikusan változik UPDATE-nél
 - EF Core IsConcurrencyToken() + HasColumnName("xmin") + HasColumnType("xid") konfiguráció
 - [Timestamp] attribútum NEM használható PostgreSQL-en (SQL Server specifikus)
-- Migration: AddColumn<uint>("xmin") sorokat el kell távolítani — xmin system column, nem kell létrehozni
+- Migration: AddColumn<uint>("xmin") sorokat el kell távolítani - xmin system column, nem kell létrehozni
 - uint típus a C# modellben, number a TypeScript interface-ekben
 - Frontend minden szükséges API hívásban elküldi a rowVersion-t
 - Backend OriginalValues["xmin"] beállítás -> EF Core ellenőrzi mentéskor
@@ -2248,18 +2248,19 @@ policy.WithOrigins(
 
 #### Cloudflare beállítások
 - SSL/TLS Full Strict mód -> Secure flag működik
-- Cache bypass: api.trunkpeter.com/api/auth/* -> ne cache-elje
+- Cache bypass nem szükséges: POST kérések és cookie-s response-ok
+  automatikusan ki vannak zárva a Cloudflare cache-ből
 - Cookie-kat Cloudflare nem módosítja -> nem kell külön konfiguráció
 
 #### SignalR kompatibilitás
-- SignalR csak az access tokent használja (query string)
-- Access token memóriában marad -> SignalR működik
-- Access token lejártakor interceptor megújítja -> SignalR újracsatlakozik
-- Nem igényel SignalR változtatást
+- SignalR accessTokenFactory tokenStore.get()-et hív -> mindig friss token
+- Affinity cookie biztosítja a negotiate/connect routing konzisztenciáját
+- Token refresh interceptor + proaktív megújítás -> SignalR nem szakad meg
+- Részletek: SignalR multi-replica fix szekció
 
 ---
 
-### 2. fázis implementáció (SameSite=Strict) - (1. fázis után meggondolandó)
+### 2. fázis implementáció (SameSite=Strict) - (1. fázis után meggondolandó - Elhalasztva)
 - Előfeltétel: 1. fázis teljes implementációja
 
 **Változtatások az 1. fázisra épülve:**
@@ -2277,7 +2278,7 @@ policy.WithOrigins(
 ### Implementációs sorrend (1. fázis)
 - Program.cs: Cookie policy + CORS WithOrigins + AllowCredentials
 - AuthController: refresh token -> HttpOnly Cookie
-- AuthResponseDto: RefreshToken mező törlése
+- AuthResponseDto: RefreshToken mező törlése (végül megmaradt, de nullozva lett, így nem lesz ténylegesen kiküldve)
 - Frontend: apiClient withCredentials: true
 - Frontend: authStore localStorage cleanup
 - Frontend: komponensek frissítése
@@ -2296,6 +2297,78 @@ policy.WithOrigins(
 **2. fázis után:**
 - Access token: memória (authStore) <- XSS ellen védett
 - Refresh token: HttpOnly Cookie + SameSite=Strict <- maximális védelem
+
+### Elvégzett implementáció
+
+### 1. fázis:
+
+### SignalR multi-replica fix
+
+#### Probléma
+Több backend replika esetén a SignalR kapcsolat megszakadt:
+Negotiate (HTTP POST) -> Traefik -> api-1 -> connection ID létrejön
+WebSocket connect -> Traefik -> api-2 -> "No Connection with that ID" -> 404
+A Redis backplane csak a broadcast-ot osztja meg instance-ok között, a connection ID-kat nem.
+
+#### Megoldás - Traefik affinity cookie
+Rövid életű (30 másodperc) affinity cookie biztosítja hogy a negotiate és WebSocket connect ugyanarra az instance-ra kerüljön. Utána lejár -> a Redis backplane kezeli a broadcastot.
+
+#### Miért nem sticky session?
+Végtelen életű sticky session -> egy instance-hoz kötné a klienst
+- Ha az instance meghal -> kapcsolat elveszik (bár reconnection logika van, de playback stb nincs)
+- Nem igazi horizontális skálázás
+
+30 másodperces affinity cookie:
+- "Csak" a negotiate/connect időtartamára sticky
+- Utána round-robin load balancing visszaáll
+- Redis backplane kezeli a broadcastot
+- Fallback transport (SSE, LongPolling) megmarad
+
+
+#### Token refresh és proaktív megújítás
+
+Probléma: ha a user nem csinál semmit -> access token lejár
+- Következő API kérés 401 -> interceptor megújítja
+- DE ha a SignalR kapcsolat közben szakad meg -> lejárt tokennel próbál reconnect-elni
+
+Megoldás: tokenRefreshService.ts
+- 1 perccel lejárat előtt automatikusan megújítja az access tokent
+- scheduleTokenRefresh() login után, cancelTokenRefresh() logout után
+- SignalR accessTokenFactory mindig tokenStore.get()-et hív -> mindig friss token
+
+
+#### JWT konfiguráció
+
+- ClockSkew = TimeSpan.Zero -> kötelező! (Problémát okoz az expiriti paraméterezése esetén)
+Alapértelmezetten 5 perces "grace period" van -> token látszólag nem jár le
+- Refresh interceptor nem aktiválódik az elvárt időben
+
+- JWT_EXPIRY_MINUTES env var -> access token élettartam (perc)
+- JWT_REFRESH_TOKEN_LIFETIME env var -> refresh token élettartam (perc)
+- VITE_JWT_ACCESS_TOKEN_LIFETIME -> frontend proaktív refresh ütemezéséhez
+(docker-compose.prod.yml-ben: VITE_JWT_ACCESS_TOKEN_LIFETIME: ${JWT_EXPIRY_MINUTES})
+
+#### SignalR kompatibilitás (frissítve)
+
+accessTokenFactory: () => tokenStore.get() ?? token
+- Mindig a legfrissebb access tokent adja -> reconnect esetén is
+
+- Affinity cookie -> negotiate + WebSocket connect ugyanarra az instance-ra kerül
+- Redis backplane -> broadcast instance-ok között
+- tokenRefreshService -> proaktív token megújítás -> SignalR nem szakad meg lejárt token miatt
+(egy fontos hiányosság: nincs playback vagy stream, egyszerű lehetőség: reconnect esetén teljes adatlekérés, egyenlőre nincs implementálva)
+
+#### Implementációs sorrend (elvégzett)
+- tokenStore.ts -> in-memory access token tárolás
+- authStore.ts -> localStorage cleanup
+- apiClient.ts -> withCredentials: true + refresh interceptor + ClockSkew fix
+- tokenRefreshService.ts -> proaktív token megújítás
+- signalRService.ts -> accessTokenFactory -> tokenStore.get()
+- AuthController -> HttpOnly cookie refresh token
+- JWT_EXPIRY_MINUTES, JWT_REFRESH_TOKEN_LIFETIME env vars
+- docker-compose.prod.yml -> affinity cookie + VITE_JWT_ACCESS_TOKEN_LIFETIME build arg
+
+---
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
