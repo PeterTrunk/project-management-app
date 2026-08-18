@@ -34,7 +34,7 @@
     }
 
     function finishLogin(response: any) {
-        login(response.token, response.refreshToken, {
+        login(response.token, {
             userId: response.userId,
             email: response.email,
             displayName: response.displayName,

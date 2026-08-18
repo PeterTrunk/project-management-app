@@ -1,4 +1,5 @@
 import * as signalR from '@microsoft/signalr';
+import { tokenStore } from '../stores/tokenStore';
 
 const HUB_URL = import.meta.env.VITE_API_URL 
     ? `${import.meta.env.VITE_API_URL}/hubs/project`
@@ -14,7 +15,7 @@ class SignalRService {
     async connect(token: string) {
         const builder = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
-                accessTokenFactory: () => token
+                accessTokenFactory: () => tokenStore.get() ?? token
             })
             .withAutomaticReconnect([0, 2000, 5000, 10000]);
 

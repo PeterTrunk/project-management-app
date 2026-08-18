@@ -83,6 +83,12 @@ var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
 var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
     ?? throw new InvalidOperationException("JWT_AUDIENCE nincs beállítva!");
 
+var jwtExpiryMinutes = Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")
+    ?? throw new InvalidOperationException("JWT_EXPIRY_MINUTES nincs beállítva!");
+
+var jwtRefreshTokenLifetime = Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_LIFETIME")
+    ?? throw new InvalidOperationException("JWT_REFRESH_TOKEN_LIFETIME nincs beállítva!");
+
 var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? throw new InvalidOperationException("DATABASE_URL nincs beállítva!");
 
@@ -110,6 +116,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,

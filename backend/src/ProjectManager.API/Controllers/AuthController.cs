@@ -27,6 +27,7 @@ namespace ProjectManager.API.Controllers
             try
             {
                 var response = await _authService.RegisterAsync(dto);
+                SetRefreshTokenCookie(response.RefreshToken);
                 return Created(string.Empty, response);
             }
             catch (Exception ex)
@@ -44,6 +45,8 @@ namespace ProjectManager.API.Controllers
             try
             {
                 var response = await _authService.LoginAsync(dto);
+                if (!response.RequiresTotp)
+                    SetRefreshTokenCookie(response.RefreshToken);
                 return Ok(response);
             }
             catch (Exception ex)
@@ -55,12 +58,16 @@ namespace ProjectManager.API.Controllers
         [HttpPost("refresh")]
         [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<AuthResponseDto>> RefreshAsync([FromBody] RefreshTokenDto dto)
+        public async Task<ActionResult<AuthResponseDto>> RefreshAsync()
         {
             try
             {
+                var refreshToken = Request.Cookies["refreshToken"];
+                if (string.IsNullOrEmpty(refreshToken))
+                    return BadRequest("Refresh token hiányzik!");
 
-                var response = await _authService.RefreshTokenAsync(dto.RefreshToken);
+                var response = await _authService.RefreshTokenAsync(refreshToken);
+                SetRefreshTokenCookie(response.RefreshToken);
                 return Ok(response);
             }
             catch (Exception ex)
@@ -73,12 +80,19 @@ namespace ProjectManager.API.Controllers
         [HttpPost("logout")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> LogoutAsync([FromBody] RefreshTokenDto dto)
+        public async Task<ActionResult> LogoutAsync()
         {
             try
             {
 
-                await _authService.LogoutAsync(dto.RefreshToken);
+                var refreshToken = Request.Cookies["refreshToken"];
+                if (!string.IsNullOrEmpty(refreshToken))
+                    await _authService.LogoutAsync(refreshToken);
+
+                Response.Cookies.Delete("refreshToken", new CookieOptions
+                {
+                    Path = "/api/auth"
+                });
                 return Ok();
             }
             catch (Exception ex)
@@ -210,6 +224,7 @@ namespace ProjectManager.API.Controllers
             try
             {
                 var result = await _authService.LoginWithTotpAsync(dto);
+                SetRefreshTokenCookie(result.RefreshToken);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -281,6 +296,23 @@ namespace ProjectManager.API.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private void SetRefreshTokenCookie(string refreshToken)
+        {
+            var isProd = HttpContext.RequestServices
+                .GetRequiredService<IWebHostEnvironment>()
+                .IsProduction();
+
+            Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = isProd,
+                SameSite = isProd ? SameSiteMode.None : SameSiteMode.Lax,
+                Domain = isProd ? ".trunkpeter.com" : null,
+                Path = "/api/auth",
+                Expires = DateTime.UtcNow.AddDays(30)
+            });
         }
     }
 }

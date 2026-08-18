@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { tokenStore } from './tokenStore';
 
 // Ki van bejelentkezve? Milyen adatokat tárolunk?
 interface User {
@@ -11,30 +12,26 @@ interface User {
 
 interface AuthState {
     token: string | null;
-    refreshToken: string | null;
     user: User | null;
     isAuthenticated: boolean;
 }
 
 //Kezdeti állapot
 const initialState: AuthState = {
-    token: localStorage.getItem('token'),
-    refreshToken: localStorage.getItem('refreshToken'),
+    token: null,
     user: null,
-    isAuthenticated: !!localStorage.getItem('token')
+    isAuthenticated: false
 };
 
 //initialState példányosítása
 export const authStore = writable<AuthState>(initialState);
 
-export function login(token: string, refreshToken: string, user: User) {
-    localStorage.setItem('token', token);
-    localStorage.setItem('refreshToken', refreshToken);
-    authStore.set({ token, refreshToken, user, isAuthenticated: true });
+export function login(token: string, user: User) {
+    tokenStore.set(token);
+    authStore.set({ token, user, isAuthenticated: true });
 }
 
 export function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    authStore.set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+    tokenStore.clear();
+    authStore.set({ token: null, user: null, isAuthenticated: false });
 }
