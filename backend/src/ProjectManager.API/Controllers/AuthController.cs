@@ -28,6 +28,7 @@ namespace ProjectManager.API.Controllers
             {
                 var response = await _authService.RegisterAsync(dto);
                 SetRefreshTokenCookie(response.RefreshToken);
+                response.RefreshToken = null!;
                 return Created(string.Empty, response);
             }
             catch (Exception ex)
@@ -46,7 +47,10 @@ namespace ProjectManager.API.Controllers
             {
                 var response = await _authService.LoginAsync(dto);
                 if (!response.RequiresTotp)
+                {
                     SetRefreshTokenCookie(response.RefreshToken);
+                    response.RefreshToken = null!;
+                }
                 return Ok(response);
             }
             catch (Exception ex)
@@ -68,6 +72,7 @@ namespace ProjectManager.API.Controllers
 
                 var response = await _authService.RefreshTokenAsync(refreshToken);
                 SetRefreshTokenCookie(response.RefreshToken);
+                response.RefreshToken = null!;
                 return Ok(response);
             }
             catch (Exception ex)
@@ -225,6 +230,7 @@ namespace ProjectManager.API.Controllers
             {
                 var result = await _authService.LoginWithTotpAsync(dto);
                 SetRefreshTokenCookie(result.RefreshToken);
+                result.RefreshToken = null!;
                 return Ok(result);
             }
             catch (Exception ex)
