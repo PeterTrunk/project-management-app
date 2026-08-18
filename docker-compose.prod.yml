@@ -100,6 +100,12 @@ services:
       - "traefik.http.routers.api-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie=true"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.name=signalr_affinity"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.httponly=true"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.secure=true"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.samesite=none"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.maxage=30"
   
   frontend:
     build:
