@@ -11,10 +11,6 @@ interface RegisterRequest {
     password: string;
 }
 
-interface RefreshTokenRequest {
-    refreshToken: string;
-}
-
 interface ChangePasswordRequest {
     currentPassword: string;
     newPassword: string;
@@ -32,7 +28,6 @@ interface UserProfileResponse {
 
 interface AuthResponse {
     token: string;
-    refreshToken: string;
     userId: string;
     email: string;
     displayName: string;
@@ -62,13 +57,13 @@ export async function registerAsync(data: RegisterRequest): Promise<AuthResponse
     return response.data;
 }
 
-export async function refreshAsync(data: RefreshTokenRequest): Promise<AuthResponse> {
-    const response = await apiClient.post('/auth/refresh', data);
+export async function refreshAsync(): Promise<AuthResponse> {
+    const response = await apiClient.post('/auth/refresh');
     return response.data;
 }
 
-export async function logoutAsync(refreshToken: string): Promise<void> {
-    await apiClient.post('/auth/logout', { refreshToken});
+export async function logoutAsync(): Promise<void> {
+    await apiClient.post('/auth/logout');
 }
 
 export async function meAsync(): Promise<AuthResponse> {

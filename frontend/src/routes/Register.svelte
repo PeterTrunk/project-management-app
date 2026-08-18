@@ -56,7 +56,7 @@
         try {
             const response = await registerAsync({ email, displayName, password });
             // Store-ba mentjük a usert
-            login(response.token, response.refreshToken, {
+            login(response.token, {
                 userId: response.userId,
                 email: response.email,
                 displayName: response.displayName,

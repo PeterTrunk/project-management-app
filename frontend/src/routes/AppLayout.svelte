@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
+    import { onDestroy } from 'svelte';
     import { signalRService } from '../lib/services/signalRService';
     import { push } from 'svelte-spa-router';
-    import { meAsync, resendVerificationAsync } from '../lib/api/authApi';
+    import { meAsync, resendVerificationAsync, logoutAsync } from '../lib/api/authApi';
     import { login } from '../lib/stores/authStore';
     import { authStore, logout } from '../lib/stores/authStore';
     import { getProjectsAsync } from '../lib/api/projectApi';
@@ -21,6 +21,9 @@
     import { setColumns } from '../lib/stores/boardStore';
     import { getSprintsAsync } from '../lib/api/sprintApi';
     import { setSprints } from '../lib/stores/sprintStore';
+
+    import { tokenStore } from '../lib/stores/tokenStore';
+    import { scheduleTokenRefresh, cancelTokenRefresh } from '../lib/services/tokenRefreshService';
 
     import ProjectOverview from '../lib/components/ProjectOverview.svelte';
     import ProjectSettings from '../lib/components/ProjectSettings.svelte';
@@ -71,8 +74,6 @@
     let isProjectCreationOpen = false;
     let isUserSettingsOpen = false;
     
-    let token = '';
-    
     let signalRConnected = false;
 
     authStore.subscribe(async (state) => {
@@ -121,13 +122,6 @@
         }
     }
 
-    onMount(async () => {
-        if (token) {
-            await signalRService.connect(token);
-            registerSignalREvents();    
-        }
-    });
-
     onDestroy(async () => {
         unregisterSignalREvents();
         await signalRService.disconnect();
@@ -136,10 +130,9 @@
     async function loadCurrentUser() {
         try {
             const user = await meAsync();
-            
+            const currentToken = tokenStore.get() ?? '';
             login(
-                localStorage.getItem('token') ?? '',
-                localStorage.getItem('refreshToken') ?? '',
+                currentToken,
                 {
                     userId: user.userId,
                     email: user.email,
@@ -148,6 +141,7 @@
                     isEmailVerified: user.isEmailVerified ?? false
                 }
             );
+            scheduleTokenRefresh();
         } catch (e) {
             // token lejárt, az interceptor kezeli
         }
@@ -157,14 +151,15 @@
     let displayName = '';
     authStore.subscribe(state => {
         displayName = state.user?.displayName ?? '';
-        token = state.token ?? '';
     });
 
     async function handleLogout() {
         unregisterSignalREvents();
         await signalRService.disconnect();
         signalRConnected = false;
+        cancelTokenRefresh();
         logout();
+        await logoutAsync();
         push('/');
     }
 
