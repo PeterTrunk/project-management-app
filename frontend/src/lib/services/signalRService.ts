@@ -15,6 +15,8 @@ class SignalRService {
     async connect(token: string) {
         const builder = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
+                skipNegotiation: true,
+                transport: signalR.HttpTransportType.WebSockets,
                 accessTokenFactory: () => tokenStore.get() ?? token
             })
             .withAutomaticReconnect([0, 2000, 5000, 10000]);
