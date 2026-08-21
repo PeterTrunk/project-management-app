@@ -343,7 +343,7 @@
                     title={item.label}
                 >
                     <svelte:component this={item.icon} size={18} />
-                    <span class="nav-label">{item.label}</span>
+                    <span class="nav-label" class:hidden={sidebarCollapsed}>{item.label}</span>
                 </button>
             {/each}
         </nav>
@@ -723,6 +723,7 @@
         }
     }
 
+    /*
     @media (max-width: 768px) {
         .sidebar {
             width: 60px;
@@ -733,6 +734,10 @@
         .nav-label {
             display: none;
         }
+    }
+    */
+    .nav-label.hidden {
+        display: none;
     }
 
     .archived-banner {
