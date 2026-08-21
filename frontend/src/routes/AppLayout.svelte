@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
     import { signalRService } from '../lib/services/signalRService';
     import { push } from 'svelte-spa-router';
     import { meAsync, resendVerificationAsync, logoutAsync } from '../lib/api/authApi';
@@ -59,6 +59,20 @@
     let resendSent = false;
 
     let sidebarCollapsed = false;
+    let manuallyToggled = false;
+
+    const SIDEBAR_COLLAPSE_BREAKPOINT = 768;
+
+    function syncSidebarWithWidth() {
+        if (!manuallyToggled) {
+            sidebarCollapsed = window.innerWidth <= SIDEBAR_COLLAPSE_BREAKPOINT;
+        }
+    }
+
+    onMount(() => {
+        syncSidebarWithWidth();
+        window.addEventListener('resize', syncSidebarWithWidth);
+    });
 
     const navItems = [
         { view: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -125,6 +139,7 @@
     onDestroy(async () => {
         unregisterSignalREvents();
         await signalRService.disconnect();
+        window.removeEventListener('resize', syncSidebarWithWidth);
     });
 
     async function loadCurrentUser() {
@@ -222,7 +237,13 @@
     <!-- Bal oldal -->
     <aside class="sidebar" class:collapsed={sidebarCollapsed}>
         <!-- Collapse gomb -->
-        <button class="collapse-btn" on:click={() => sidebarCollapsed = !sidebarCollapsed}>
+        <button
+            class="collapse-btn"
+            on:click={() => {
+                sidebarCollapsed = !sidebarCollapsed;
+                manuallyToggled = true;
+            }}
+        >
             {#if sidebarCollapsed}
                 <ChevronRight size={18} />
             {:else}
