@@ -6,6 +6,7 @@ namespace ProjectManager.API.Services.FileStorageService
     public class MinIOFileStorageService : IFileStorageService
     {
         private readonly IMinioClient _minioClient;
+        private readonly IMinioClient _presignedMinioClient;
         private readonly string _bucketName;
         private readonly string _internalEndpoint;
 
@@ -24,12 +25,25 @@ namespace ProjectManager.API.Services.FileStorageService
 
             var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
 
-            _internalEndpoint = $"{(useSSL ? "https" : "http")}://{endpoint}";
+            //Presigned URL-ekhez a publikus endpoint-ot használjuk
+            var presignedEndpoint = !string.IsNullOrEmpty(publicUrl)
+                ? publicUrl.Replace("https://", "").Replace("http://", "")
+                : endpoint;
+            var presignedUseSSL = !string.IsNullOrEmpty(publicUrl) && publicUrl.StartsWith("https://");
 
+            //Két kliens:
+            //1. Belső műveletek (upload, download, delete) ez lesz a belső endpoint
             _minioClient = new MinioClient()
                 .WithEndpoint(endpoint)
                 .WithCredentials(accessKey, secretKey)
                 .WithSSL(useSSL)
+                .Build();
+
+            //2. Presigned URL generálás ez lesz a publikus endpoint
+            _presignedMinioClient = new MinioClient()
+                .WithEndpoint(presignedEndpoint)
+                .WithCredentials(accessKey, secretKey)
+                .WithSSL(presignedUseSSL)
                 .Build();
         }
 
@@ -115,16 +129,7 @@ namespace ProjectManager.API.Services.FileStorageService
                 .WithObject(storageKey)
                 .WithExpiry(expirySeconds);
 
-            var url = await _minioClient.PresignedPutObjectAsync(args);
-
-            //Belső URL cseréje publikus URL-re
-            var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
-            if (!string.IsNullOrEmpty(publicUrl))
-            {
-                url = url.Replace(_internalEndpoint, publicUrl);
-            }
-
-            return url;
+            return await _presignedMinioClient.PresignedPutObjectAsync(args);
         }
 
         public async Task<ObjectInfo?> GetObjectInfoAsync(string storageKey)
