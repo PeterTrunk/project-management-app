@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { getProjectAttachmentsAsync, uploadProjectAttachmentAsync } from '../api/attachmentApi';
+    import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToMinIOAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
     import { getTasksAsync, type TaskResponse } from '../api/taskApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
@@ -14,6 +14,7 @@
     let isUploading = false;
     let uploadError = '';
     let error = '';
+    let uploadProgress = 0;
 
     onMount(async () => {
         await loadAttachments();
@@ -44,19 +45,38 @@
         const input = e.target as HTMLInputElement;
         if (!input.files || input.files.length === 0) return;
 
-        const file = input.files[0];
+        const files = Array.from(input.files);
         isUploading = true;
         uploadError = '';
 
-        try {
-            const uploaded = await uploadProjectAttachmentAsync(projectId, file);
-            attachments = [uploaded, ...attachments];
-        } catch (e: any) {
-            uploadError = 'Hiba történt a feltöltéskor!';
-        } finally {
-            isUploading = false;
-            input.value = '';
+        for (const file of files) {
+            try {
+                // 1. Presigned URL kérés
+                const { presignedUrl, storageKey } = await getProjectPresignedUrlAsync(
+                    projectId, {
+                        fileName: file.name,
+                        contentType: file.type,
+                        sizeBytes: file.size
+                    }
+                );
+
+                // 2. Direkt feltöltés MinIO-ra
+                await uploadToMinIOAsync(presignedUrl, file, (progress) => {
+                    uploadProgress = progress;
+                });
+
+                // 3. Confirm
+                const uploaded = await confirmProjectUploadAsync(projectId, { storageKey });
+                attachments = [uploaded, ...attachments];
+
+            } catch (e: any) {
+                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+            }
         }
+
+        isUploading = false;
+        uploadProgress = 0;
+        input.value = '';
     }
 </script>
 
@@ -64,14 +84,25 @@
     <div class="resources-toolbar">
         <h2>Projekt dokumentumok ({attachments.length})</h2>
         <label class="upload-btn" class:loading={isUploading}>
-            {isUploading ? 'Feltöltés...' : '+ Feltöltés'}
+            {isUploading ? `Feltöltés... ${uploadProgress > 0 ? uploadProgress + '%' : ''}` : '+ Feltöltés'}
             <input
                 type="file"
                 style="display: none"
+                multiple
                 on:change={handleFileUpload}
                 disabled={isUploading}
             />
         </label>
+
+        {#if isUploading && uploadProgress > 0}
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {uploadProgress}%"></div>
+            </div>
+        {/if}
+
+        {#if uploadError}
+            <p class="msg error">{uploadError}</p>
+        {/if}
     </div>
     <div class="resources-content">
         <!-- Projekt szintű attachmentek -->

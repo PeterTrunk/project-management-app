@@ -65,6 +65,7 @@ public class AppDbContext : DbContext
     public DbSet<ProjectInvite> ProjectInvites => Set<ProjectInvite>();
     public DbSet<TaskStatusHistory> TaskStatusHistories => Set<TaskStatusHistory>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<PresignedUrlLog> PresignedUrlLogs => Set<PresignedUrlLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -543,6 +544,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(a => a.UploadedById);
             entity.HasIndex(a => new { a.TaskId, a.AttachmentType });
 
+            entity.HasIndex(a => a.StorageKey)
+                  .IsUnique();
+
             //Foreign keys
             entity.HasOne(a => a.Project)
                   .WithMany(p => p.Attachments)
@@ -766,6 +770,29 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(h => h.ColumnId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PresignedUrlLog>(entity =>
+        {
+            entity.Property(p => p.StorageKey).IsRequired();
+            entity.Property(p => p.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(p => p.ContentType).HasMaxLength(120).IsRequired();
+            entity.Property(p => p.ExpiresAt).IsRequired();
+            entity.Property(p => p.CreatedAt).IsRequired();
+
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.HasIndex(p => p.StorageKey).IsUnique();
+            entity.HasIndex(p => p.Confirmed);
+
+            entity.HasOne(p => p.Project)
+                  .WithMany()
+                  .HasForeignKey(p => p.ProjectId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.CreatedBy)
+                  .WithMany()
+                  .HasForeignKey(p => p.CreatedById)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

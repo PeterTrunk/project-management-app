@@ -6,6 +6,7 @@ using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.FileStorageService;
 
 namespace ProjectManager.API.Services.ProjectService
 {
@@ -15,13 +16,15 @@ namespace ProjectManager.API.Services.ProjectService
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
+        private readonly IFileStorageService _fileStorageService;
 
-        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
+        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService, IFileStorageService fileStorageService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
             _activityService = activityService;
+            _fileStorageService = fileStorageService;
         }
 
         public async Task DeleteProjectAsync(Guid projectId)
@@ -29,8 +32,39 @@ namespace ProjectManager.API.Services.ProjectService
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
                 throw new Exception("Projekt nem található!");
+
+            //MinIO cleanup: összes attachment törlése
+            var attachments = await _context.Attachments
+                .Where(a => a.ProjectId == projectId)
+                .ToListAsync();
+
+            foreach (var attachment in attachments)
+            {
+                try
+                {
+                    await _fileStorageService.DeleteFileAsync(attachment.StorageKey);
+                }
+                catch { } //Ha már nem létezik MinIO-ban, nem gond
+            }
+
+            //Nem confirmed presigned URL-ek MinIO cleanup-ja
+            var unconfirmedLogs = await _context.PresignedUrlLogs
+                .Where(p => p.ProjectId == projectId && !p.Confirmed)
+                .ToListAsync();
+
+            foreach (var log in unconfirmedLogs)
+            {
+                try
+                {
+                    await _fileStorageService.DeleteFileAsync(log.StorageKey);
+                }
+                catch { }
+            }
+
             _context.Projects.Remove(project);
+
             await _context.SaveChangesAsync();
+
             await _hubContext.Clients
                 .Group($"project-{projectId}")
                 .SendAsync("ProjectDeleted", new { projectId });
