@@ -92,6 +92,8 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<AttachmentResponseDto> UploadProjectAttachmentAsync(Guid projectId, Stream fileStream, string fileName, string contentType, long sizeBytes)
         {
+            ValidateFile(contentType, sizeBytes);
+
             var storageKey = _fileStorageService.GenerateStorageKey(projectId, null, fileName);
 
             await _fileStorageService.UploadFileAsync(fileStream, fileName, contentType, storageKey);
@@ -133,6 +135,8 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<AttachmentResponseDto> UploadTaskAttachmentAsync(Guid projectId, Guid taskId, Stream fileStream, string fileName, string contentType, long sizeBytes)
         {
+            ValidateFile(contentType, sizeBytes);
+
             var storageKey = _fileStorageService.GenerateStorageKey(projectId, taskId, fileName);
 
             await _fileStorageService.UploadFileAsync(fileStream, fileName, contentType, storageKey);
@@ -211,6 +215,40 @@ namespace ProjectManager.API.Services.AttachmentService
             if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentType.Spreadsheet;
             if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentType.Document;
             return AttachmentType.Other;
+        }
+
+        private static readonly HashSet<string> AllowedContentTypes = new()
+        {
+            //Képek
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            //Dokumentumok
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            //Táblázatok
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            //Szöveg
+            "text/plain",
+            //Archívum
+            "application/zip",
+            "application/x-zip-compressed"
+        };
+
+        private void ValidateFile(string contentType, long sizeBytes)
+        {
+            var maxSizeMb = int.Parse(
+                Environment.GetEnvironmentVariable("MAX_UPLOAD_SIZE_MB") ?? "64");
+            var maxSizeBytes = maxSizeMb * 1024 * 1024;
+
+            if (sizeBytes > maxSizeBytes)
+                throw new Exception($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
+
+            if (!AllowedContentTypes.Contains(contentType))
+                throw new Exception($"A {contentType} fájltípus nem engedélyezett!");
         }
     }
 }
