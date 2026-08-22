@@ -14,6 +14,7 @@ using ProjectManager.API.Hubs;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.AttachmentService;
 using ProjectManager.API.Services.Auth;
+using ProjectManager.API.Services.BackgroundJobs;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
@@ -325,6 +326,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+//OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
+builder.Services.AddHostedService<OrphanCleanupJob>();
 
 //Middleware hozzáadás
 app.UseRouting();
