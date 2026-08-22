@@ -2091,76 +2091,87 @@ A két irány különböző kockázati profillal rendelkezik ezért különböz�
 1. Client -> API: GET /attachments/{id}/download (JWT-vel)
 2. API: friss jogosultság ellenőrzés (project tagság)
 3. API -> MinIO: stream lekérés
-4. API -> Client: chunk-onkénti streaming, Content-Disposition: attachment -> böngésző letöltésre kényszeríti (stored XSS védelem scan nélkül)
+4. API -> Client: 
+   - Content-Disposition: attachment -> böngésző letöltésre kényszeríti (stored XSS védelem scan nélkül)
+   - X-Content-Type-Options: nosniff -> MIME-sniffing védelem
 
-**Endpoint kontraktusok:**
+**Endpoint megállapodások:**
+Presigned URL generálás (task és projekt szintű):
+- POST /api/projects/{projectId}/tasks/{taskId}/attachments/presigned
+- POST /api/projects/{projectId}/attachments/presigned
+- Request: { fileName, contentType, fileSize }
+- Response: { presignedUrl, storageKey, expiresAt }
 
-Presigned URL generálás:
-  POST /api/projects/{projectId}/tasks/{taskId}/attachments/presigned
-  Request: { fileName, contentType, fileSize }
-  Response: { presignedUrl, storageKey, expiresAt }
+Confirm (task és projekt szintű):
+- POST /api/projects/{projectId}/tasks/{taskId}/attachments/confirm
+- POST /api/projects/{projectId}/attachments/confirm
+- Request: { storageKey }
+- Response: AttachmentResponseDto
+- Védelem: unique constraint storageKey-en + duplikált confirm ellenőrzés
 
+Download (egységes, task és projekt szintű egyaránt):
+- GET /api/projects/{projectId}/attachments/{id}/download
+- Streaming proxy, sosem látja a kliens a MinIO URL-t
+- Content-Disposition: attachment + X-Content-Type-Options: nosniff
 
-Confirm:
-  POST /api/projects/{projectId}/tasks/{taskId}/attachments/confirm
-  Request: { storageKey, fileName, contentType, fileSize }
-  Response: AttachmentResponseDto
-  Védelem: unique constraint storageKey-en + duplikált confirm ellenőrzés
+Delete (egységes):
+- DELETE /api/projects/{projectId}/attachments/{id}
 
-
-Download:
-  GET /api/projects/{projectId}/tasks/{taskId}/attachments/{id}/download
-  - Streaming proxy, sosem látja a kliens a MinIO URL-t
-  - Content-Disposition: attachment amely böngészőt letöltésre kényszeríti
-  - X-Content-Type-Options: nosniff -> MIME-sniffing védelem
-
-**MinIO CORS konfiguráció:**
-Community Edition -> csak globális CORS (nem per-bucket)
-MINIO_API_CORS_ALLOW_ORIGIN: "https://app.trunkpeter.com"
-Elegendő mert csak egy bucket van
+**MinIO konfiguráció:**
+- Community Edition -> csak globális CORS (nem per-bucket)
+- MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_URL}
+- MINIO_SERVER_URL: ${MINIO_PUBLIC_URL} -> publikus presigned URL generáláshoz
+- Két MinIO kliens a backendben:
+  - Belső műveletek (upload, download, delete): minio:9000
+  - Presigned URL generálás: files.trunkpeter.com (signature a publikus URL-re)
+- files.trunkpeter.com Traefik route + Cloudflare DNS A rekord szükséges
 
 **Orphan fájlok kezelése:**
-- Cleanup job óránként fut
+- PresignedUrlLog tábla tárolja a generált presigned URL-eket
+- OrphanCleanupJob (BackgroundService, PeriodicTimer alapú)
+- Default futási intervallum: 24 óra (ORPHAN_CLEANUP_INTERVAL_HOURS env var)
 - Csak azokat törli ahol expiresAt + 15 perces puffer már lejárt
   (edge case: késett confirm hálózati döcögés esetén)
-- PresignedUrlLog.Confirmed = false + expiresAt + 15 perc < now => törlés
-
-PresignedUrlLog tábla:
-
-storageKey, expiresAt, confirmed (bool)
-Ha expiresAt lejárt + confirmed = false -> MinIO objektum törlése
+- Két replika esetén race condition minimális -> EF Core tranzakció véd
 
 **Adatbázis változások:**
-Attachment tábla:
-- StorageKey: unique constraint (duplikált confirm ellen)
+- Attachment tábla: StorageKey unique constraint (duplikált confirm ellen)
+- PresignedUrlLog tábla (új): StorageKey, ExpiresAt, Confirmed, CreatedAt, ProjectId, TaskId
 
-PresignedUrlLog tábla (új):
-- StorageKey, ExpiresAt, Confirmed, CreatedAt
+**Frontend változások:**
+- attachmentApi.ts: presigned URL flow (getPresignedUrlAsync, uploadToMinIOAsync, confirmUploadAsync)
+- Egységes downloadAttachmentAsync és deleteAttachmentAsync (taskId paraméter eltávolítva)
+- TaskDetailModal és TeamResources: presigned URL flow, több fájl egyszerre, progress bar
+- AttachmentCard: egységes API hívások
+- CSP frissítve: connect-src https://files.trunkpeter.com hozzáadva
 
 **Ami most ki lesz hagyva (késöbb még ráépíthető):**
 - Karantén/scan workflow
 - pending_scan/approved/rejected státuszok
 - Vírusellenőrzés
-Ennél projektnél jelenleg túlzás, architektúra felkészített rá, akkor lenne ajánlott ha tényleges piacra lépésröl lenne szó!
+Ennél a projektnél jelenleg túlzás, architektúra felkészített rá, akkor lenne ajánlott ha tényleges piacra lépésröl lenne szó!
 
-**Implementációs sorrend:**
-1. docker-compose.prod.yml: MINIO_API_CORS_ALLOW_ORIGIN
-2. PresignedUrlLog model + migration + unique constraint StorageKey-en
-3. Presigned PUT endpoint (backend)
-4. Confirm endpoint (backend)
-5. Download streaming proxy javítás (Content-Disposition: attachment)
-6. Orphan cleanup job (IHostedService)
-7. Frontend: új feltöltési flow
-8. Tesztelés
+**Implementációs sorrend (elvégzett):**
+1. AttachmentType konstansok (Common/Constants)
+2. StorageKey unique constraint + migration
+3. Controller összevonás (AttachmentController)
+4. Download streaming javítás + Content-Disposition + nosniff headerek
+5. Fájlméret + content-type whitelist validáció (MAX_UPLOAD_SIZE_MB env var)
+6. PresignedUrlLog model + migration
+7. Presigned PUT endpoint (backend)
+8. Confirm endpoint (backend)
+9. Projekt törléskor MinIO cleanup
+10. OrphanCleanupJob (PeriodicTimer, 24h default)
+11. Frontend: presigned URL flow, több fájl, progress bar
+12. docker-compose.prod.yml: MinIO publikus route, CSP frissítés
 
 **Előnyök:**
-
 - API memória nem terhelt feltöltésnél
 - Skálázható több instance esetén
 - Friss auth-ellenőrzés minden letöltésnél
 - Stored XSS védelem (Content-Disposition: attachment)
 - Duplikált confirm védelem (unique constraint + ellenőrzés)
-- Orphan fájlok cleanup-ja
+- Orphan fájlok automatikus cleanup-ja
 - Karantén workflow later ráépíthető
 
 ---
