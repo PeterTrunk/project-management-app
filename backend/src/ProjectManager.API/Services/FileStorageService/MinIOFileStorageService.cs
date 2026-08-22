@@ -7,6 +7,7 @@ namespace ProjectManager.API.Services.FileStorageService
     {
         private readonly IMinioClient _minioClient;
         private readonly string _bucketName;
+        private readonly string _internalEndpoint;
 
         public MinIOFileStorageService()
         {
@@ -23,17 +24,13 @@ namespace ProjectManager.API.Services.FileStorageService
 
             var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
 
-            var clientBuilder = new MinioClient()
+            _internalEndpoint = $"{(useSSL ? "https" : "http")}://{endpoint}";
+
+            _minioClient = new MinioClient()
                 .WithEndpoint(endpoint)
                 .WithCredentials(accessKey, secretKey)
-                .WithSSL(useSSL);
-
-            if (!string.IsNullOrEmpty(publicUrl))
-            {
-                clientBuilder = clientBuilder.WithEndpoint(publicUrl.Replace("https://", "").Replace("http://", ""));
-            }
-
-            _minioClient = clientBuilder.Build();
+                .WithSSL(useSSL)
+                .Build();
         }
 
         public async Task<string> UploadFileAsync(
@@ -124,7 +121,7 @@ namespace ProjectManager.API.Services.FileStorageService
             var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
             if (!string.IsNullOrEmpty(publicUrl))
             {
-                url = url.Replace("http://minio:9000", publicUrl);
+                url = url.Replace(_internalEndpoint, publicUrl);
             }
 
             return url;
