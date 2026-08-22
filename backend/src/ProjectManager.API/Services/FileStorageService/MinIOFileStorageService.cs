@@ -110,7 +110,16 @@ namespace ProjectManager.API.Services.FileStorageService
                 .WithObject(storageKey)
                 .WithExpiry(expirySeconds);
 
-            return await _minioClient.PresignedPutObjectAsync(args);
+            var url = await _minioClient.PresignedPutObjectAsync(args);
+
+            //Belső URL cseréje publikus URL-re
+            var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
+            if (!string.IsNullOrEmpty(publicUrl))
+            {
+                url = url.Replace("http://minio:9000", publicUrl);
+            }
+
+            return url;
         }
 
         public async Task<ObjectInfo?> GetObjectInfoAsync(string storageKey)
