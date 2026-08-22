@@ -21,11 +21,19 @@ namespace ProjectManager.API.Services.FileStorageService
             _bucketName = Environment.GetEnvironmentVariable("MINIO_BUCKET")
                 ?? throw new InvalidOperationException("MINIO_BUCKET nincs beállítva!");
 
-            _minioClient = new MinioClient()
+            var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
+
+            var clientBuilder = new MinioClient()
                 .WithEndpoint(endpoint)
                 .WithCredentials(accessKey, secretKey)
-                .WithSSL(useSSL)
-                .Build();
+                .WithSSL(useSSL);
+
+            if (!string.IsNullOrEmpty(publicUrl))
+            {
+                clientBuilder = clientBuilder.WithEndpoint(publicUrl.Replace("https://", "").Replace("http://", ""));
+            }
+
+            _minioClient = clientBuilder.Build();
         }
 
         public async Task<string> UploadFileAsync(
