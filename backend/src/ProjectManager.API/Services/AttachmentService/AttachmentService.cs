@@ -176,6 +176,119 @@ namespace ProjectManager.API.Services.AttachmentService
             return MapToDto(attachment);
         }
 
+        public async Task<PresignedUrlResponseDto> GetPresignedUploadUrlAsync(Guid projectId, Guid? taskId, PresignedUrlRequestDto dto)
+        {
+            //Validáció
+            ValidateFile(dto.ContentType, dto.SizeBytes);
+
+            var storageKey = _fileStorageService.GenerateStorageKey(projectId, taskId, dto.FileName);
+            var expiresAt = DateTime.UtcNow.AddSeconds(120);
+
+            var presignedUrl = await _fileStorageService.GeneratePresignedPutUrlAsync(
+                storageKey, dto.ContentType);
+
+            //PresignedUrlLog létrehozása
+            var log = new PresignedUrlLog
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                TaskId = taskId,
+                StorageKey = storageKey,
+                FileName = dto.FileName,
+                ContentType = dto.ContentType,
+                SizeBytes = dto.SizeBytes,
+                ExpiresAt = expiresAt,
+                Confirmed = false,
+                CreatedAt = DateTime.UtcNow,
+                CreatedById = _currentUserService.UserId
+            };
+
+            await _context.PresignedUrlLogs.AddAsync(log);
+            await _context.SaveChangesAsync();
+
+            return new PresignedUrlResponseDto
+            {
+                PresignedUrl = presignedUrl,
+                StorageKey = storageKey,
+                ExpiresAt = expiresAt
+            };
+        }
+
+        public async Task<AttachmentResponseDto> ConfirmUploadAsync(Guid projectId, Guid? taskId, ConfirmUploadDto dto)
+        {
+            //PresignedUrlLog keresése
+            var log = await _context.PresignedUrlLogs
+                .FirstOrDefaultAsync(p => p.StorageKey == dto.StorageKey
+                                        && p.ProjectId == projectId);
+            if (log == null)
+                throw new Exception("Érvénytelen storage key!");
+
+            //Lejárt-e?
+            if (log.ExpiresAt < DateTime.UtcNow)
+                throw new Exception("A feltöltési URL lejárt!");
+
+            //Duplikált confirm ellenőrzés
+            if (log.Confirmed)
+                throw new Exception("Ez a fájl már meg lett erősítve!");
+
+            //Duplikált Attachment ellenőrzés (unique constraint előtt)
+            if (await _context.Attachments.AnyAsync(a => a.StorageKey == dto.StorageKey))
+                throw new Exception("Ez a fájl már fel lett töltve!");
+
+            //MinIO-ban létezik-e ténylegesen?
+            var objectInfo = await _fileStorageService.GetObjectInfoAsync(dto.StorageKey);
+            if (objectInfo == null)
+                throw new Exception("A fájl nem található a tárolóban!");
+
+            //Méret ellenőrzés
+            if (objectInfo.Size > log.SizeBytes * 1.1) // 10% tolerancia
+                throw new Exception("A fájl mérete nem egyezik!");
+
+            //Attachment létrehozása
+            var attachment = new Attachment
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                TaskId = taskId ?? log.TaskId,
+                UploadedById = _currentUserService.UserId,
+                FileName = log.FileName,
+                ContentType = log.ContentType,
+                SizeBytes = objectInfo.Size,
+                StorageKey = log.StorageKey,
+                AttachmentType = GetAttachmentType(log.ContentType),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _context.Attachments.AddAsync(attachment);
+
+            //Log megjelölése confirmált-ként
+            log.Confirmed = true;
+
+            await _context.SaveChangesAsync();
+
+            //Activity log
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    taskId.HasValue ? "Task" : "Project",
+                    taskId ?? projectId,
+                    "AttachmentUploaded",
+                    $"{_currentUserService.DisplayName} feltöltötte a {log.FileName} fájlt"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch { }
+
+            //Attachment betöltése UploadedBy-jal
+            attachment.UploadedBy = (await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == attachment.UploadedById))!;
+
+            return MapToDto(attachment);
+        }
+
         public async Task<AttachmentResponseDto?> GetAttachmentMetadataAsync(Guid projectId, Guid attachmentId)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);

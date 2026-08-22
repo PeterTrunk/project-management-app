@@ -102,5 +102,35 @@ namespace ProjectManager.API.Services.FileStorageService
                     await stream.CopyToAsync(destination, cancellationToken);
                 }));
         }
+
+        public async Task<string> GeneratePresignedPutUrlAsync(string storageKey, string contentType, int expirySeconds = 120)
+        {
+            var args = new PresignedPutObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(storageKey)
+                .WithExpiry(expirySeconds);
+
+            return await _minioClient.PresignedPutObjectAsync(args);
+        }
+
+        public async Task<ObjectInfo?> GetObjectInfoAsync(string storageKey)
+        {
+            try
+            {
+                var stat = await _minioClient.StatObjectAsync(new StatObjectArgs()
+                    .WithBucket(_bucketName)
+                    .WithObject(storageKey));
+
+                return new ObjectInfo
+                {
+                    Size = stat.Size,
+                    ContentType = stat.ContentType
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 }

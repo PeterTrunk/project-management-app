@@ -11,5 +11,7 @@ namespace ProjectManager.API.Services.AttachmentService
         Task DownloadAttachmentAsync(Guid projectId, Guid attachmentId, Stream destination, CancellationToken ct);
         Task DeleteAttachmentAsync(Guid projectId, Guid attachmentId);
         Task<AttachmentResponseDto?> GetAttachmentMetadataAsync(Guid projectId, Guid attachmentId);
+        Task<PresignedUrlResponseDto> GetPresignedUploadUrlAsync(Guid projectId, Guid? taskId, PresignedUrlRequestDto dto);
+        Task<AttachmentResponseDto> ConfirmUploadAsync(Guid projectId, Guid? taskId, ConfirmUploadDto dto);
     }
 }

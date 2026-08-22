@@ -141,5 +141,80 @@ namespace ProjectManager.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        //Task szintű presigned URL
+        [HttpPost("tasks/{taskId}/attachments/presigned")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(typeof(PresignedUrlResponseDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<PresignedUrlResponseDto>> GetTaskPresignedUploadUrlAsync(
+            Guid projectId, 
+            Guid taskId, 
+            [FromBody] PresignedUrlRequestDto dto)
+        {
+            try
+            {
+                var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, taskId, dto);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        //Projekt szintű presigned URL
+        [HttpPost("attachments/presigned")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(typeof(PresignedUrlResponseDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<PresignedUrlResponseDto>> GetProjectPresignedUploadUrlAsync(
+            Guid projectId, 
+            [FromBody] PresignedUrlRequestDto dto)
+        {
+            try
+            {
+                var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, null, dto);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        //Task szintű confirm
+        [HttpPost("tasks/{taskId}/attachments/confirm")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<AttachmentResponseDto>> ConfirmTaskUploadAsync(
+            Guid projectId, Guid taskId, [FromBody] ConfirmUploadDto dto)
+        {
+            try
+            {
+                var response = await _attachmentService.ConfirmUploadAsync(projectId, taskId, dto);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        //Projekt szintű confirm
+        [HttpPost("attachments/confirm")]
+        [Authorize(Policy = "ProjectMember")]
+        [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<AttachmentResponseDto>> ConfirmProjectUploadAsync(
+            Guid projectId, [FromBody] ConfirmUploadDto dto)
+        {
+            try
+            {
+                var response = await _attachmentService.ConfirmUploadAsync(projectId, null, dto);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
