@@ -61,9 +61,9 @@ namespace ProjectManager.API.Services.FileStorageService
             await _minioClient.GetObjectAsync(new GetObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
-                .WithCallbackStream(stream =>
+                .WithCallbackStream(async (stream, ct)=>
                 {
-                    stream.CopyTo(memoryStream);
+                    await stream.CopyToAsync(memoryStream, ct);
                 }));
 
             memoryStream.Position = 0;
@@ -90,6 +90,17 @@ namespace ProjectManager.API.Services.FileStorageService
             {
                 return $"attachments/{projectId}/shared/{fileId}_{sanitizedFileName}";
             }
+        }
+        
+        public async Task StreamFileAsync(string storageKey, Stream destination, CancellationToken ct = default)
+        {
+            await _minioClient.GetObjectAsync(new GetObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(storageKey)
+                .WithCallbackStream(async (stream, cancellationToken) =>
+                {
+                    await stream.CopyToAsync(destination, cancellationToken);
+                }));
         }
     }
 }

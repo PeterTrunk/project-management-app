@@ -543,6 +543,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(a => a.UploadedById);
             entity.HasIndex(a => new { a.TaskId, a.AttachmentType });
 
+            entity.HasIndex(a => a.StorageKey)
+                  .IsUnique();
+
             //Foreign keys
             entity.HasOne(a => a.Project)
                   .WithMany(p => p.Attachments)

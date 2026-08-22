@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.Services.FileStorageService
+﻿using Minio.DataModel.Args;
+
+namespace ProjectManager.API.Services.FileStorageService
 {
     public interface IFileStorageService
     {
@@ -14,5 +16,6 @@
         Task DeleteFileAsync(string storageKey);
 
         string GenerateStorageKey(Guid projectId, Guid? taskId, string fileName);
+        Task StreamFileAsync(string storageKey, Stream destination, CancellationToken ct = default);
     }
 }

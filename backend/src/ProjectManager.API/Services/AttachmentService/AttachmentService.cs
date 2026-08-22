@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Hubs;
@@ -56,7 +57,7 @@ namespace ProjectManager.API.Services.AttachmentService
             catch { }
         }
 
-        public async Task<(Stream stream, string fileName, string contentType)> DownloadAttachmentAsync(Guid projectId, Guid attachmentId)
+        public async Task DownloadAttachmentAsync(Guid projectId, Guid attachmentId, Stream destination, CancellationToken ct = default)
         {
             var attachment = await _context.Attachments
                 .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
@@ -64,9 +65,7 @@ namespace ProjectManager.API.Services.AttachmentService
             if (attachment == null)
                 throw new Exception("Fájl nem található!");
 
-            var stream = await _fileStorageService.GetFileStreamAsync(attachment.StorageKey);
-
-            return (stream, attachment.FileName, attachment.ContentType);
+            await _fileStorageService.StreamFileAsync(attachment.StorageKey, destination, ct);
         }
 
         public async Task<List<AttachmentResponseDto>> GetProjectAttachmentsAsync(Guid projectId)
@@ -173,6 +172,22 @@ namespace ProjectManager.API.Services.AttachmentService
             return MapToDto(attachment);
         }
 
+        public async Task<AttachmentResponseDto?> GetAttachmentMetadataAsync(Guid projectId, Guid attachmentId)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new Exception("Projekt nem található!");
+
+            var attachment = await _context.Attachments
+                .Include(a => a.UploadedBy)
+                .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
+
+            if (attachment == null)
+                return null;
+
+            return MapToDto(attachment);
+        }
+
         private AttachmentResponseDto MapToDto(Attachment attachment)
         {
             return new AttachmentResponseDto
@@ -191,11 +206,11 @@ namespace ProjectManager.API.Services.AttachmentService
 
         private string GetAttachmentType(string contentType)
         {
-            if (contentType.StartsWith("image/")) return "image";
-            if (contentType == "application/pdf") return "pdf";
-            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return "spreadsheet";
-            if (contentType.Contains("document") || contentType.Contains("word")) return "document";
-            return "other";
+            if (contentType.StartsWith("image/")) return AttachmentType.Image;
+            if (contentType == "application/pdf") return AttachmentType.Pdf;
+            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentType.Spreadsheet;
+            if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentType.Document;
+            return AttachmentType.Other;
         }
     }
 }
