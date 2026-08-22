@@ -6,7 +6,7 @@
     import ConfirmModal from './ConfirmModal.svelte';
     import { validateTaskTitle, validateTaskDescription } from '../validators';
     import CommentSection from './CommentSection.svelte';
-    import { getLabelsAsync, addLabelToTaskAsync as addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
+    import { getLabelsAsync, addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
     import { projectStore, setLabels } from '../stores/projectStore';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
@@ -16,8 +16,7 @@
     import type { SprintResponse } from '../api/sprintApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
-    import type { AttachmentResponse } from '../api/attachmentApi';
-    import { uploadTaskAttachmentAsync, } from '../api/attachmentApi';
+    import { type AttachmentResponse, getTaskPresignedUrlAsync, uploadToMinIOAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -60,9 +59,8 @@
     let attachments: AttachmentResponse[] = [];
     $: attachments = (task.attachments ?? []) as AttachmentResponse[];
     let isUploading = false;
+    let uploadProgress = 0;
     let uploadError = '';
-
-
 
     let modalRef: HTMLElement;
 
@@ -206,20 +204,39 @@
     async function handleFileUpload(e: Event) {
         const input = e.target as HTMLInputElement;
         if (!input.files || input.files.length === 0) return;
-        
-        const file = input.files[0];
+
+        const files = Array.from(input.files);  // több fájl támogatás
         isUploading = true;
         uploadError = '';
-        
-        try {
-            const uploaded = await uploadTaskAttachmentAsync(projectId, task.id, file);
-            task = { ...task, attachments: [...task.attachments, uploaded] };
-        } catch (e: any) {
-            uploadError = 'Hiba történt a feltöltéskor!';
-        } finally {
-            isUploading = false;
-            input.value = '';
+
+        for (const file of files) {
+            try {
+                // 1. Presigned URL kérés
+                const { presignedUrl, storageKey } = await getTaskPresignedUrlAsync(
+                    projectId, task.id, {
+                        fileName: file.name,
+                        contentType: file.type,
+                        sizeBytes: file.size
+                    }
+                );
+
+                // 2. Direkt feltöltés MinIO-ra
+                await uploadToMinIOAsync(presignedUrl, file, (progress) => {
+                    uploadProgress = progress;
+                });
+
+                // 3. Confirm
+                const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
+                task = { ...task, attachments: [...task.attachments, uploaded] };
+
+            } catch (e: any) {
+                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+            }
         }
+
+        isUploading = false;
+        uploadProgress = 0;
+        input.value = '';
     }
 
     function closeModal() {
@@ -384,12 +401,21 @@
                             {:else}
                                 <p class="empty">Nincs csatolmány</p>
                             {/if}
+
                             <label class="upload-btn" class:loading={isUploading}>
-                                {isUploading ? 'Feltöltés...' : '+ Fájl feltöltése'}
+                                {isUploading ? `Feltöltés... ${uploadProgress > 0 ? uploadProgress + '%' : ''}` : '+ Fájl feltöltése'}
                                 <input type="file" style="display: none"
+                                    multiple
                                     on:change={handleFileUpload}
                                     disabled={isUploading} />
                             </label>
+                            
+                            {#if isUploading && uploadProgress > 0}
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: {uploadProgress}%"></div>
+                                </div>
+                            {/if}
+
                             {#if uploadError}
                                 <p class="msg error">{uploadError}</p>
                             {/if}

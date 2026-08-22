@@ -1,20 +1,20 @@
 <script lang="ts">
     import type { AttachmentResponse } from '../api/attachmentApi';
-    import { downloadAttachmentAsync, deleteTaskAttachmentAsync, downloadProjectAttachmentAsync, deleteProjectAttachmentAsync } from '../api/attachmentApi';
+    import { downloadAttachmentAsync, deleteAttachmentAsync  } from '../api/attachmentApi';
 
-    import { Image, FileText, Sheet, FileEdit, Paperclip, Download, Trash2 } from 'lucide-svelte';
+    import { Image, FileText, Sheet, FilePen, Paperclip, Download, Trash2 } from 'lucide-svelte';
 
     export let attachment: AttachmentResponse;
     export let projectId: string;
     export let taskId: string | null = null;
     export let onDelete: (attachmentId: string) => void = () => {};
-
+    
     function getAttachmentIcon(attachmentType: string): any {
         switch (attachmentType) {
             case 'image':       return Image;
             case 'pdf':         return FileText;
             case 'spreadsheet': return Sheet;
-            case 'document':    return FileEdit;
+            case 'document':    return FilePen;
             default:            return Paperclip;
         }
     }
@@ -27,11 +27,7 @@
 
     async function handleDownload() {
         try {
-            if (taskId) {
-                await downloadAttachmentAsync(projectId, taskId, attachment.id, attachment.fileName);
-            } else {
-                await downloadProjectAttachmentAsync(projectId, attachment.id, attachment.fileName);
-            }
+            await downloadAttachmentAsync(projectId, attachment.id, attachment.fileName);
         } catch (e) {
             console.error('Hiba a letöltéskor!');
         }
@@ -39,11 +35,7 @@
 
     async function handleDelete() {
         try {
-            if (taskId) {
-                await deleteTaskAttachmentAsync(projectId, taskId, attachment.id);
-            } else {
-                await deleteProjectAttachmentAsync(projectId, attachment.id);
-            }
+            await deleteAttachmentAsync(projectId, attachment.id);
             onDelete(attachment.id);
         } catch (e) {
             console.error('Hiba a törléskor!');
