@@ -33,6 +33,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+<<<<<<< Updated upstream
+=======
+      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_URL}
+      MINIO_SERVER_URL: ${MINIO_PUBLIC_URL}
+>>>>>>> Stashed changes
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -43,6 +48,14 @@ services:
       retries: 5
     networks:
       - pma-internal
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.rule=Host(`${MINIO_DOMAIN}`)"
+      - "traefik.http.routers.minio.entrypoints=websecure"
+      - "traefik.http.routers.minio.tls=true"
+      - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio.loadbalancer.server.port=9000"
 
   pm-api:
     build:
@@ -139,7 +152,7 @@ services:
       - "traefik.http.middlewares.frontend-security.headers.referrerPolicy=strict-origin-when-cross-origin"
       - "traefik.http.middlewares.frontend-security.headers.customResponseHeaders.Cross-Origin-Resource-Policy=same-origin"
       - "traefik.http.routers.frontend.middlewares=frontend-security"
-      - "traefik.http.middlewares.frontend-security.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.trunkpeter.com wss://api.trunkpeter.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+      - "traefik.http.middlewares.frontend-security.headers.contentSecurityPolicy=default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.trunkpeter.com wss://api.trunkpeter.com https://files.trunkpeter.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 
 networks:
   dokploy-network:
