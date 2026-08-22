@@ -270,6 +270,9 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddScoped<ProjectNotArchivedFilter>();
 
+//OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
+builder.Services.AddHostedService<OrphanCleanupJob>();
+
 var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
 //Middleware Pipeline - Sorrendjük kritikus
@@ -327,9 +330,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-//OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
-builder.Services.AddHostedService<OrphanCleanupJob>();
-
 //Middleware hozzáadás
 app.UseRouting();
 
@@ -346,4 +346,3 @@ app.MapGet("/health", () => "OK");
 
 //Start
 app.Run();
-
