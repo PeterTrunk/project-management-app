@@ -95,6 +95,7 @@ services:
       EMAIL_FROM: ${EMAIL_FROM}
       JWT_REFRESH_TOKEN_LIFETIME: ${JWT_REFRESH_TOKEN_LIFETIME}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
     networks:
       - dokploy-network
       - pma-internal
