@@ -323,11 +323,11 @@ namespace ProjectManager.API.Services.AttachmentService
 
         private string GetAttachmentType(string contentType)
         {
-            if (contentType.StartsWith("image/")) return AttachmentType.Image;
-            if (contentType == "application/pdf") return AttachmentType.Pdf;
-            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentType.Spreadsheet;
-            if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentType.Document;
-            return AttachmentType.Other;
+            if (contentType.StartsWith("image/")) return AttachmentTypes.Image;
+            if (contentType == "application/pdf") return AttachmentTypes.Pdf;
+            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentTypes.Spreadsheet;
+            if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentTypes.Document;
+            return AttachmentTypes.Other;
         }
 
         private static readonly HashSet<string> AllowedContentTypes = new()

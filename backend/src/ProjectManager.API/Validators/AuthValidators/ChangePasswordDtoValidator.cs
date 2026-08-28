@@ -7,7 +7,9 @@ namespace ProjectManager.API.Validators.AuthValidators
     {
         public ChangePasswordDtoValidator()
         {
-            RuleFor(d => d.CurrentPassword).NotEmpty();
+            RuleFor(d => d.CurrentPassword)
+                .NotEmpty().WithMessage("A jelenlegi jelszó megadása kötelező!");
+
             RuleFor(d => d.NewPassword)
                 .NotEmpty()
                 .MinimumLength(8).WithMessage("A jelszónak legalább 8 karakter hosszúnak kell lennie")

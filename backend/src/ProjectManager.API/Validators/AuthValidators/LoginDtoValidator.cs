@@ -8,11 +8,11 @@ namespace ProjectManager.API.Validators.AuthValidators
         public LoginDtoValidator()
         {
             RuleFor(x => x.Email)
-                .NotEmpty()
-                .EmailAddress();
+                .NotEmpty().WithMessage("Az email cím megadása kötelező!")
+                .EmailAddress().WithMessage("Érvénytelen email cím formátum!");
 
             RuleFor(x => x.Password)
-                .NotEmpty();
+                .NotEmpty().WithMessage("A jelszó megadása közelező!");
         }
     }
 }

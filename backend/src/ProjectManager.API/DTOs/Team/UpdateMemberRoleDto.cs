@@ -1,4 +1,6 @@
-﻿namespace ProjectManager.API.DTOs.Team
+﻿using ProjectManager.API.Common.Constants;
+
+namespace ProjectManager.API.DTOs.Team
 {
     public class UpdateMemberRoleDto
     {

@@ -8,11 +8,14 @@ namespace ProjectManager.API.Validators.ColumnValidators
         public ColumnOrderDtoValidator() 
         {
             RuleFor(x => x.Id)
-                .NotEmpty();
+                .NotEmpty().WithMessage("Az oszlop azonosítója kötelező!");
 
             RuleFor(c => c.Position)
                 .GreaterThan(0)
                 .WithMessage("A 0-ás pozíció a Backlog oszlopnak van fenntartva!");
+
+            RuleFor(c => c.RowVersion)
+                .GreaterThan(0u).WithMessage("Érvénytelen RowVersion!");
         }
     }
 }

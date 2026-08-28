@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace ProjectManager.API.DTOs.Project
+﻿namespace ProjectManager.API.DTOs.Project
 {
     public class CreateProjectDto
     {

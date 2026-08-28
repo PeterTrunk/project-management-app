@@ -7,15 +7,16 @@ namespace ProjectManager.API.Validators.AuthValidators
     {
         public RegisterDtoValidator()
         {
-            RuleFor(x =>  x.Email)
-                .NotEmpty()
-                .EmailAddress()
-                .MaximumLength(254);
+            RuleFor(x => x.Email)
+                .NotEmpty().WithMessage("Az email cím megadása kötelező!")
+                .EmailAddress().WithMessage("Érvénytelen email cím formátum!")
+                .MaximumLength(254).WithMessage("Az email cím maximum 254 karakter lehet!");
 
             RuleFor(x => x.DisplayName)
-                .MaximumLength(120)
-                .MinimumLength(3);
-            
+                .NotEmpty().WithMessage("A megjelenítési név megadása kötelező!")
+                .MinimumLength(3).WithMessage("A névnek legalább 3 karakter hosszúnak kell lennie!")
+                .MaximumLength(120).WithMessage("A név maximum 120 karakter lehet!");
+
             RuleFor(x => x.Password)
                 .NotEmpty()
                 .MinimumLength(8).WithMessage("A jelszónak legalább 8 karakter hosszúnak kell lennie")

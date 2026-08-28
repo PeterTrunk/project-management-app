@@ -8,8 +8,8 @@ namespace ProjectManager.API.Validators.CommentValidators
         public CreateCommentDtoValidator()
         {
             RuleFor(x => x.Body)
-                .NotEmpty()
-                .MaximumLength(2000);
+                .NotEmpty().WithMessage("A komment tartalma kötelező!")
+                .MaximumLength(2000).WithMessage("A komment maximum 2000 karakter lehet!");
         }
     }
 }
