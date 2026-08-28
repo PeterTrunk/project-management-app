@@ -2549,6 +2549,47 @@ Konstans fejlesztések:
 - ValidRoles lista hozzáadva ProjectRole-hoz
 - Validátorok frissítve hogy a listákat a konstans osztályokból használják
 
+### Magic string-ek kiváltása konstansokkal
+
+**Probléma:**
+A policy nevek és szerepkörök string literálként voltak megadva az összes controllerben 
+és a Program.cs-ben, ami hibalehetőséget és nehézkes karbantartást okoz.
+
+**Megoldás:**
+
+PolicyNames konstans osztály létrehozva:
+- ProjectViewer, ProjectMember, ProjectAdmin, ProjectOwner
+
+ProjectRole konstans osztály létrehozva:
+- Owner, Admin, Member, Viewer + ValidRoles lista
+
+Érintett helyek:
+- Program.cs: policy definíciók frissítve
+- Összes controller: [Authorize(Policy = "...")] -> [Authorize(Policy = PolicyNames.xxx)]
+- ProjectRoleRequirement: role string-ek -> ProjectRole konstansok
+- UpdateMemberRoleDtoValidator: ValidRoles lista -> ProjectRole.ValidRoles
+
+### ProjectCounter Race Condition Fix
+
+**Probléma:**
+Több backend replika esetén két instance egyszerre olvashatta ugyanazt a counter értéket,
+ami duplikált TaskKey-t eredményezett (unique constraint violation).
+
+**Megoldás:**
+CounterService létrehozva dedikált counter kezeléssel:
+- Serializable tranzakció garantálja hogy egyszerre csak egy instance módosíthatja a countert
+- Exponenciális backoff retry logika (3 kísérlet, 50ms/100ms/150ms várakozással)
+- PostgresException 40001 (serialization failure) kezelés
+- GetNextTaskNumberAsync: egy szám lefoglalása
+- GetNextTaskNumbersAsync: több szám egyszerre (tömeges betöltéshez előkészítve)
+- CreateTaskAsync-ból kiszervezve a counter logika
+
+**Előnyök:**
+- Nincs duplikált TaskKey több replika esetén
+- Tömeges task létrehozáshoz felkészített (egy tranzakcióban foglal le N számot)
+- Egységes helyen kezelt counter logika
+- Retry logika minimális felhasználói várakozással (max ~300ms)
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

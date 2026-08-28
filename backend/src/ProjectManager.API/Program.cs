@@ -19,6 +19,7 @@ using ProjectManager.API.Services.BackgroundJobs;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
+using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EmailService;
 using ProjectManager.API.Services.EncryptionService;
@@ -266,6 +267,7 @@ builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IGitWebhookService, GitWebhookService>();
 builder.Services.AddScoped<IGitService, GitService>();
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
+builder.Services.AddScoped<ICounterService, CounterService>();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
