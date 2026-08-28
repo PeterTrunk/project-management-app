@@ -2518,6 +2518,37 @@ accessTokenFactory: () => tokenStore.get() ?? token
 
 ---
 
+## General Improvements & Fixes
+Kisebb javítások és fejlesztések amelyek nem illeszkednek 
+egy specifikus fejezetbe.
+
+### Validátor átnézés és javítás
+
+**Probléma:**
+Számos DTO-hoz hiányzott a validátor, meglévő validátoroknál hiányoztak a hibaüzenetek, 
+RowVersion validáció, illetve konstansok helyett magic string-ek voltak használva.
+
+**Megoldás:**
+
+Pótolt validátorok:
+- Auth: ForgotPassword, ResendVerification, LoginWithTotp, VerifyTotp, ResetPassword
+- Attachment: PresignedUrlRequest, ConfirmUpload
+- Task: AssignTaskToBoard, AssignTaskToSprint
+
+Javított validátorok:
+- Hiányzó hibaüzenetek pótolva minden validátorban
+- RowVersion validáció hozzáadva: UpdateBoard, UpdateColumn, ColumnOrder, MoveTask, UpdateTask, UpdateSprint
+- UpdateProjectDtoValidator: Description When feltétel elírás javítva (Name helyett Description)
+- TaskPriority validátor: "normal" érték eltávolítva (nem létező prioritás)
+- Email MaxLength: 255 -> 254 (RFC 5321 szabvány szerint)
+
+Konstans fejlesztések:
+- ProjectRole konstans osztály létrehozva (Owner, Admin, Member, Viewer)
+- ValidStates lista hozzáadva SprintState-hez
+- ValidPriorities lista hozzáadva TaskPriority-hoz
+- ValidRoles lista hozzáadva ProjectRole-hoz
+- Validátorok frissítve hogy a listákat a konstans osztályokból használják
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

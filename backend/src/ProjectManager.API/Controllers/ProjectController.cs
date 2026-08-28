@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectService;
@@ -52,7 +53,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet("{projectId}")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(ProjectResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectResponseDto>> GetProjectById(Guid projectId)
@@ -70,7 +71,7 @@ namespace ProjectManager.API.Controllers
 
         [HttpPut("{projectId}")]
         [ServiceFilter(typeof(ProjectNotArchivedFilter))]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(ProjectResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectResponseDto>> UpdateProject(Guid projectId, [FromBody] UpdateProjectDto dto)
@@ -87,7 +88,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpPatch("{projectId}/archive")]
-        [Authorize(Policy = "ProjectOwner")]
+        [Authorize(Policy = PolicyNames.ProjectOwner)]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ArchiveProject(Guid projectId)
@@ -104,7 +105,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{projectId}/unarchive")]
-        [Authorize(Policy = "ProjectOwner")]
+        [Authorize(Policy = PolicyNames.ProjectOwner)]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> UnarchiveProject(Guid projectId)
@@ -121,7 +122,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{projectId}")]
-        [Authorize(Policy = "ProjectOwner")]
+        [Authorize(Policy = PolicyNames.ProjectOwner)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteProjectAsync(Guid projectId)

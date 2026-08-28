@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Team;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.TeamService;
@@ -19,7 +20,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<ProjectMemberResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ProjectMemberResponseDto>>> GetMembersAsync(Guid projectId)
@@ -36,7 +37,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{userId}")]
-        [Authorize(Policy = "ProjectOwner")]
+        [Authorize(Policy = PolicyNames.ProjectOwner)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveMemberAsync(Guid projectId, Guid userId)
@@ -53,7 +54,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{userId}/role")]
-        [Authorize(Policy = "ProjectOwner")]
+        [Authorize(Policy = PolicyNames.ProjectOwner)]
         [ProducesResponseType(typeof(ProjectMemberResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectMemberResponseDto>> UpdateMemberRoleAsync(Guid projectId, Guid userId, [FromBody] UpdateMemberRoleDto dto)
@@ -70,7 +71,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("invite")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(InviteLinkResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<InviteLinkResponseDto>> GenerateInviteLinkAsync(Guid projectId, [FromBody] GenerateInviteLinkDto dto)
@@ -87,7 +88,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet("invites")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(List<InviteLinkResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<InviteLinkResponseDto>>> GetInvitationsAsync(Guid projectId)
@@ -104,7 +105,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("invites/{token}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteInvitationAsync(Guid projectId, string token)

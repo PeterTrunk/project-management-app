@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Columns;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Model;
@@ -20,7 +21,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(ColumnResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ColumnResponseDto>> CreateColumnAsync(Guid projectId, Guid boardId, [FromBody] CreateColumnDto dto)
@@ -37,7 +38,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{columnId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteColumnAsync(Guid projectId, Guid boardId, Guid columnId)
@@ -54,7 +55,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<ColumnResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ColumnResponseDto>>> GetColumnsAsync(Guid projectId, Guid boardId)
@@ -72,7 +73,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{columnId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(ColumnResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ColumnResponseDto>> UpdateColumnAsync(Guid projectId, Guid boardId, Guid columnId, UpdateColumnDto dto)
@@ -89,7 +90,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("reorder")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(List<ColumnResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ColumnResponseDto>>> OrderColumnsAsync(Guid projectId, Guid boardId, [FromBody] List<ColumnOrderDto> order)

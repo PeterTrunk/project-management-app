@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.ProjectTaskService;
@@ -18,7 +19,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> CreateTaskAsync(Guid projectId, [FromBody] CreateTaskDto dto)
@@ -35,7 +36,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{taskId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteTaskAsync(Guid projectId, Guid taskId)
@@ -52,7 +53,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet("{taskId}")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> GetTaskByIdAsync(Guid projectId, Guid taskId)
@@ -69,7 +70,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<TaskResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<TaskResponseDto>>> GetTasksAsync(
@@ -90,7 +91,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{taskId}/move")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> MoveTaskAsync(Guid projectId, Guid taskId, [FromBody] MoveTaskDto dto)
@@ -107,7 +108,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{taskId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> UpdateTaskAsync(Guid projectId, Guid taskId, [FromBody] UpdateTaskDto dto)
@@ -124,7 +125,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("{taskId}/board")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(TaskResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> AssignTaskToBoardAsync(Guid projectId, Guid taskId, [FromBody] AssignTaskToBoardDto dto)
@@ -141,7 +142,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("{taskId}/assignees/{userId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
@@ -158,7 +159,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{taskId}/assignees/{userId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)

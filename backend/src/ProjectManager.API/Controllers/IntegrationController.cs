@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Integration;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.IntegrationService;
@@ -19,7 +20,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<IntegrationResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<IntegrationResponseDto>>> GetIntegrationsAsync(Guid projectId)
         {
@@ -35,7 +36,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpPost]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(IntegrationResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<IntegrationResponseDto>> CreateIntegrationAsync(Guid projectId, [FromBody] CreateIntegrationDto dto)
         {
@@ -51,7 +52,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpDelete("{integrationId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> DeleteIntegrationAsync(Guid projectId, Guid integrationId)
         {
@@ -67,7 +68,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpPost("{integrationId}/regenerate")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(IntegrationResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<IntegrationResponseDto>> RegenerateWebhookTokenAsync(Guid projectId, Guid integrationId)
         {
@@ -83,7 +84,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{integrationId}/toggle")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> EnableDisableIntegrationAsync(Guid projectId, Guid integrationId, [FromQuery] bool isEnabled)
         {
@@ -99,7 +100,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("{integrationId}/reset-secret")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> ResetWebhookSecretAsync(Guid projectId, Guid integrationId, [FromBody] ResetWebhookSecretDto dto)
         {

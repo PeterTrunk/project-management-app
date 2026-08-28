@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
@@ -232,14 +233,14 @@ else
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("ProjectViewer", policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement("Viewer")))
-    .AddPolicy("ProjectMember", policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement("Member")))
-    .AddPolicy("ProjectAdmin", policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement("Admin")))
-    .AddPolicy("ProjectOwner", policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement("Owner")));
+    .AddPolicy(PolicyNames.ProjectViewer, policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Viewer)))
+    .AddPolicy(PolicyNames.ProjectMember, policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Member)))
+    .AddPolicy(PolicyNames.ProjectAdmin, policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Admin)))
+    .AddPolicy(PolicyNames.ProjectOwner, policy =>
+        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Owner)));
 
 //FluentValidation Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();

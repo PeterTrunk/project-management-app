@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Labels;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.LabelService;
@@ -20,7 +21,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<LabelResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<LabelResponseDto>>> GetLabelsAsync(Guid projectId)
@@ -37,7 +38,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(LabelResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<LabelResponseDto>> CreateLabelAsync(Guid projectId, [FromBody] CreateLabelDto dto)
@@ -54,7 +55,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{labelId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteLabelAsync(Guid projectId, Guid labelId)
@@ -71,7 +72,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("tasks/{taskId}/labels/{labelId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> AddLabelToTask(Guid projectId, Guid taskId, Guid labelId)
@@ -88,7 +89,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("tasks/{taskId}/labels/{labelId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveLabelFromTask(Guid projectId, Guid taskId, Guid labelId)
