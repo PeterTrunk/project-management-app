@@ -2590,6 +2590,63 @@ CounterService létrehozva dedikált counter kezeléssel:
 - Egységes helyen kezelt counter logika
 - Retry logika minimális felhasználói várakozással (max ~300ms)
 
+### Logolás (Serilog + Seq)
+
+**Probléma:**
+Nem volt strukturált logolás, hibák csak a konzolon jelentek meg és nem voltak visszakereshetők.
+
+**Megoldás:**
+Serilog + Seq alapú strukturált logolás:
+- Serilog: .NET legelterjedtebb logging library
+- Seq: dedikált log aggregátor, UI, több replika esetén is egy helyre ír
+- Seq csak belső hálózaton érhető el (SSH tunnel-en keresztül)
+- Production-ban jelszóval védett
+
+**Architektúra:**
+
+Backend instance 1 -> Serilog -> Seq (pm-seq:5341)
+Backend instance 2 -> Serilog -> Seq (pm-seq:5341)
+
+**Logolási szintek:**
+- ERROR: kezeletlen kivételek (Global Exception Handler)
+- WARNING: rate limit, sikertelen auth, érvénytelen tokenek, fájl validáció
+- INFO: sikeres bejelentkezés, regisztráció, fájl műveletek, token megújítás
+
+**Global Exception Handler:**
+Minden kezeletlen kivételt megfog és logolja:
+- HTTP Method és Path
+- Exception típusa és üzenete
+- 500 Internal Server Error visszaküldés
+
+**Explicit logolás:**
+
+AuthService:
+- Sikeres/sikertelen bejelentkezés (normál + TOTP)
+- Rate limit elérése (login, register, forgot password)
+- Token műveletek (refresh, revoked, expired)
+- Jelszó változtatás és visszaállítás
+- TOTP aktiválás/kikapcsolás
+
+AttachmentService:
+- Fájl validáció sikertelen (méret, típus)
+- Presigned URL generálás
+- Lejárt URL confirm kísérlet
+- Sikeres fájl feltöltés és törlés
+
+**GDPR megjegyzés:**
+A logok email címeket tartalmaznak biztonsági célból.
+Production-ban a GDPR megfelelőség érdekében hash-eléssel
+vagy UserId alapú logolással kellene kiváltani,
+illetve megőrzési időt és törlési mechanizmust kellene bevezetni.
+
+**Implementációs sorrend (elvégzett):**
+1. Serilog.AspNetCore, Serilog.Sinks.Console, Serilog.Sinks.Seq telepítés
+2. Program.cs konfiguráció (try/catch/finally wrap)
+3. Global Exception Handler middleware
+4. Seq service hozzáadása docker-compose.yml és docker-compose.prod.yml-be
+5. AuthService logolás
+6. AttachmentService logolás
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
