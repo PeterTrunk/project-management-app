@@ -2684,6 +2684,121 @@ Program.cs struktúra:
 7. Middleware Pipeline (extension metódus)
 8. Start
 
+### Biztonsági mentés
+
+**Backup stratégia: 2-1-1 (közelítő 3-2-1)**
+
+A 3-2-1 backup szabály szerint ideálisan:
+- 3 másolat az adatból
+- 2 különböző tárolási médián
+- 1 offsite helyszínen
+
+**Miért nem teljes 3-2-1?**
+Ez egy szakdolgozati projekt, nem éles production rendszer:
+- Nincs valódi felhasználói adat amit mindenképp meg kell őrizni
+- Harmadik backup helyszín extra költséget és komplexitást jelentene feleslegesen
+- Ezért a projektnél a 2-1-1 megoldás elegendő a célra
+
+Valódi production környezetben a harmadik másolathoz egy második 
+cloud provider (pl. AWS S3 vagy Wasabi) használata lenne ajánlott!
+Esetleg egy másik telephelyi szerver is megoldhatná a problémát.
+
+**Jelenlegi 2-1-1 megoldás:**
+másolat -> Hetzner szerver (élő adat)
+másolat -> Backblaze B2 (offsite, automatikus napi backup)
+
+**Mit mentünk?**
+
+PostgreSQL adatbázis:
+-> Dokploy beépített backup funkció
+-> pg_dump alapú mentés
+-> Napi 1x (hajnali 2:00)
+-> 7 nap megőrzés
+-> Destination: Backblaze B2
+
+MinIO fájlok:
+-> Dokploy Volume Backup funkció
+-> minio_data named volume mentése
+-> Napi 1x (hajnali 3:00)
+-> 7 nap megőrzés
+-> Destination: Backblaze B2
+
+**Miért Backblaze B2?**
+- S3-kompatibilis API -> Dokploy natívan támogatja
+- 10GB ingyenes tárhely -> elegendő a projektnél
+- Egyáltalán nem kell bankkártya az ingyenes szinthez
+- Más platform mint a szerver -> offsite backup-nak minősíthető
+- Automatikus retention kezelés
+
+**Beállítási lépések:**
+- Backblaze B2 fiók létrehozása
+- B2 bucket létrehozása (pl. pma-backups)
+- Application Key generálása (read/write jogosultság)
+- Dokploy Settings -> S3 Destinations -> Add:
+  - Endpoint: s3.us-west-004.backblazeb2.com
+  - Access Key: B2 Application Key ID
+  - Secret Key: B2 Application Key
+- PostgreSQL service -> Backups tab -> Add Backup:
+  - Schedule: 0 2 * * *
+  - Prefix: pma-postgres
+  - Retention: 7
+- MinIO Volume -> Volume Backups -> Add Backup:
+  - Schedule: 0 2 * * *
+  - Prefix: pma-minio
+  - Retention: 7
+
+**Backup konzisztencia és korlátok:**
+PostgreSQL backup (pg_dump):
+- MVCC alapú, tranzakció-konzisztens snapshot
+- Az adatbázis közben teljesen működőképes marad, kezeli ha a mentés indítása óta bekerült adatokat nem teszi be a mentésbe
+- Nem zárol semmit, biztonságos éles rendszeren is
+
+MinIO Volume Backup:
+- Docker volume szintű backup (rsync/tar alapú)
+- NEM tranzakció-tudatos!
+- Ha épp feltöltés folyik a backup készítésekor:
+   - Félbevágott fájl kerülhet a backupba
+   - Vagy a fájl egyáltalán nem kerül bele
+- Inkonzisztens állapot keletkezhet DB és MinIO között
+
+**Miért elfogadható mégis a projektnél?**
+- Hajnali 2:00-kor minimális az aktív feltöltés valószínűsége
+- Ha inkonzisztencia mégis keletkezik -> orphan fájl vagy hiányzó attachment
+- Nem kritikus adatvesztés
+- Ennek a problémának a kezeléséhez fejlettebb infrastruktúra lenne szükséges.
+
+**Production-ban a helyes megoldás:**
+- MinIO saját snapshot API használata
+- Vagy maintenance window a backup idejére
+- Vagy S3 object versioning bekapcsolása MinIO-n
+- Vagy alkalmazás szintű backup koordináció
+
+**Visszaállítás:**
+PostgreSQL:
+-> Dokploy dashboard -> PostgreSQL -> Backups -> Restore
+MinIO:
+-> Dokploy dashboard -> Volume Backups -> Restore
+
+**Lehetséges megoldás (elméleti, nem lesz implementálva):**
+Maintenance window koordináció SignalR-rel:
+1. 01:55 -> Backend SignalR broadcast: "MaintenanceStarting"
+   -> Frontend banner: "Fájl feltöltés 5 perc múlva szünetel"
+2. 02:00 -> Backend middleware letiltja a feltöltési endpointokat
+   -> MinIO Volume Backup indul
+3. Fix idő elteltével (pl. 15 perc) -> Backend újra engedélyezi
+   -> SignalR broadcast: "MaintenanceEnded"
+   -> Frontend banner eltűnik
+
+Korlátok:
+- Dokploy nem küld webhookot backup befejezésekor
+- Fix időablak szükséges ami nem garantálja a backup befejezését
+- Implementációs komplexitás nem arányos a haszonnal portfolio projektnél
+
+Production-ban ideális megoldás:
+- Dedikált backup orchestrator (pl. Velero)
+- MinIO saját snapshot API + webhook
+- Vagy managed backup szolgáltatás
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
