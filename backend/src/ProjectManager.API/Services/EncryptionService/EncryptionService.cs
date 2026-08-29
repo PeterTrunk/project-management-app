@@ -1,4 +1,6 @@
-﻿using System.Security.Cryptography;
+﻿using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace ProjectManager.API.Services.EncryptionService
@@ -9,9 +11,9 @@ namespace ProjectManager.API.Services.EncryptionService
         private const int NonceSize = 12;
         private const int TagSize = 16;
 
-        public EncryptionService(string base64Key)
+        public EncryptionService(IOptions<EncryptionOptions> options)
         {
-            _key = Convert.FromBase64String(base64Key);
+            _key = Convert.FromBase64String(options.Value.Key);
             if (_key.Length != 32)
                 throw new InvalidOperationException(
                     $"ENCRYPTION_KEY must be exactly 32 bytes, got {_key.Length}");

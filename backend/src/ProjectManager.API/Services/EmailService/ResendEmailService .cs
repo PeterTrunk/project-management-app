@@ -1,4 +1,6 @@
-﻿using Resend;
+﻿using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
+using Resend;
 
 namespace ProjectManager.API.Services.EmailService
 {
@@ -8,11 +10,11 @@ namespace ProjectManager.API.Services.EmailService
         private readonly string _fromEmail;
         private readonly string _frontendUrl;
 
-        public ResendEmailService(IResend resend, string fromEmail, string frontendUrl)
+        public ResendEmailService(IResend resend, IOptions<EmailOptions> options)
         {
             _resend = resend;
-            _fromEmail = fromEmail;
-            _frontendUrl = frontendUrl;
+            _fromEmail = options.Value.EmailFrom;
+            _frontendUrl = options.Value.FrontendUrl;
         }
 
         public async Task SendEmailVerificationAsync(string toEmail, string displayName, string verificationToken)

@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Constants;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Hubs;
@@ -19,14 +21,16 @@ namespace ProjectManager.API.Services.AttachmentService
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ILogger<AttachmentService> _logger;
-        
+        private readonly AttachmentOptions _attachmentOptions;
+
         public AttachmentService(
             AppDbContext context, 
             IFileStorageService fileStorageService, 
             IActivityService activityService, 
             ICurrentUserService currentUserService, 
             IHubContext<ProjectHub> hubContext,
-            ILogger<AttachmentService> logger)
+            ILogger<AttachmentService> logger,
+            IOptions<AttachmentOptions> attachmentOptions)
         {
             _context = context;
             _fileStorageService = fileStorageService;
@@ -34,6 +38,7 @@ namespace ProjectManager.API.Services.AttachmentService
             _currentUserService = currentUserService;
             _hubContext = hubContext;
             _logger = logger;
+            _attachmentOptions = attachmentOptions.Value;
         }
 
         public async Task DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
@@ -369,9 +374,8 @@ namespace ProjectManager.API.Services.AttachmentService
 
         private void ValidateFile(string contentType, long sizeBytes)
         {
-            var maxSizeMb = int.Parse(
-                Environment.GetEnvironmentVariable("MAX_UPLOAD_SIZE_MB") ?? "64");
-            var maxSizeBytes = maxSizeMb * 1024 * 1024;
+            var maxSizeMb = _attachmentOptions.MaxUploadSizeMb;
+            var maxSizeBytes = (long)maxSizeMb * 1024 * 1024;
 
             if (sizeBytes > maxSizeBytes)
             {

@@ -1,8 +1,10 @@
 ﻿using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OtpNet;
 using ProjectManager.API.Common.Exceptions;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
@@ -22,19 +24,22 @@ namespace ProjectManager.API.Services.Auth
         private readonly IEmailService _emailService;
         private readonly IRateLimitService _rateLimitService;
         private readonly ILogger<AuthService> _logger;
+        private readonly JwtOptions _jwtOptions;
 
         public AuthService(
             AppDbContext context, 
             ICurrentUserService currentUserService, 
             IEmailService emailService,
             IRateLimitService rateLimitService,
-            ILogger<AuthService> logger)
+            ILogger<AuthService> logger,
+            IOptions<JwtOptions> jwtOptions)
         {
             _context = context;
             _currentUserService = currentUserService;
             _emailService = emailService;
             _rateLimitService = rateLimitService;
             _logger = logger;
+            _jwtOptions = jwtOptions.Value;
         }
 
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
@@ -73,15 +78,12 @@ namespace ProjectManager.API.Services.Auth
             //Token előállítás
             var token = CreateToken(user);
 
-            var refreshMinutes = int.Parse(
-                Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_LIFETIME")!);
-
             //Refresh Token
             var refreshTokenEntry = new RefreshToken
             {
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(refreshMinutes)
+                ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes)
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
@@ -108,20 +110,16 @@ namespace ProjectManager.API.Services.Auth
                     new Claim(ClaimTypes.Email, user.Email),
                     new Claim(ClaimTypes.Name, user.DisplayName)
             };
+
             //Aláíró kulcs
             var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(
-                Environment.GetEnvironmentVariable("JWT_SECRET")!));
+                Encoding.UTF8.GetBytes(_jwtOptions.Secret));
 
-            var expiryMinutes = int.Parse(
-                Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")!);
-
-            //Token összerakása
             var token = new JwtSecurityToken(
-                issuer: Environment.GetEnvironmentVariable("JWT_ISSUER"),
-                audience: Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
+                issuer: _jwtOptions.Issuer,
+                audience: _jwtOptions.Audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(expiryMinutes),
+                expires: DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryMinutes),
                 signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
             );
 
