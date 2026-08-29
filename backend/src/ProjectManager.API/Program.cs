@@ -12,6 +12,7 @@ using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
+using ProjectManager.API.Middleware;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.AttachmentService;
 using ProjectManager.API.Services.Auth;
@@ -293,6 +294,8 @@ try
     var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
 
     //Middleware Pipeline - Sorrendjük kritikus
+    app.UseMiddleware<GlobalExceptionHandlerMiddleware>();  //Legelső dolog, hogy a nem várt hibákat már most így kezelje!
+
     // Retry logika a migrációhoz
     var retries = 10;
     while (retries > 0)
@@ -362,6 +365,7 @@ try
     app.MapGet("/health", () => "OK");
 
     //Start
+    Console.WriteLine("Alkalmazás indul!");
     app.Run();
 }
 catch (Exception ex)
