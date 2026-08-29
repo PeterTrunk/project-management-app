@@ -2647,6 +2647,43 @@ illetve megőrzési időt és törlési mechanizmust kellene bevezetni.
 5. AuthService logolás
 6. AttachmentService logolás
 
+### Program.cs átszervezés és Options pattern
+
+**Probléma:**
+A Program.cs nehezen olvasható volt, env var kinyerések szétszórva,
+service regisztrációk és middleware konfiguráció egy helyen.
+
+**Megoldás:**
+
+Options pattern bevezetése:
+- JwtOptions, DatabaseOptions, EmailOptions, MinioOptions, RedisOptions, EncryptionOptions, AttachmentOptions, CleanupOptions, ApiOptions
+- Service-ek IOptions<T>-n keresztül kapják a konfigurációt
+- Összes Environment.GetEnvironmentVariable hívás egy helyen (Program.cs env vars szekció)
+
+Érintett service-ek:
+- AuthService -> JwtOptions
+- MinIOFileStorageService -> MinioOptions
+- ResendEmailService -> EmailOptions
+- EncryptionService -> EncryptionOptions
+- AttachmentService -> AttachmentOptions
+- OrphanCleanupJob -> CleanupOptions
+- IntegrationService -> ApiOptions
+- TeamService -> EmailOptions (FrontendUrl)
+
+Program.cs szétszedése extension metódusokba:
+- ServiceCollectionExtensions: AddDatabase, AddJwtAuthentication, AddRedisAndSignalR, AddSwagger, AddEmailService, AddRbac, AddApplicationServices
+- ApplicationBuilderExtensions: UseProjectManagerMiddleware, RunMigrationsAsync, MigrateWebhookSecretsAsync
+
+Program.cs struktúra:
+1. Serilog konfiguráció
+2. .env betöltés (development)
+3. Env vars kinyerése (egy helyen!)
+4. Options regisztrálás
+5. Service Registration (extension metódusok)
+6. Build
+7. Middleware Pipeline (extension metódus)
+8. Start
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
