@@ -36,149 +36,163 @@ using ProjectManager.API.Services.SprintService;
 using ProjectManager.API.Services.StatisticsService;
 using ProjectManager.API.Services.TeamService;
 using Resend;
+using Serilog;
+using Serilog.Events;
 using StackExchange.Redis;
 using System.Reflection;
 using System.Text;
 
-var builder = WebApplication.CreateBuilder(args);
+Serilog.Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .WriteTo.Console()
+    .WriteTo.Seq(Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://localhost:5341")
+    .CreateLogger();
 
-// .env fájl betöltése CSAK development-ben
-if (!builder.Environment.IsProduction())
+try
 {
-    var envFile = Path.Combine(
-        Directory.GetCurrentDirectory(),
-        "..", "..", "..",
-        ".env"
-    );
-    if (File.Exists(envFile))
+    var builder = WebApplication.CreateBuilder(args);
+
+    // .env fájl betöltése CSAK development-ben
+    if (!builder.Environment.IsProduction())
     {
-        foreach (var line in File.ReadAllLines(envFile))
+        var envFile = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "..", "..", "..",
+            ".env"
+        );
+        if (File.Exists(envFile))
         {
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
-            var parts = line.Split('=', 2);
-            if (parts.Length == 2)
+            foreach (var line in File.ReadAllLines(envFile))
             {
-                Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
+                var parts = line.Split('=', 2);
+                if (parts.Length == 2)
+                {
+                    Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+                }
             }
         }
     }
-}
 
-builder.Configuration.AddEnvironmentVariables();
+    builder.Configuration.AddEnvironmentVariables();
 
-// Debug: összes env var kiírása
+    // Debug: összes env var kiírása
 
-/*
-Console.WriteLine("=== ALL ENV VARS ===");
-foreach (System.Collections.DictionaryEntry env in System.Environment.GetEnvironmentVariables())
-{
-    Console.WriteLine($"{env.Key}={env.Value}");
-}
-Console.WriteLine("=== END ENV VARS ===");
-*/
-
-// Environment variables kinyerése
-var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
-    ?? throw new InvalidOperationException("JWT_SECRET nincs beállítva!");
-
-var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
-    ?? throw new InvalidOperationException("JWT_ISSUER nincs beállítva!");
-
-var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
-    ?? throw new InvalidOperationException("JWT_AUDIENCE nincs beállítva!");
-
-var jwtExpiryMinutes = Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")
-    ?? throw new InvalidOperationException("JWT_EXPIRY_MINUTES nincs beállítva!");
-
-var jwtRefreshTokenLifetime = Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_LIFETIME")
-    ?? throw new InvalidOperationException("JWT_REFRESH_TOKEN_LIFETIME nincs beállítva!");
-
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
-    ?? throw new InvalidOperationException("DATABASE_URL nincs beállítva!");
-
-var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
-    ?? throw new InvalidOperationException("ENCRYPTION_KEY nincs beállítva!");
-
-var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY");
-
-var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
-
-// Service Registration (DI Container)
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    /*
+    Console.WriteLine("=== ALL ENV VARS ===");
+    foreach (System.Collections.DictionaryEntry env in System.Environment.GetEnvironmentVariables())
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSecret))
-        };
+        Console.WriteLine($"{env.Key}={env.Value}");
+    }
+    Console.WriteLine("=== END ENV VARS ===");
+    */
 
-        // SignalR JWT kezelés:
-        options.Events = new JwtBearerEvents
+    // Environment variables kinyerése
+    var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
+        ?? throw new InvalidOperationException("JWT_SECRET nincs beállítva!");
+
+    var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
+        ?? throw new InvalidOperationException("JWT_ISSUER nincs beállítva!");
+
+    var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+        ?? throw new InvalidOperationException("JWT_AUDIENCE nincs beállítva!");
+
+    var jwtExpiryMinutes = Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")
+        ?? throw new InvalidOperationException("JWT_EXPIRY_MINUTES nincs beállítva!");
+
+    var jwtRefreshTokenLifetime = Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_LIFETIME")
+        ?? throw new InvalidOperationException("JWT_REFRESH_TOKEN_LIFETIME nincs beállítva!");
+
+    var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
+        ?? throw new InvalidOperationException("DATABASE_URL nincs beállítva!");
+
+    var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
+        ?? throw new InvalidOperationException("ENCRYPTION_KEY nincs beállítva!");
+
+    var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY");
+
+    var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
+
+    // Service Registration (DI Container)
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString));
+
+    builder.Host.UseSerilog();
+
+    builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
         {
-            OnMessageReceived = context =>
+            options.TokenValidationParameters = new TokenValidationParameters
             {
-                var accessToken = context.Request.Query["access_token"];
-                var path = context.HttpContext.Request.Path;
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwtIssuer,
+                ValidAudience = jwtAudience,
+                IssuerSigningKey = new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(jwtSecret))
+            };
 
-                if (!string.IsNullOrEmpty(accessToken) &&
-                    path.StartsWithSegments("/hubs"))
+            // SignalR JWT kezelés:
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
                 {
-                    context.Token = accessToken;
+                    var accessToken = context.Request.Query["access_token"];
+                    var path = context.HttpContext.Request.Path;
+
+                    if (!string.IsNullOrEmpty(accessToken) &&
+                        path.StartsWithSegments("/hubs"))
+                    {
+                        context.Token = accessToken;
+                    }
+                    return Task.CompletedTask;
                 }
-                return Task.CompletedTask;
-            }
-        };
-    });
+            };
+        });
 
-var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
+    var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
 
-var signalRBuilder = builder.Services.AddSignalR();
-if (!string.IsNullOrEmpty(redisConnection))
-{
-    //SignalR backplane
-    signalRBuilder.AddStackExchangeRedis(redisConnection, options =>
+    var signalRBuilder = builder.Services.AddSignalR();
+    if (!string.IsNullOrEmpty(redisConnection))
     {
-        options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
-    });
+        //SignalR backplane
+        signalRBuilder.AddStackExchangeRedis(redisConnection, options =>
+        {
+            options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
+        });
 
-    //Rate limiting-hez külön regisztráció multiplexerként
-    var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
-    builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
-}
+        //Rate limiting-hez külön regisztráció multiplexerként
+        var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
+        builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
+    }
 
-builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+    builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
-builder.Services.AddSwaggerGen(options =>
-{
-    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    //options.IncludeXmlComments(xmlPath);
-    options.IncludeXmlComments(xmlPath, true);
-
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    builder.Services.AddSwaggerGen(options =>
     {
-        Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Írd be: Bearer {token}"
-    });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+        //options.IncludeXmlComments(xmlPath);
+        options.IncludeXmlComments(xmlPath, true);
+
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Írd be: Bearer {token}"
+        });
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
@@ -192,160 +206,169 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
-});
-
-var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
-    ?? "http://localhost:5173";
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins(frontendUrl)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
     });
-});
 
-//EmailService
-if (!string.IsNullOrEmpty(resendApiKey))
-{
-    builder.Services.AddResend(options =>
+    var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
+        ?? "http://localhost:5173";
+
+    builder.Services.AddCors(options =>
     {
-        options.ApiToken = resendApiKey;
+        options.AddPolicy("AllowFrontend", policy =>
+        {
+            policy.WithOrigins(frontendUrl)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
     });
-    builder.Services.AddSingleton<IEmailService>(sp =>
-        new ResendEmailService(
-            sp.GetRequiredService<IResend>(),
-            emailFrom,
-            frontendUrl
-        )
-    );
-    Console.WriteLine("#Email: Resend service aktív");
-}
-else
-{
-    builder.Services.AddSingleton<IEmailService>(new ConsoleEmailService());
-    Console.WriteLine("#Email: Console service aktív (fejlesztői mód)");
-}
 
-//RBAC - Role Based Access Control
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(PolicyNames.ProjectViewer, policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Viewer)))
-    .AddPolicy(PolicyNames.ProjectMember, policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Member)))
-    .AddPolicy(PolicyNames.ProjectAdmin, policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Admin)))
-    .AddPolicy(PolicyNames.ProjectOwner, policy =>
-        policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Owner)));
-
-//FluentValidation Validators
-builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-builder.Services.AddFluentValidationAutoValidation();
-
-builder.Services.AddSingleton<ILexorankService, LexorankService>();
-builder.Services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
-
-builder.Services.AddSingleton<IEncryptionService>(
-    new EncryptionService(encryptionKey));
-
-builder.Services.AddScoped<IProjectService, ProjectService>();
-builder.Services.AddScoped<ITaskService, TaskService>();
-builder.Services.AddScoped<ILabelService, LabelService>();
-builder.Services.AddScoped<ICommentService, CommentService>();
-builder.Services.AddScoped<IColumnService, ColumnService>();
-builder.Services.AddScoped<IBoardService, BoardService>();
-builder.Services.AddScoped<ISprintService, SprintService>();
-builder.Services.AddScoped<ITeamService, TeamService>();
-builder.Services.AddScoped<IActivityService, ActivityService>();
-builder.Services.AddScoped<IAttachmentService, AttachmentService>();
-builder.Services.AddScoped<IIntegrationService, IntegrationService>();
-builder.Services.AddScoped<IGitWebhookService, GitWebhookService>();
-builder.Services.AddScoped<IGitService, GitService>();
-builder.Services.AddScoped<IStatisticsService, StatisticsService>();
-builder.Services.AddScoped<ICounterService, CounterService>();
-
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-
-builder.Services.AddScoped<ProjectNotArchivedFilter>();
-
-//OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
-builder.Services.AddHostedService<OrphanCleanupJob>();
-
-var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
-
-//Middleware Pipeline - Sorrendjük kritikus
-// Retry logika a migrációhoz
-var retries = 10;
-while (retries > 0)
-{
-    try
+    //EmailService
+    if (!string.IsNullOrEmpty(resendApiKey))
     {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
-        break;
+        builder.Services.AddResend(options =>
+        {
+            options.ApiToken = resendApiKey;
+        });
+        builder.Services.AddSingleton<IEmailService>(sp =>
+            new ResendEmailService(
+                sp.GetRequiredService<IResend>(),
+                emailFrom,
+                frontendUrl
+            )
+        );
+        Console.WriteLine("#Email: Resend service aktív");
     }
-    catch (Exception ex)
+    else
     {
-        retries--;
-        Console.WriteLine($"Connection String: {connectionString}");
-        Console.WriteLine($"Migration failed, retrying... ({retries} attempts left): {ex.Message}");
-        if (retries == 0) throw;
-        await Task.Delay(3000);
+        builder.Services.AddSingleton<IEmailService>(new ConsoleEmailService());
+        Console.WriteLine("#Email: Console service aktív (fejlesztői mód)");
     }
-}
 
-//Meglévő plain text WebhookSecret-ek titkosítása (egyszer futó migráció)
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+    //RBAC - Role Based Access Control
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddScoped<IAuthorizationHandler, ProjectRoleHandler>();
+    builder.Services.AddAuthorizationBuilder()
+        .AddPolicy(PolicyNames.ProjectViewer, policy =>
+            policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Viewer)))
+        .AddPolicy(PolicyNames.ProjectMember, policy =>
+            policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Member)))
+        .AddPolicy(PolicyNames.ProjectAdmin, policy =>
+            policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Admin)))
+        .AddPolicy(PolicyNames.ProjectOwner, policy =>
+            policy.Requirements.Add(new ProjectRoleRequirement(ProjectRoles.Owner)));
 
-    var integrations = await context.Integrations.ToListAsync();
-    foreach (var integration in integrations)
+    //FluentValidation Validators
+    builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+    builder.Services.AddFluentValidationAutoValidation();
+
+    builder.Services.AddSingleton<ILexorankService, LexorankService>();
+    builder.Services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
+
+    builder.Services.AddSingleton<IEncryptionService>(
+        new EncryptionService(encryptionKey));
+
+    builder.Services.AddScoped<IProjectService, ProjectService>();
+    builder.Services.AddScoped<ITaskService, TaskService>();
+    builder.Services.AddScoped<ILabelService, LabelService>();
+    builder.Services.AddScoped<ICommentService, CommentService>();
+    builder.Services.AddScoped<IColumnService, ColumnService>();
+    builder.Services.AddScoped<IBoardService, BoardService>();
+    builder.Services.AddScoped<ISprintService, SprintService>();
+    builder.Services.AddScoped<ITeamService, TeamService>();
+    builder.Services.AddScoped<IActivityService, ActivityService>();
+    builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+    builder.Services.AddScoped<IIntegrationService, IntegrationService>();
+    builder.Services.AddScoped<IGitWebhookService, GitWebhookService>();
+    builder.Services.AddScoped<IGitService, GitService>();
+    builder.Services.AddScoped<IStatisticsService, StatisticsService>();
+    builder.Services.AddScoped<ICounterService, CounterService>();
+
+    builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+    builder.Services.AddScoped<ProjectNotArchivedFilter>();
+
+    //OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
+    builder.Services.AddHostedService<OrphanCleanupJob>();
+
+    var app = builder.Build(); // Határ: konfiguráció fent, pipeline lent
+
+    //Middleware Pipeline - Sorrendjük kritikus
+    // Retry logika a migrációhoz
+    var retries = 10;
+    while (retries > 0)
     {
         try
         {
-            //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
-            encryption.Decrypt(integration.WebhookSecret);
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+            break;
         }
-        catch
+        catch (Exception ex)
         {
-            //Ha Decrypt hibát dob,akkor még plain text, titkosítjuk
-            integration.WebhookSecret = encryption.Encrypt(integration.WebhookSecret);
-            Console.WriteLine($"Migrated integration {integration.Id} WebhookSecret to encrypted format.");
+            retries--;
+            Console.WriteLine($"Connection String: {connectionString}");
+            Console.WriteLine($"Migration failed, retrying... ({retries} attempts left): {ex.Message}");
+            if (retries == 0) throw;
+            await Task.Delay(3000);
         }
     }
 
-    await context.SaveChangesAsync();
-    Console.WriteLine("WebhookSecret migration completed.");
-}
+    //Meglévő plain text WebhookSecret-ek titkosítása (egyszer futó migráció)
+    using (var scope = app.Services.CreateScope())
+    {
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
 
-if (app.Environment.IsDevelopment())
+        var integrations = await context.Integrations.ToListAsync();
+        foreach (var integration in integrations)
+        {
+            try
+            {
+                //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
+                encryption.Decrypt(integration.WebhookSecret);
+            }
+            catch
+            {
+                //Ha Decrypt hibát dob,akkor még plain text, titkosítjuk
+                integration.WebhookSecret = encryption.Encrypt(integration.WebhookSecret);
+                Console.WriteLine($"Migrated integration {integration.Id} WebhookSecret to encrypted format.");
+            }
+        }
+
+        await context.SaveChangesAsync();
+        Console.WriteLine("WebhookSecret migration completed.");
+    }
+
+    if (app.Environment.IsDevelopment())
+    {
+        //Middleware hozzáadás ami development specifikus
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    //Middleware hozzáadás
+    app.UseRouting();
+
+    app.UseCors("AllowFrontend");
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.MapControllers();
+
+    app.MapHub<ProjectHub>("/hubs/project");
+
+    app.MapGet("/health", () => "OK");
+
+    //Start
+    app.Run();
+}
+catch (Exception ex)
 {
-    //Middleware hozzáadás ami development specifikus
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    Serilog.Log.Fatal(ex, "Az alkalmazás váratlanul leállt!");
 }
-
-//Middleware hozzáadás
-app.UseRouting();
-
-app.UseCors("AllowFrontend");
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.MapHub<ProjectHub>("/hubs/project");
-
-app.MapGet("/health", () => "OK");
-
-//Start
-app.Run();
+finally
+{
+    Serilog.Log.CloseAndFlush();
+}
