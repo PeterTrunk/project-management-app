@@ -54,6 +54,17 @@ services:
       - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
       - "traefik.http.services.minio.loadbalancer.server.port=9000"
 
+  seq:
+    image: datalust/seq
+    container_name: pm-seq
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+    volumes:
+      - seq_data:/data
+    networks:
+      - pma-internal
+
   pm-api:
     build:
       context: ./backend
@@ -97,6 +108,7 @@ services:
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB}
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
       ORPHAN_CLEANUP_INTERVAL_HOURS: ${ORPHAN_CLEANUP_INTERVAL_HOURS}
+      SEQ_URL: ${SEQ_URL}
     networks:
       - dokploy-network
       - pma-internal
@@ -165,3 +177,4 @@ volumes:
   postgres_data:
   minio_data:
   redis_data:
+  seq_data:

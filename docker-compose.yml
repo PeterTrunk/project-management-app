@@ -34,8 +34,20 @@ services:
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
+  
+  seq:
+    image: datalust/seq
+    container_name: pm-seq
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+    volumes:
+      - seq_data:/data
+    networks:
+      - pma-internal
 
 volumes:
   postgres_data:
   minio_data:
   redis_data:
+  seq_data:
