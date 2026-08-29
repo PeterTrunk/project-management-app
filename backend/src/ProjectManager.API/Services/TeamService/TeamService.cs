@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
 using ProjectManager.API.Hubs;
@@ -15,13 +17,20 @@ namespace ProjectManager.API.Services.TeamService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ICurrentUserService _currentUserService;
         private readonly IActivityService _activityService;
+        private readonly EmailOptions _emailOptions;
 
-        public TeamService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
+        public TeamService(
+            AppDbContext context, 
+            IHubContext<ProjectHub> hubContext, 
+            ICurrentUserService currentUserService, 
+            IActivityService activityService,
+            IOptions<EmailOptions> emailOptions)
         {
             _context = context;
             _hubContext = hubContext;
             _currentUserService = currentUserService;
             _activityService = activityService;
+            _emailOptions = emailOptions.Value;
         }
 
         public async Task<InviteLinkResponseDto> GenerateInviteLinkAsync(Guid projectId, GenerateInviteLinkDto dto)
@@ -33,7 +42,7 @@ namespace ProjectManager.API.Services.TeamService
             // 32 karakter, kötőjel nélkül
             var token = Guid.NewGuid().ToString("N");
 
-            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
+            var frontendUrl = _emailOptions.FrontendUrl;
 
             var invite = new ProjectInvite
             {
@@ -258,7 +267,7 @@ namespace ProjectManager.API.Services.TeamService
 
         public async Task<List<InviteLinkResponseDto>> GetInvitationsAsync(Guid projectId)
         {
-            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
+            var frontendUrl = _emailOptions.FrontendUrl;
 
             var invites = await _context.ProjectInvites
                 .Where(i => i.ProjectId == projectId)

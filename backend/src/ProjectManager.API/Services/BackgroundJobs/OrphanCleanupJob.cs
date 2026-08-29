@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.FileStorageService;
 
@@ -8,19 +10,21 @@ namespace ProjectManager.API.Services.BackgroundJobs
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<OrphanCleanupJob> _logger;
+        private readonly CleanupOptions _cleanupOptions;
 
-        public OrphanCleanupJob(IServiceProvider serviceProvider, ILogger<OrphanCleanupJob> logger)
+        public OrphanCleanupJob(
+            IServiceProvider serviceProvider, 
+            ILogger<OrphanCleanupJob> logger,
+            IOptions<CleanupOptions> cleanupOptions)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
+            _cleanupOptions = cleanupOptions.Value;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var intervalHours = int.Parse(
-                Environment.GetEnvironmentVariable("ORPHAN_CLEANUP_INTERVAL_HOURS") ?? "24");
-
-            using var timer = new PeriodicTimer(TimeSpan.FromHours(intervalHours));
+            using var timer = new PeriodicTimer(TimeSpan.FromHours(_cleanupOptions.OrphanCleanupIntervalHours));
 
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {

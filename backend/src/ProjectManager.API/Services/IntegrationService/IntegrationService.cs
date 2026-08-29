@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Integration;
 using ProjectManager.API.Hubs;
@@ -17,22 +19,22 @@ namespace ProjectManager.API.Services.IntegrationService
         private readonly IActivityService _activityService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IEncryptionService _encryptionService;
-
-        public string baseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
-                ?? "http://localhost:5178";
+        private readonly ApiOptions _apiOptions;
 
         public IntegrationService(
             AppDbContext context, 
             ICurrentUserService currentUserService, 
             IActivityService activityService, 
             IHubContext<ProjectHub> hubContext,
-            IEncryptionService encryptionService)
+            IEncryptionService encryptionService,
+            IOptions<ApiOptions> apiOptions)
         {
             _context = context;
             _currentUserService = currentUserService;
             _activityService = activityService;
             _hubContext = hubContext;
             _encryptionService = encryptionService;
+            _apiOptions = apiOptions.Value;
         }
 
         public async Task<IntegrationResponseDto> CreateIntegrationAsync(Guid projectId, CreateIntegrationDto dto)
@@ -76,7 +78,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     repoFullName = integration.RepoFullName,
                     isEnabled = integration.IsEnabled,
                     isVerified = integration.IsVerified,
-                    webhookUrl = $"{baseUrl}/api/git/webhook/{integration.WebhookToken}",
+                    webhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                     createdAt = integration.CreatedAt
                 });
 
@@ -284,7 +286,7 @@ namespace ProjectManager.API.Services.IntegrationService
                 Provider = integration.Provider,
                 RepoFullName = integration.RepoFullName,
                 WebhookToken = integration.WebhookToken,
-                WebhookUrl = $"{baseUrl}/api/git/webhook/{integration.WebhookToken}",
+                WebhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
                 IsVerified = integration.IsVerified,
                 HasAccessToken = !string.IsNullOrEmpty(integration.AccessToken),

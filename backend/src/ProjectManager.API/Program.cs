@@ -58,6 +58,7 @@ try
     var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
     var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
     var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
+    var apiBaseUrl = Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5178";
 
     // MinIO
     var minioEndpoint = Environment.GetEnvironmentVariable("MINIO_ENDPOINT")
@@ -75,6 +76,10 @@ try
     var maxUploadSizeMb = int.Parse(
         Environment.GetEnvironmentVariable("MAX_UPLOAD_SIZE_MB") ?? "64");
 
+    //OrphanCleanupJob
+    var orphanCleanupIntervalHours = int.Parse(
+        Environment.GetEnvironmentVariable("ORPHAN_CLEANUP_INTERVAL_HOURS") ?? "24");
+
     // Options regisztrálás
 
     //JWT
@@ -85,6 +90,12 @@ try
         options.Audience = jwtAudience;
         options.ExpiryMinutes = int.Parse(jwtExpiryMinutes);
         options.RefreshTokenLifetimeMinutes = int.Parse(jwtRefreshTokenLifetime);
+    });
+
+    //Base URL
+    builder.Services.Configure<ApiOptions>(options =>
+    {
+        options.BaseUrl = apiBaseUrl;
     });
 
     //DB
@@ -128,6 +139,12 @@ try
     builder.Services.Configure<AttachmentOptions>(options =>
     {
         options.MaxUploadSizeMb = maxUploadSizeMb;
+    });
+
+    //OrphanCleanupJob
+    builder.Services.Configure<CleanupOptions>(options =>
+    {
+        options.OrphanCleanupIntervalHours = orphanCleanupIntervalHours;
     });
 
     // Service Registration (DI Container)
