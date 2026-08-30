@@ -2799,6 +2799,34 @@ Production-ban ideális megoldás:
 - MinIO saját snapshot API + webhook
 - Vagy managed backup szolgáltatás
 
+**Konzisztencia probléma megoldása:**
+A Dokploy Volume Backup "Turn Off Container During Backup" opció
+a MinIO konténer ideiglenesen leáll a backup készítésekor:
+- Hajnali 2:00-kor minimálisan valószínű a forgalom, de amennyiben mégis használva lenne akkor abban az időben hibát dob a kapcsolódó feltöltés / letöltés funkció
+- Konzisztens mentés garantált, nem történhet meg a fél file mentés feltöltés közben
+- Az elméleti maintenance window megoldás így nem szükséges!
+
+**Lokális backup korlátai és ideális megoldás:**
+
+Jelenlegi megoldás:
+- Backblaze B2 offsite backup a projektnél
+- Lokális backup ugyanazon a szerveren nem ad valódi redundanciát
+  (ha a szerver meghal - lokális backup is elvész, ezért ki lett hagyva, későbbre lett áttéve)
+
+Ideális production megoldás (3-2-1 szabály szerint):
+1. Élő adat - Hetzner szerver
+2. Lokális backup - második Hetzner szerver vagy külön volume
+   (dedikált backup MinIO példány külön szerveren)
+3. Offsite backup - Backblaze B2 (vagy más cloud provider)
+
+Lokális backup implementálása ha később szükséges:
+- Külön backup MinIO példány ugyanazon a szerveren
+- Dokploy S3 Destination-ként regisztrálva
+- Napi mentés Postgres és MinIO volume-ról
+- Ennek csak főleg csak a lokalitás szintjén lenne előnye: gyorsabb visszatöltés / mentés.
+- Ha véletlenűl a remote backup provider oldalán lenne a baj akkor lenne itt is egy mentés.
+- Csak akkor lenne baj ha mindkettő rendszer egyszerre hibásodik meg
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
