@@ -157,7 +157,7 @@ namespace ProjectManager.API.Services.SprintService
                 var targetSprint = await _context.Sprints
                     .FirstOrDefaultAsync(s => s.Id == targetSprintId && s.ProjectId == projectId);
                 if (targetSprint == null)
-                    throw new Exception("A cél sprint nem található vagy nem ehhez a projekthez tartozik!");
+                    throw new Exception("A cél sprint nem található");
                 if (targetSprint.State == SprintStates.Completed)
                     throw new Exception("A cél sprint már le van zárva!");
             }

@@ -997,9 +997,6 @@ GitController - git kezelő endpointok:
   - PR review events kezelése
 
 ## Statistics Dashboard & ECharts Integration
-Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using PostgreSQL views for efficient aggregation. Filterable by sprint, user, and date range.
-
-## Statistics Dashboard & ECharts Integration
 
 Statistics view with ECharts visualizations: task status distribution (pie chart), sprint burndown and burnup charts (line chart), team workload distribution (bar chart), sprint velocity over time, cumulative flow diagram (stacked area chart). Backend reporting endpoints using EF Core ORM queries. Filterable by sprint and date range.
 
@@ -2826,6 +2823,64 @@ Lokális backup implementálása ha később szükséges:
 - Ennek csak főleg csak a lokalitás szintjén lenne előnye: gyorsabb visszatöltés / mentés.
 - Ha véletlenűl a remote backup provider oldalán lenne a baj akkor lenne itt is egy mentés.
 - Csak akkor lenne baj ha mindkettő rendszer egyszerre hibásodik meg
+
+### Biztonsági és stabilitási javítások
+
+**CounterService - ChangeTracker.Clear() retry logikában**
+Probléma: Retry esetén a C# DbContext nem volt tisztítva, a counter objektum
+a memóriában a régi értéket tartotta ezért duplikált TaskKey keletkezhetett.
+Megoldás: ChangeTracker.Clear() hozzáadva a 40001 catch blokkhoz.
+
+**RateLimitService - Atomikus Redis INCR+EXPIRE**
+Probléma: INCR és EXPIRE két külön Redis parancs, ha köztük megszakad a folyamat
+a kulcs TTL nélkül marad, memory leak + végleges rate limit az adott email/IP-re.
+Megoldás: Lua script ami atomikusan futtatja az INCR+EXPIRE-t Redis szerveren.
+
+**OrphanCleanupJob - Konkurens cleanup kezelése**
+Probléma: Két replika egyszerre futtathatja a cleanup job-ot, DbUpdateConcurrencyException (bár nem omolna össze az alkalmazás ennyitől)
+ha mindkettő ugyanazt az orphan-t próbálja törölni -> BackgroundService leállhat.
+Megoldás: DbUpdateConcurrencyException elkapva és logolva, ChangeTracker.Clear()
+hozzáadva, SaveChangesAsync egyenként a cikluson belül.
+
+**RefreshTokenAsync - Race condition javítás**
+Probléma: Két párhuzamos refresh kérés egyszerre olvashatta a még nem visszavont tokent
+ezért mindkettő érvényes új tokent kapott, refresh token reuse detection nem működött.
+Megoldás: Feltételes UPDATE (WHERE is_revoked = false), csak az első kérés kap
+rowsAffected = 1, a második rowsAffected = 0 -> hibát kap.
+
+**Frontend - Single-flight token refresh védelem**
+Probléma: Párhuzamos 401 válaszok esetén minden kérés külön refresh hívást indított,
+tokenRefreshService és interceptor egymástól függetlenül is indíthatott refresh-t.
+Megoldás: Közös refreshTokenOnce() helper shared Promise-cache mintával:
+fizikailag nem mehet ki egyszerre két refresh hívás (A 2.+ kérésnek ha már fut akkor a Promise-t adjuk vissza).
+
+**SameSite=Strict cookie beállítás**
+Probléma: SameSite=None volt beállítva holott app.trunkpeter.com és api.trunkpeter.com
+ugyanaz a site (trunkpeter.com), Strict is működik, biztonságosabb.
+Megoldás: refreshToken cookie és signalr_affinity cookie SameSite=Strict-re állítva.
+Phase 2 (same-origin Traefik routing) ezzel feleslegessé vált.
+
+### CompleteSprintAsync javítások
+
+**1. Rollback committált tranzakción**
+Probléma: A TaskMoved SignalR broadcast-ok a try/catch-en belül voltak a commit után,
+így ha egy broadcast hibázott akkor rollback kísérlet egy már committált tranzakción.
+Megoldás: unfinishedTasks és completedTasks listák deklarálása a try/catch elött,
+broadcast-ok áthelyezése a try/catch utánra.
+
+**2. targetSprintId validáció hiánya**
+Probléma: Nem volt ellenőrzés hogy a cél-sprint ugyanahhoz a projekthez tartozik-e
+és megfelelő állapotban van-e.
+Megoldás: Validáció hozzáadva a tranzakció előtt:
+- Cél-sprint projekthez tartozásának ellenőrzése
+- Cél-sprint nem Completed állapotának ellenőrzése
+
+**3. Lexorank pozíció-ütközés carry-over taskoknál**
+Probléma: Több befejezetlen task carry-over esetén mindegyik ugyanazt a lastTask-ot
+látta (nincs köztes SaveChanges) ezért azonos pozíciót kaptak (nem feltétlen hiba, hiszen nem kell egyedi pozíciónak lennie, de így szebbnek mondható).
+Megoldás: lastPosition követés a cikluson belül:
+- Első körnél DB-ből olvassa az utolsó pozíciót
+- Minden következő körnél az előző task pozícióját használja az új pozíció számítására
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
