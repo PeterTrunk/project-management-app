@@ -152,11 +152,24 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
+            if (targetSprintId.HasValue)
+            {
+                var targetSprint = await _context.Sprints
+                    .FirstOrDefaultAsync(s => s.Id == targetSprintId && s.ProjectId == projectId);
+                if (targetSprint == null)
+                    throw new Exception("A cél sprint nem található vagy nem ehhez a projekthez tartozik!");
+                if (targetSprint.State == SprintStates.Completed)
+                    throw new Exception("A cél sprint már le van zárva!");
+            }
+
+            List<ProjectTask> unfinishedTasks = new();
+            List<ProjectTask> completedTasks = new();
+
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
                 // Befejezetlen taskok ellenőrzése (CompletedAt alapján)
-                var unfinishedTasks = await _context.ProjectTasks
+                unfinishedTasks = await _context.ProjectTasks
                     .Where(t => t.SprintId == sprintId && t.CompletedAt == null)
                     .ToListAsync();
 
@@ -183,6 +196,8 @@ namespace ProjectManager.API.Services.SprintService
                     }
                     else
                     {
+                        string? lastPosition = null;
+
                         // Következő sprintbe
                         foreach (var task in unfinishedTasks)
                         {
@@ -199,13 +214,19 @@ namespace ProjectManager.API.Services.SprintService
 
                                 if (firstColumn != null)
                                 {
-                                    var lastTask = await _context.ProjectTasks
-                                        .Where(t => t.ColumnId == firstColumn.Id)
-                                        .OrderBy(t => t.Position)
-                                        .LastOrDefaultAsync();
+                                    if (lastPosition == null)
+                                    {
+                                        //Csak az első körnél nézzük meg a DB-t, utána lastPosition követés.
+                                        var lastTask = await _context.ProjectTasks
+                                            .Where(t => t.ColumnId == firstColumn.Id)
+                                            .OrderBy(t => t.Position)
+                                            .LastOrDefaultAsync();
+                                        lastPosition = lastTask?.Position;
+                                    }
 
+                                    task.Position = _lexorankService.GetInitialPosition(lastPosition);
+                                    lastPosition = task.Position;
                                     task.ColumnId = firstColumn.Id;
-                                    task.Position = _lexorankService.GetInitialPosition(lastTask?.Position);
 
                                     _context.TaskStatusHistories.Add(new TaskStatusHistory
                                     {
@@ -221,7 +242,7 @@ namespace ProjectManager.API.Services.SprintService
                 }
 
                 // ClosedAt beállítása CSAK a befejezett taskokra
-                var completedTasks = await _context.ProjectTasks
+                completedTasks = await _context.ProjectTasks
                     .Where(t => t.SprintId == sprintId && t.CompletedAt != null)
                     .ToListAsync();
 
@@ -234,43 +255,43 @@ namespace ProjectManager.API.Services.SprintService
                 sprint.State = SprintStates.Completed;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-
-                foreach (var task in unfinishedTasks)
-                {
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("TaskMoved", new
-                        {
-                            taskId = task.Id,
-                            boardId = task.BoardId,
-                            columnId = task.ColumnId,
-                            sprintId = task.SprintId,
-                            position = task.Position,
-                            completedAt = task.CompletedAt,
-                            rowVersion = task.xmin
-                        });
-                }
-
-                foreach (var task in completedTasks)
-                {
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("TaskMoved", new
-                        {
-                            taskId = task.Id,
-                            boardId = task.BoardId,
-                            columnId = task.ColumnId,
-                            sprintId = task.SprintId,
-                            position = task.Position,
-                            completedAt = task.CompletedAt,
-                            rowVersion = task.xmin
-                        });
-                }
             }
             catch (Exception)
             {
                 await transaction.RollbackAsync();
                 throw;
+            }
+
+            foreach (var task in unfinishedTasks)
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskMoved", new
+                    {
+                        taskId = task.Id,
+                        boardId = task.BoardId,
+                        columnId = task.ColumnId,
+                        sprintId = task.SprintId,
+                        position = task.Position,
+                        completedAt = task.CompletedAt,
+                        rowVersion = task.xmin
+                    });
+            }
+
+            foreach (var task in completedTasks)
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskMoved", new
+                    {
+                        taskId = task.Id,
+                        boardId = task.BoardId,
+                        columnId = task.ColumnId,
+                        sprintId = task.SprintId,
+                        position = task.Position,
+                        completedAt = task.CompletedAt,
+                        rowVersion = task.xmin
+                    });
             }
 
             await _hubContext.Clients
