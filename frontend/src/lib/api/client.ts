@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { tokenStore } from '../stores/tokenStore';
+import { refreshTokenOnce } from './tokenRefresh';
 
 const apiClient = axios.create({
     baseURL: `${import.meta.env.VITE_API_URL || 'http://localhost:5178'}/api`,
@@ -27,16 +28,8 @@ apiClient.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
-                console.log('Token lejárt, refresh indítása...');
-                const response = await axios.post(
-                    `${import.meta.env.VITE_API_URL || 'http://localhost:5178'}/api/auth/refresh`,
-                    {},
-                    { withCredentials: true }
-                );
-
-                const newToken = response.data.token;
-                tokenStore.set(newToken);
-                
+                console.log('Refresh hívva!');
+                const newToken = await refreshTokenOnce();
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return apiClient(originalRequest);
             } catch (refreshError) {

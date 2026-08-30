@@ -136,7 +136,7 @@ services:
       - "traefik.http.services.api.loadbalancer.sticky.cookie.name=signalr_affinity"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.httponly=true"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.secure=true"
-      - "traefik.http.services.api.loadbalancer.sticky.cookie.samesite=none"
+      - "traefik.http.services.api.loadbalancer.sticky.cookie.samesite=strict"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.maxage=30"
   
   frontend:

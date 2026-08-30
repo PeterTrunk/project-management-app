@@ -1,5 +1,5 @@
 import { tokenStore } from '../stores/tokenStore';
-import apiClient from '../api/client';
+import { refreshTokenOnce } from '../api/tokenRefresh';
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -14,10 +14,8 @@ export function scheduleTokenRefresh() {
     const refreshInMs = expiryMs - 60 * 1000;
     
     refreshTimer = setTimeout(async () => {
-        console.log('scheduleTokenRefresh hívva!');
         try {
-            const response = await apiClient.post('/auth/refresh');
-            tokenStore.set(response.data.token);
+            await refreshTokenOnce();
             scheduleTokenRefresh();
         } catch {
             tokenStore.clear();
