@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.AttachmentService;
@@ -20,7 +21,7 @@ namespace ProjectManager.API.Controllers
 
         //Projekt szintű lista
         [HttpGet("attachments")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<AttachmentResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<AttachmentResponseDto>>> GetProjectAttachmentsAsync(Guid projectId)
         {
@@ -37,7 +38,7 @@ namespace ProjectManager.API.Controllers
 
         //Task szintű lista
         [HttpGet("tasks/{taskId}/attachments")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<AttachmentResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<AttachmentResponseDto>>> GetTaskAttachmentsAsync(Guid projectId, Guid taskId)
         {
@@ -54,7 +55,7 @@ namespace ProjectManager.API.Controllers
 
         //Projekt feltöltés
         [HttpPost("attachments")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> UploadProjectAttachmentAsync(Guid projectId, IFormFile file)
         {
@@ -78,7 +79,7 @@ namespace ProjectManager.API.Controllers
 
         //Task feltöltés
         [HttpPost("tasks/{taskId}/attachments")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> UploadTaskAttachmentAsync(Guid projectId, Guid taskId, IFormFile file)
         {
@@ -103,7 +104,7 @@ namespace ProjectManager.API.Controllers
 
         //Letöltés (projekt és task szintű egyaránt)
         [HttpGet("attachments/{attachmentId}/download")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         public async Task<IActionResult> DownloadAttachmentAsync(Guid projectId, Guid attachmentId, CancellationToken ct)
         {
             try
@@ -128,7 +129,7 @@ namespace ProjectManager.API.Controllers
 
         //Törlés (projekt és task szintű egyaránt)
         [HttpDelete("attachments/{attachmentId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         public async Task<IActionResult> DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
         {
             try
@@ -144,7 +145,7 @@ namespace ProjectManager.API.Controllers
 
         //Task szintű presigned URL
         [HttpPost("tasks/{taskId}/attachments/presigned")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(PresignedUrlResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<PresignedUrlResponseDto>> GetTaskPresignedUploadUrlAsync(
             Guid projectId, 
@@ -164,7 +165,7 @@ namespace ProjectManager.API.Controllers
 
         //Projekt szintű presigned URL
         [HttpPost("attachments/presigned")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(PresignedUrlResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<PresignedUrlResponseDto>> GetProjectPresignedUploadUrlAsync(
             Guid projectId, 
@@ -183,7 +184,7 @@ namespace ProjectManager.API.Controllers
 
         //Task szintű confirm
         [HttpPost("tasks/{taskId}/attachments/confirm")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> ConfirmTaskUploadAsync(
             Guid projectId, Guid taskId, [FromBody] ConfirmUploadDto dto)
@@ -201,7 +202,7 @@ namespace ProjectManager.API.Controllers
 
         //Projekt szintű confirm
         [HttpPost("attachments/confirm")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> ConfirmProjectUploadAsync(
             Guid projectId, [FromBody] ConfirmUploadDto dto)

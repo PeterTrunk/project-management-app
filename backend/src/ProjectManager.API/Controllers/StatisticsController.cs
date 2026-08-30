@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Statistics;
 using ProjectManager.API.Services.StatisticsService;
 
@@ -17,7 +18,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("task-status")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<TaskStatusDistributionDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<TaskStatusDistributionDto>>> GetTaskStatusDistributionAsync(Guid projectId, [FromQuery] Guid? sprintId = null)
         {
@@ -33,7 +34,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("burndown")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<BurndownDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<BurndownDataPointDto>>> GetBurndownAsync(Guid projectId, [FromQuery] Guid sprintId)
         {
@@ -49,7 +50,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("workload")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<WorkloadDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<WorkloadDataPointDto>>> GetWorkloadAsync(Guid projectId, [FromQuery] Guid? sprintId = null)
         {
@@ -65,7 +66,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("velocity")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<VelocityDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<VelocityDataPointDto>>> GetVelocityAsync(Guid projectId)
         {
@@ -81,7 +82,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("cumulative-flow")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<CumulativeFlowDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<CumulativeFlowDataPointDto>>> GetCumulativeFlowAsync(
             Guid projectId,

@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace ProjectManager.API.DTOs.Comments
+﻿namespace ProjectManager.API.DTOs.Comments
 {
     public class CreateCommentDto
     {

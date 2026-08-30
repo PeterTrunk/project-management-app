@@ -7,6 +7,7 @@ using ProjectManager.API.DTOs.ProjectTask;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.LexorankService;
 using System.Data;
@@ -20,14 +21,22 @@ namespace ProjectManager.API.Services.ProjectTaskService
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
+        private readonly ICounterService _counterService;
 
-        public TaskService(AppDbContext context, ILexorankService lexorankService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
+        public TaskService(
+            AppDbContext context, 
+            ILexorankService lexorankService, 
+            ICurrentUserService currentUserService, 
+            IHubContext<ProjectHub> hubContext, 
+            IActivityService activityService,
+            ICounterService counterService)
         {
             _context = context;
             _lexorankService = lexorankService;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
             _activityService = activityService;
+            _counterService = counterService;
         }
         
         public async Task<TaskResponseDto> CreateTaskAsync(Guid projectId, CreateTaskDto dto)
@@ -50,9 +59,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     throw new Exception("Oszlop nem található!");
             }
 
-            var counter = await _context.ProjectCounters.FirstOrDefaultAsync(pc => pc.ProjectId == projectId);
-            if (counter == null)
-                throw new Exception("Számláló nem található");
+            var taskNumber = await _counterService.GetNextTaskNumberAsync(projectId);
+            var taskKey = $"{project.ProjKey}-{taskNumber}";
 
             var lastTask = dto.ColumnId.HasValue
                 ? await _context.ProjectTasks
@@ -60,9 +68,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .OrderBy(t => t.Position)
                     .LastOrDefaultAsync()
                 : null;
-
-            counter.LastNum += 1;
-            var taskKey = $"{project.ProjKey}-{counter.LastNum}";
 
             // CompletedAt beállítása ha az utolsó oszlopba van létrehozva
             DateTime? completedAt = null;

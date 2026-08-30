@@ -7,9 +7,12 @@ namespace ProjectManager.API.DTOs.ProjectTask
         public MoveTaskDtoValidator()
         {
             RuleFor(d => d.ColumnId)
-                .NotEmpty();
+                .NotEmpty().WithMessage("A cél oszlop megadása kötelező!");
 
-            //AdterTaskId- nem szükséges itt validálni.
+            RuleFor(d => d.RowVersion)
+                .GreaterThan(0u).WithMessage("Érvénytelen RowVersion!");
+
+            //AfterTaskId- nem szükséges itt validálni.
             //Ha null akkor első hely, különben ellenőrizve lesz hogy tényleg létező Taskrol van e szó.
         }
     }

@@ -1,5 +1,8 @@
-﻿using Minio;
+﻿using Microsoft.Extensions.Options;
+using Minio;
 using Minio.DataModel.Args;
+using OtpNet;
+using ProjectManager.API.Common.Options;
 
 namespace ProjectManager.API.Services.FileStorageService
 {
@@ -8,41 +11,31 @@ namespace ProjectManager.API.Services.FileStorageService
         private readonly IMinioClient _minioClient;
         private readonly IMinioClient _presignedMinioClient;
         private readonly string _bucketName;
-        private readonly string _internalEndpoint;
 
-        public MinIOFileStorageService()
+        public MinIOFileStorageService(IOptions<MinioOptions> options)
         {
-            var endpoint = Environment.GetEnvironmentVariable("MINIO_ENDPOINT")
-                ?? throw new InvalidOperationException("MINIO_ENDPOINT nincs beállítva!");
-            var accessKey = Environment.GetEnvironmentVariable("MINIO_ACCESS_KEY")
-                ?? throw new InvalidOperationException("MINIO_ACCESS_KEY nincs beállítva!");
-            var secretKey = Environment.GetEnvironmentVariable("MINIO_SECRET_KEY")
-                ?? throw new InvalidOperationException("MINIO_SECRET_KEY nincs beállítva!");
-            var useSSL = Environment.GetEnvironmentVariable("MINIO_USE_SSL") == "true";
+            var opt = options.Value;
 
-            _bucketName = Environment.GetEnvironmentVariable("MINIO_BUCKET")
-                ?? throw new InvalidOperationException("MINIO_BUCKET nincs beállítva!");
+            _bucketName = opt.Bucket;
 
-            var publicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
-
-            //Presigned URL-ekhez a publikus endpoint-ot használjuk
-            var presignedEndpoint = !string.IsNullOrEmpty(publicUrl)
-                ? publicUrl.Replace("https://", "").Replace("http://", "")
-                : endpoint;
-            var presignedUseSSL = !string.IsNullOrEmpty(publicUrl) && publicUrl.StartsWith("https://");
+            var presignedEndpoint = !string.IsNullOrEmpty(opt.PublicUrl)
+                ? opt.PublicUrl.Replace("https://", "").Replace("http://", "")
+                : opt.Endpoint;
+            var presignedUseSSL = !string.IsNullOrEmpty(opt.PublicUrl)
+                && opt.PublicUrl.StartsWith("https://");
 
             //Két kliens:
             //1. Belső műveletek (upload, download, delete) ez lesz a belső endpoint
             _minioClient = new MinioClient()
-                .WithEndpoint(endpoint)
-                .WithCredentials(accessKey, secretKey)
-                .WithSSL(useSSL)
+                .WithEndpoint(opt.Endpoint)
+                .WithCredentials(opt.AccessKey, opt.SecretKey)
+                .WithSSL(opt.UseSSL)
                 .Build();
 
             //2. Presigned URL generálás ez lesz a publikus endpoint
             _presignedMinioClient = new MinioClient()
                 .WithEndpoint(presignedEndpoint)
-                .WithCredentials(accessKey, secretKey)
+                .WithCredentials(opt.AccessKey, opt.SecretKey)
                 .WithSSL(presignedUseSSL)
                 .Build();
         }

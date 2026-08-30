@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Constants;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Hubs;
@@ -18,14 +20,25 @@ namespace ProjectManager.API.Services.AttachmentService
         private readonly IActivityService _activityService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
-        
-        public AttachmentService(AppDbContext context, IFileStorageService fileStorageService, IActivityService activityService, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext)
+        private readonly ILogger<AttachmentService> _logger;
+        private readonly AttachmentOptions _attachmentOptions;
+
+        public AttachmentService(
+            AppDbContext context, 
+            IFileStorageService fileStorageService, 
+            IActivityService activityService, 
+            ICurrentUserService currentUserService, 
+            IHubContext<ProjectHub> hubContext,
+            ILogger<AttachmentService> logger,
+            IOptions<AttachmentOptions> attachmentOptions)
         {
             _context = context;
             _fileStorageService = fileStorageService;
             _activityService = activityService;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
+            _logger = logger;
+            _attachmentOptions = attachmentOptions.Value;
         }
 
         public async Task DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
@@ -37,6 +50,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 throw new Exception("Fájl nem található!");
 
             await _fileStorageService.DeleteFileAsync(attachment.StorageKey);
+            _logger.LogInformation("Fájl törölve | AttachmentId: {AttachmentId} | StorageKey: {StorageKey}", attachmentId, attachment.StorageKey);
 
             _context.Attachments.Remove(attachment);
             await _context.SaveChangesAsync();
@@ -206,6 +220,8 @@ namespace ProjectManager.API.Services.AttachmentService
             await _context.PresignedUrlLogs.AddAsync(log);
             await _context.SaveChangesAsync();
 
+            _logger.LogInformation("Presigned URL generálva | StorageKey: {StorageKey} | FileName: {FileName}", storageKey, dto.FileName);
+
             return new PresignedUrlResponseDto
             {
                 PresignedUrl = presignedUrl,
@@ -225,7 +241,10 @@ namespace ProjectManager.API.Services.AttachmentService
 
             //Lejárt-e?
             if (log.ExpiresAt < DateTime.UtcNow)
+            {
+                _logger.LogWarning("Lejárt presigned URL confirm kísérlet | StorageKey: {StorageKey}", dto.StorageKey);
                 throw new Exception("A feltöltési URL lejárt!");
+            }
 
             //Duplikált confirm ellenőrzés
             if (log.Confirmed)
@@ -265,6 +284,8 @@ namespace ProjectManager.API.Services.AttachmentService
             log.Confirmed = true;
 
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
 
             //Activity log
             try
@@ -323,11 +344,11 @@ namespace ProjectManager.API.Services.AttachmentService
 
         private string GetAttachmentType(string contentType)
         {
-            if (contentType.StartsWith("image/")) return AttachmentType.Image;
-            if (contentType == "application/pdf") return AttachmentType.Pdf;
-            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentType.Spreadsheet;
-            if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentType.Document;
-            return AttachmentType.Other;
+            if (contentType.StartsWith("image/")) return AttachmentTypes.Image;
+            if (contentType == "application/pdf") return AttachmentTypes.Pdf;
+            if (contentType.Contains("spreadsheet") || contentType.Contains("excel")) return AttachmentTypes.Spreadsheet;
+            if (contentType.Contains("document") || contentType.Contains("word")) return AttachmentTypes.Document;
+            return AttachmentTypes.Other;
         }
 
         private static readonly HashSet<string> AllowedContentTypes = new()
@@ -353,15 +374,21 @@ namespace ProjectManager.API.Services.AttachmentService
 
         private void ValidateFile(string contentType, long sizeBytes)
         {
-            var maxSizeMb = int.Parse(
-                Environment.GetEnvironmentVariable("MAX_UPLOAD_SIZE_MB") ?? "64");
-            var maxSizeBytes = maxSizeMb * 1024 * 1024;
+            var maxSizeMb = _attachmentOptions.MaxUploadSizeMb;
+            var maxSizeBytes = (long)maxSizeMb * 1024 * 1024;
 
             if (sizeBytes > maxSizeBytes)
+            {
+                _logger.LogWarning("Fájl méret limit túllépve | Size: {SizeBytes} | Limit: {MaxSizeBytes}", sizeBytes, maxSizeBytes);
                 throw new Exception($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
-
+            }
+            
             if (!AllowedContentTypes.Contains(contentType))
+            {
+                _logger.LogWarning("Nem engedélyezett fájltípus | ContentType: {ContentType}", contentType);
                 throw new Exception($"A {contentType} fájltípus nem engedélyezett!");
+            }
+                
         }
     }
 }

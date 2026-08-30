@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Git;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Hubs;
@@ -25,7 +26,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("unmatched-commits")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<CommitLinkResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<CommitLinkResponseDto>>> GetUnmatchedCommitsAsync(Guid projectId)
         {
@@ -41,7 +42,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpGet("unmatched-prs")]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<PrLinkResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<PrLinkResponseDto>>> GetUnmatchedPrsAsync(Guid projectId)
         {
@@ -57,7 +58,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpPost("commits/{commitId}/assign/{taskId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> AssignCommitToTaskAsync(Guid projectId, Guid commitId, Guid taskId)
         {
@@ -73,7 +74,7 @@ namespace ProjectManager.API.Controllers
         }
         
         [HttpPost("prs/{prId}/assign/{taskId}")]
-        [Authorize(Policy = "ProjectMember")]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> AssignPrToTaskAsync(Guid projectId, Guid prId, Guid taskId)
         {

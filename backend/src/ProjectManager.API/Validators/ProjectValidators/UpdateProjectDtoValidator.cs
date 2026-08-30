@@ -8,12 +8,12 @@ namespace ProjectManager.API.Validators.ProjectValidators
         public UpdateProjectDtoValidator()
         {
             RuleFor(d => d.Name)
-                .MaximumLength(120)
+                .MaximumLength(120).WithMessage("A projekt neve maximum 120 karakter lehet!")
                 .When(d => d.Name != null);
 
             RuleFor(d => d.Description)
-                .MaximumLength(1000)
-                .When(d => d.Name != null);
+                .MaximumLength(1000).WithMessage("A leírás maximum 1000 karakter lehet!")
+                .When(d => d.Description != null);
         }
     }
 }

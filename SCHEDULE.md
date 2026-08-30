@@ -2518,6 +2518,315 @@ accessTokenFactory: () => tokenStore.get() ?? token
 
 ---
 
+## General Improvements & Fixes
+Kisebb javítások és fejlesztések amelyek nem illeszkednek 
+egy specifikus fejezetbe.
+
+### Validátor átnézés és javítás
+
+**Probléma:**
+Számos DTO-hoz hiányzott a validátor, meglévő validátoroknál hiányoztak a hibaüzenetek, 
+RowVersion validáció, illetve konstansok helyett magic string-ek voltak használva.
+
+**Megoldás:**
+
+Pótolt validátorok:
+- Auth: ForgotPassword, ResendVerification, LoginWithTotp, VerifyTotp, ResetPassword
+- Attachment: PresignedUrlRequest, ConfirmUpload
+- Task: AssignTaskToBoard, AssignTaskToSprint
+
+Javított validátorok:
+- Hiányzó hibaüzenetek pótolva minden validátorban
+- RowVersion validáció hozzáadva: UpdateBoard, UpdateColumn, ColumnOrder, MoveTask, UpdateTask, UpdateSprint
+- UpdateProjectDtoValidator: Description When feltétel elírás javítva (Name helyett Description)
+- TaskPriority validátor: "normal" érték eltávolítva (nem létező prioritás)
+- Email MaxLength: 255 -> 254 (RFC 5321 szabvány szerint)
+
+Konstans fejlesztések:
+- ProjectRole konstans osztály létrehozva (Owner, Admin, Member, Viewer)
+- ValidStates lista hozzáadva SprintState-hez
+- ValidPriorities lista hozzáadva TaskPriority-hoz
+- ValidRoles lista hozzáadva ProjectRole-hoz
+- Validátorok frissítve hogy a listákat a konstans osztályokból használják
+
+### Magic string-ek kiváltása konstansokkal
+
+**Probléma:**
+A policy nevek és szerepkörök string literálként voltak megadva az összes controllerben 
+és a Program.cs-ben, ami hibalehetőséget és nehézkes karbantartást okoz.
+
+**Megoldás:**
+
+PolicyNames konstans osztály létrehozva:
+- ProjectViewer, ProjectMember, ProjectAdmin, ProjectOwner
+
+ProjectRole konstans osztály létrehozva:
+- Owner, Admin, Member, Viewer + ValidRoles lista
+
+Érintett helyek:
+- Program.cs: policy definíciók frissítve
+- Összes controller: [Authorize(Policy = "...")] -> [Authorize(Policy = PolicyNames.xxx)]
+- ProjectRoleRequirement: role string-ek -> ProjectRole konstansok
+- UpdateMemberRoleDtoValidator: ValidRoles lista -> ProjectRole.ValidRoles
+
+### ProjectCounter Race Condition Fix
+
+**Probléma:**
+Több backend replika esetén két instance egyszerre olvashatta ugyanazt a counter értéket,
+ami duplikált TaskKey-t eredményezett (unique constraint violation).
+
+**Megoldás:**
+CounterService létrehozva dedikált counter kezeléssel:
+- Serializable tranzakció garantálja hogy egyszerre csak egy instance módosíthatja a countert
+- Exponenciális backoff retry logika (3 kísérlet, 50ms/100ms/150ms várakozással)
+- PostgresException 40001 (serialization failure) kezelés
+- GetNextTaskNumberAsync: egy szám lefoglalása
+- GetNextTaskNumbersAsync: több szám egyszerre (tömeges betöltéshez előkészítve)
+- CreateTaskAsync-ból kiszervezve a counter logika
+
+**Előnyök:**
+- Nincs duplikált TaskKey több replika esetén
+- Tömeges task létrehozáshoz felkészített (egy tranzakcióban foglal le N számot)
+- Egységes helyen kezelt counter logika
+- Retry logika minimális felhasználói várakozással (max ~300ms)
+
+### Logolás (Serilog + Seq)
+
+**Probléma:**
+Nem volt strukturált logolás, hibák csak a konzolon jelentek meg és nem voltak visszakereshetők.
+
+**Megoldás:**
+Serilog + Seq alapú strukturált logolás:
+- Serilog: .NET legelterjedtebb logging library
+- Seq: dedikált log aggregátor, UI, több replika esetén is egy helyre ír
+- Seq csak belső hálózaton érhető el (SSH tunnel-en keresztül)
+- Production-ban jelszóval védett
+
+**Architektúra:**
+
+Backend instance 1 -> Serilog -> Seq (pm-seq:5341)
+Backend instance 2 -> Serilog -> Seq (pm-seq:5341)
+
+**Logolási szintek:**
+- ERROR: kezeletlen kivételek (Global Exception Handler)
+- WARNING: rate limit, sikertelen auth, érvénytelen tokenek, fájl validáció
+- INFO: sikeres bejelentkezés, regisztráció, fájl műveletek, token megújítás
+
+**Global Exception Handler:**
+Minden kezeletlen kivételt megfog és logolja:
+- HTTP Method és Path
+- Exception típusa és üzenete
+- 500 Internal Server Error visszaküldés
+
+**Explicit logolás:**
+
+AuthService:
+- Sikeres/sikertelen bejelentkezés (normál + TOTP)
+- Rate limit elérése (login, register, forgot password)
+- Token műveletek (refresh, revoked, expired)
+- Jelszó változtatás és visszaállítás
+- TOTP aktiválás/kikapcsolás
+
+AttachmentService:
+- Fájl validáció sikertelen (méret, típus)
+- Presigned URL generálás
+- Lejárt URL confirm kísérlet
+- Sikeres fájl feltöltés és törlés
+
+**GDPR megjegyzés:**
+A logok email címeket tartalmaznak biztonsági célból.
+Production-ban a GDPR megfelelőség érdekében hash-eléssel
+vagy UserId alapú logolással kellene kiváltani,
+illetve megőrzési időt és törlési mechanizmust kellene bevezetni.
+
+**Implementációs sorrend (elvégzett):**
+1. Serilog.AspNetCore, Serilog.Sinks.Console, Serilog.Sinks.Seq telepítés
+2. Program.cs konfiguráció (try/catch/finally wrap)
+3. Global Exception Handler middleware
+4. Seq service hozzáadása docker-compose.yml és docker-compose.prod.yml-be
+5. AuthService logolás
+6. AttachmentService logolás
+
+### Program.cs átszervezés és Options pattern
+
+**Probléma:**
+A Program.cs nehezen olvasható volt, env var kinyerések szétszórva,
+service regisztrációk és middleware konfiguráció egy helyen.
+
+**Megoldás:**
+
+Options pattern bevezetése:
+- JwtOptions, DatabaseOptions, EmailOptions, MinioOptions, RedisOptions, EncryptionOptions, AttachmentOptions, CleanupOptions, ApiOptions
+- Service-ek IOptions<T>-n keresztül kapják a konfigurációt
+- Összes Environment.GetEnvironmentVariable hívás egy helyen (Program.cs env vars szekció)
+
+Érintett service-ek:
+- AuthService -> JwtOptions
+- MinIOFileStorageService -> MinioOptions
+- ResendEmailService -> EmailOptions
+- EncryptionService -> EncryptionOptions
+- AttachmentService -> AttachmentOptions
+- OrphanCleanupJob -> CleanupOptions
+- IntegrationService -> ApiOptions
+- TeamService -> EmailOptions (FrontendUrl)
+
+Program.cs szétszedése extension metódusokba:
+- ServiceCollectionExtensions: AddDatabase, AddJwtAuthentication, AddRedisAndSignalR, AddSwagger, AddEmailService, AddRbac, AddApplicationServices
+- ApplicationBuilderExtensions: UseProjectManagerMiddleware, RunMigrationsAsync, MigrateWebhookSecretsAsync
+
+Program.cs struktúra:
+1. Serilog konfiguráció
+2. .env betöltés (development)
+3. Env vars kinyerése (egy helyen!)
+4. Options regisztrálás
+5. Service Registration (extension metódusok)
+6. Build
+7. Middleware Pipeline (extension metódus)
+8. Start
+
+### Biztonsági mentés
+
+**Backup stratégia: 2-1-1 (közelítő 3-2-1)**
+
+A 3-2-1 backup szabály szerint ideálisan:
+- 3 másolat az adatból
+- 2 különböző tárolási médián
+- 1 offsite helyszínen
+
+**Miért nem teljes 3-2-1?**
+Ez egy szakdolgozati projekt, nem éles production rendszer:
+- Nincs valódi felhasználói adat amit mindenképp meg kell őrizni
+- Harmadik backup helyszín extra költséget és komplexitást jelentene feleslegesen
+- Ezért a projektnél a 2-1-1 megoldás elegendő a célra
+
+Valódi production környezetben a harmadik másolathoz egy második 
+cloud provider (pl. AWS S3 vagy Wasabi) használata lenne ajánlott!
+Esetleg egy másik telephelyi szerver is megoldhatná a problémát.
+
+**Jelenlegi 2-1-1 megoldás:**
+másolat -> Hetzner szerver (élő adat)
+másolat -> Backblaze B2 (offsite, automatikus napi backup)
+
+**Mit mentünk?**
+
+PostgreSQL adatbázis:
+-> Dokploy beépített backup funkció
+-> pg_dump alapú mentés
+-> Napi 1x (hajnali 2:00)
+-> 7 nap megőrzés
+-> Destination: Backblaze B2
+
+MinIO fájlok:
+-> Dokploy Volume Backup funkció
+-> minio_data named volume mentése
+-> Napi 1x (hajnali 3:00)
+-> 7 nap megőrzés
+-> Destination: Backblaze B2
+
+**Miért Backblaze B2?**
+- S3-kompatibilis API -> Dokploy natívan támogatja
+- 10GB ingyenes tárhely -> elegendő a projektnél
+- Egyáltalán nem kell bankkártya az ingyenes szinthez
+- Más platform mint a szerver -> offsite backup-nak minősíthető
+- Automatikus retention kezelés
+
+**Beállítási lépések:**
+- Backblaze B2 fiók létrehozása
+- B2 bucket létrehozása (pl. pma-backups)
+- Application Key generálása (read/write jogosultság)
+- Dokploy Settings -> S3 Destinations -> Add:
+  - Endpoint: s3.us-west-004.backblazeb2.com
+  - Access Key: B2 Application Key ID
+  - Secret Key: B2 Application Key
+- PostgreSQL service -> Backups tab -> Add Backup:
+  - Schedule: 0 2 * * *
+  - Prefix: pma-postgres
+  - Retention: 7
+- MinIO Volume -> Volume Backups -> Add Backup:
+  - Schedule: 0 2 * * *
+  - Prefix: pma-minio
+  - Retention: 7
+
+**Backup konzisztencia és korlátok:**
+PostgreSQL backup (pg_dump):
+- MVCC alapú, tranzakció-konzisztens snapshot
+- Az adatbázis közben teljesen működőképes marad, kezeli ha a mentés indítása óta bekerült adatokat nem teszi be a mentésbe
+- Nem zárol semmit, biztonságos éles rendszeren is
+
+MinIO Volume Backup:
+- Docker volume szintű backup (rsync/tar alapú)
+- NEM tranzakció-tudatos!
+- Ha épp feltöltés folyik a backup készítésekor:
+   - Félbevágott fájl kerülhet a backupba
+   - Vagy a fájl egyáltalán nem kerül bele
+- Inkonzisztens állapot keletkezhet DB és MinIO között
+
+**Miért elfogadható mégis a projektnél?**
+- Hajnali 2:00-kor minimális az aktív feltöltés valószínűsége
+- Ha inkonzisztencia mégis keletkezik -> orphan fájl vagy hiányzó attachment
+- Nem kritikus adatvesztés
+- Ennek a problémának a kezeléséhez fejlettebb infrastruktúra lenne szükséges.
+
+**Production-ban a helyes megoldás:**
+- MinIO saját snapshot API használata
+- Vagy maintenance window a backup idejére
+- Vagy S3 object versioning bekapcsolása MinIO-n
+- Vagy alkalmazás szintű backup koordináció
+
+**Visszaállítás:**
+PostgreSQL:
+-> Dokploy dashboard -> PostgreSQL -> Backups -> Restore
+MinIO:
+-> Dokploy dashboard -> Volume Backups -> Restore
+
+**Lehetséges megoldás (elméleti, nem lesz implementálva):**
+Maintenance window koordináció SignalR-rel:
+1. 01:55 -> Backend SignalR broadcast: "MaintenanceStarting"
+   -> Frontend banner: "Fájl feltöltés 5 perc múlva szünetel"
+2. 02:00 -> Backend middleware letiltja a feltöltési endpointokat
+   -> MinIO Volume Backup indul
+3. Fix idő elteltével (pl. 15 perc) -> Backend újra engedélyezi
+   -> SignalR broadcast: "MaintenanceEnded"
+   -> Frontend banner eltűnik
+
+Korlátok:
+- Dokploy nem küld webhookot backup befejezésekor
+- Fix időablak szükséges ami nem garantálja a backup befejezését
+- Implementációs komplexitás nem arányos a haszonnal portfolio projektnél
+
+Production-ban ideális megoldás:
+- Dedikált backup orchestrator (pl. Velero)
+- MinIO saját snapshot API + webhook
+- Vagy managed backup szolgáltatás
+
+**Konzisztencia probléma megoldása:**
+A Dokploy Volume Backup "Turn Off Container During Backup" opció
+a MinIO konténer ideiglenesen leáll a backup készítésekor:
+- Hajnali 2:00-kor minimálisan valószínű a forgalom, de amennyiben mégis használva lenne akkor abban az időben hibát dob a kapcsolódó feltöltés / letöltés funkció
+- Konzisztens mentés garantált, nem történhet meg a fél file mentés feltöltés közben
+- Az elméleti maintenance window megoldás így nem szükséges!
+
+**Lokális backup korlátai és ideális megoldás:**
+
+Jelenlegi megoldás:
+- Backblaze B2 offsite backup a projektnél
+- Lokális backup ugyanazon a szerveren nem ad valódi redundanciát
+  (ha a szerver meghal - lokális backup is elvész, ezért ki lett hagyva, későbbre lett áttéve)
+
+Ideális production megoldás (3-2-1 szabály szerint):
+1. Élő adat - Hetzner szerver
+2. Lokális backup - második Hetzner szerver vagy külön volume
+   (dedikált backup MinIO példány külön szerveren)
+3. Offsite backup - Backblaze B2 (vagy más cloud provider)
+
+Lokális backup implementálása ha később szükséges:
+- Külön backup MinIO példány ugyanazon a szerveren
+- Dokploy S3 Destination-ként regisztrálva
+- Napi mentés Postgres és MinIO volume-ról
+- Ennek csak főleg csak a lokalitás szintjén lenne előnye: gyorsabb visszatöltés / mentés.
+- Ha véletlenűl a remote backup provider oldalán lenne a baj akkor lenne itt is egy mentés.
+- Csak akkor lenne baj ha mindkettő rendszer egyszerre hibásodik meg
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

@@ -47,11 +47,11 @@ namespace ProjectManager.API.Services.SprintService
             {
                 // Tranzakción belül ellenőrzünk - csak az adott projekt aktív sprintjét nézi!
                 var currentlyActive = await _context.Sprints
-                    .AnyAsync(s => s.State == SprintState.Active && s.ProjectId == projectId);
+                    .AnyAsync(s => s.State == SprintStates.Active && s.ProjectId == projectId);
                 if (currentlyActive)
                     throw new Exception("Már van Aktív sprint!");
 
-                sprint.State = SprintState.Active;
+                sprint.State = SprintStates.Active;
 
                 var sprintTasks = await _context.ProjectTasks
                     .Where(t => t.SprintId == sprintId)
@@ -231,7 +231,7 @@ namespace ProjectManager.API.Services.SprintService
                     //Kész task már historyzálva van, itt csak a lezárás van kezelve.
                 }
 
-                sprint.State = SprintState.Completed;
+                sprint.State = SprintStates.Completed;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -288,7 +288,7 @@ namespace ProjectManager.API.Services.SprintService
                     projectId,
                     "Sprint",
                     sprint.Id,
-                    SprintState.Completed,
+                    SprintStates.Completed,
                     $"{_currentUserService.DisplayName} lezárta a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
@@ -410,12 +410,12 @@ namespace ProjectManager.API.Services.SprintService
             if (scope == "initial")
             {
                 // Aktív + Planning sprintek (kezdő betöltéshez)
-                query = query.Where(s => s.State == SprintState.Active || s.State == SprintState.Planning);
+                query = query.Where(s => s.State == SprintStates.Active || s.State == SprintStates.Planning);
             }
             else if (scope == "completed")
             {
                 // Csak lezárt sprintek (SprintsView lazy load)
-                query = query.Where(s => s.State == SprintState.Completed);
+                query = query.Where(s => s.State == SprintStates.Completed);
             }
             // scope == null: összes sprint (backward compatibility)
 
@@ -482,7 +482,7 @@ namespace ProjectManager.API.Services.SprintService
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
-                sprint.State = SprintState.Planning;
+                sprint.State = SprintStates.Planning;
 
                 var sprintTasks = await _context.ProjectTasks
                     .Where(t => t.SprintId == sprintId)
@@ -647,7 +647,7 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
-            if (task.BoardId.HasValue && sprint.State == SprintState.Active)
+            if (task.BoardId.HasValue && sprint.State == SprintStates.Active)
             {
                 var firstColumn = await _context.ColumnDefinitions
                     .Where(c => c.BoardId == task.BoardId && c.Position > 0 && !c.IsDeleted)

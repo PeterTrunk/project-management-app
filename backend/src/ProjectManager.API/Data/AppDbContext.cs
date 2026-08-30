@@ -75,7 +75,7 @@ public class AppDbContext : DbContext
         {
             //Constraints
             entity.Property(u => u.Email)
-                  .HasMaxLength(255)
+                  .HasMaxLength(254)
                   .IsRequired();
 
             entity.Property(u => u.DisplayName)

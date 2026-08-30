@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Boards;
 using ProjectManager.API.Filters;
 using ProjectManager.API.Services.BoardService;
@@ -19,7 +20,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(BoardResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<BoardResponseDto>> CreateBoardAsync(Guid projectId, [FromBody] CreateBoardDto dto)
@@ -36,7 +37,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{boardId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteBoardAsync(Guid projectId, Guid boardId)
@@ -53,7 +54,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Policy = "ProjectViewer")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<BoardResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<BoardResponseDto>>> GetBoardsAsync(
@@ -72,7 +73,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{boardId}")]
-        [Authorize(Policy = "ProjectAdmin")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(BoardResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<BoardResponseDto>> UpdateBoardAsync(Guid projectId, Guid boardId, [FromBody] UpdateBoardDto dto)

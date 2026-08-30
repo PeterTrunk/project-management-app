@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace ProjectManager.API.DTOs.Auth
+﻿namespace ProjectManager.API.DTOs.Auth
 {
     public class ChangePasswordDto
     {

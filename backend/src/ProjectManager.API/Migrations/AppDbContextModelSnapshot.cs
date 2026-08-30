@@ -931,8 +931,8 @@ namespace ProjectManager.API.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
 
                     b.Property<string>("EmailVerificationToken")
                         .HasColumnType("text");

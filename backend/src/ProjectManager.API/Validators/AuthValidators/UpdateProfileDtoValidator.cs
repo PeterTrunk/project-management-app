@@ -8,8 +8,9 @@ namespace ProjectManager.API.Validators.AuthValidators
         public UpdateProfileDtoValidator()
         {
             RuleFor(d => d.DisplayName)
-                .MaximumLength(120)
-                .MinimumLength(3);
+                .NotEmpty().WithMessage("A megjelenítési név megadása kötelező!")
+                .MinimumLength(3).WithMessage("A névnek legalább 3 karakter hosszúnak kell lennie!")
+                .MaximumLength(120).WithMessage("A név maximum 120 karakter lehet!");
         }
     }
 }
