@@ -2882,6 +2882,18 @@ Megoldás: lastPosition követés a cikluson belül:
 - Első körnél DB-ből olvassa az utolsó pozíciót
 - Minden következő körnél az előző task pozícióját használja az új pozíció számítására
 
+### SignalR broadcast hibakezelés
+**Probléma:**
+A SignalR broadcast hívások nem voltak hibakezelve — ha egy broadcast kivételt dobott
+(hálózati hiba, timeout, szerializációs hiba) a metódus futása megszakadt.
+Az ActivityCreated broadcast-oknál üres catch blokk volt -> hibák elnyelve, nem logolva.
+
+**Megoldás:**
+- Minden SignalR broadcast try/catch-be foglalva
+- Hiba esetén LogError loggol Event névvel és ProjectId-val
+- ActivityCreated broadcast-oknál üres catch -> LogError-re cserélve
+- AttachmentService ConfirmUploadAsync: UploadedBy betöltése SaveChangesAsync elé helyezve
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
