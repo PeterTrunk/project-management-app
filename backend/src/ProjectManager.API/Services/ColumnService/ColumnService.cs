@@ -29,6 +29,7 @@ namespace ProjectManager.API.Services.ColumnService
             _hubContext = hubContext;
             _currentUserService = currentUserService;
             _activityService = activityService;
+            _logger = logger;
         }
 
         public async Task<ColumnResponseDto> CreateColumnAsync(Guid projectId, Guid boardId, CreateColumnDto dto)

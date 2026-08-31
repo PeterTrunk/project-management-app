@@ -263,7 +263,7 @@ namespace ProjectManager.API.Services.ProjectService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", project.Id);
             }
 
             var response = new ProjectResponseDto

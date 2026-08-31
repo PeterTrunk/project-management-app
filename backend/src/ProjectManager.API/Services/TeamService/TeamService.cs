@@ -171,7 +171,7 @@ namespace ProjectManager.API.Services.TeamService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", invite.ProjectId);
             }
 
             return new ProjectMemberResponseDto

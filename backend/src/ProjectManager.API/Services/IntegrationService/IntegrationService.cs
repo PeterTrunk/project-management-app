@@ -343,7 +343,7 @@ namespace ProjectManager.API.Services.IntegrationService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", integration.ProjectId);
             }
         }
 

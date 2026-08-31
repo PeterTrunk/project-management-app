@@ -219,7 +219,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", task.ProjectId);
             }
         }
 
@@ -618,7 +618,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", task.ProjectId);
             }
 
             var assignments = await _context.TaskAssignments
