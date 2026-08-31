@@ -51,6 +51,18 @@
     --border-radius-lg: 8px;
     --modal-width: 480px;
     --modal-width-lg: 640px;
+
+    /* Toolbar */
+    --toolbar-padding: 0.5rem 1rem;
+    --toolbar-gap: 0.5rem;
+
+    /* Button */
+    --btn-gap: 0.4rem;
+
+    /* Badge */
+    --badge-padding: 0.2rem 0.5rem;
+    --badge-border-radius: 4px;
+    --badge-font-size: var(--font-size-xs);
 }
 
 :root.light {
@@ -286,4 +298,171 @@ a:hover {
 @media (max-width: 768px) {
     .no-padding-mobile { padding: 0 !important; }
     .gap-sm-mobile { gap: 0.25rem !important; }
+}
+
+/* Szöveg truncate (meghívó link, URL) */
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* Flex wrap mobilon (flag-ek, gombok) */
+@media (max-width: 480px) {
+    .wrap-mobile {
+        flex-wrap: wrap !important;
+    }
+}
+
+/* Csak ikon mobilon (feltöltés gomb) */
+@media (max-width: 480px) {
+    .icon-only-mobile .btn-text {
+        display: none !important;
+    }
+}
+
+/* Horizontal scroll (settings menü) */
+.scroll-x {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+/* Overflow hidden kártyákon */
+.card-overflow {
+    overflow: hidden;
+}
+
+/* Gap egységesítés mobilon */
+@media (max-width: 480px) {
+    .stack-480 {
+        flex-direction: column !important;
+    }
+}
+
+/* ===== Toolbar ===== */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--toolbar-gap);
+    padding: var(--toolbar-padding);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.toolbar-with-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: var(--toolbar-padding);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.toolbar-title {
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: auto;
+}
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--toolbar-gap);
+    flex-wrap: wrap;
+}
+
+/* ===== Badge / Flag ===== */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: var(--badge-padding);
+    border-radius: var(--badge-border-radius);
+    font-size: var(--badge-font-size);
+    white-space: nowrap;
+}
+
+.badge-green {
+    background: var(--accent-green-bg);
+    color: var(--accent-green);
+}
+
+.badge-red {
+    background: var(--accent-red-bg);
+    color: var(--accent-red);
+}
+
+.badge-blue {
+    background: var(--accent-blue-bg);
+    color: var(--accent-blue);
+}
+
+.badge-yellow {
+    background: var(--accent-yellow-bg);
+    color: var(--accent-yellow);
+}
+
+.badge-purple {
+    background: var(--accent-purple-bg);
+    color: var(--accent-purple);
+}
+
+.flags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ===== Button variants ===== */
+.btn-icon-text {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--btn-gap);
+}
+
+@media (max-width: 480px) {
+    .btn-icon-text .btn-text {
+        display: none;
+    }
+}
+
+/* ===== Card ===== */
+.card-overflow-hidden {
+    overflow: hidden;
+}
+
+/* ===== Truncate ===== */
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* ===== Word break ===== */
+.word-break {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* ===== Scroll X ===== */
+.scroll-x {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+/* ===== Stack 480 ===== */
+@media (max-width: 480px) {
+    .stack-480 {
+        flex-direction: column !important;
+    }
+    
+    .wrap-480 {
+        flex-wrap: wrap !important;
+    }
 }
