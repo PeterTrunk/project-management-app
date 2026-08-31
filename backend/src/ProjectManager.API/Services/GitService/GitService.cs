@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Git;
 using ProjectManager.API.Hubs;
+using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 
@@ -14,13 +15,20 @@ namespace ProjectManager.API.Services.GitService
         private readonly IActivityService _activityService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ILogger<GitService> _logger;
 
-        public GitService(AppDbContext context, IActivityService activityService, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService)
+        public GitService(
+            AppDbContext context, 
+            IActivityService activityService, 
+            IHubContext<ProjectHub> hubContext, 
+            ICurrentUserService currentUserService,
+            ILogger<GitService> logger)
         {
             _context = context;
             _activityService = activityService;
             _hubContext = hubContext;
             _currentUserService = currentUserService;
+            _logger = logger;
         }
 
         public async Task<List<CommitLinkResponseDto>> GetUnmatchedCommitsAsync(Guid projectId)
@@ -82,14 +90,22 @@ namespace ProjectManager.API.Services.GitService
             commit.TaskId = taskId;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("CommitLinked", new
-                {
-                    taskId,
-                    commitId = commit.Id,
-                    commitSha = commit.CommitSha
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("CommitLinked", new
+                    {
+                        taskId,
+                        commitId = commit.Id,
+                        commitSha = commit.CommitSha
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "CommitLinked", projectId);
+            }
 
             try
             {
@@ -104,7 +120,10 @@ namespace ProjectManager.API.Services.GitService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task AssignPrToTaskAsync(Guid projectId, Guid prId, Guid taskId)
@@ -129,14 +148,22 @@ namespace ProjectManager.API.Services.GitService
             pr.TaskId = taskId;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("PrLinked", new
-                {
-                    taskId,
-                    prId = pr.Id,
-                    prNumber = pr.PrNumber
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("PrLinked", new
+                    {
+                        taskId,
+                        prId = pr.Id,
+                        prNumber = pr.PrNumber
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "PrLinked", projectId);
+            }
 
             try
             {
@@ -151,7 +178,10 @@ namespace ProjectManager.API.Services.GitService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
     }
 }

@@ -16,8 +16,14 @@ namespace ProjectManager.API.Services.ColumnService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ICurrentUserService _currentUserService;
         private readonly IActivityService _activityService;
+        private readonly ILogger<ColumnService> _logger;
 
-        public ColumnService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
+        public ColumnService(
+            AppDbContext context, 
+            IHubContext<ProjectHub> hubContext, 
+            ICurrentUserService currentUserService, 
+            IActivityService activityService,
+            ILogger<ColumnService> logger)
         {
             _context = context;
             _hubContext = hubContext;
@@ -45,18 +51,27 @@ namespace ProjectManager.API.Services.ColumnService
             };
             _context.ColumnDefinitions.Add(column);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ColumnCreated", new
-                {
-                    id = column.Id,
-                    boardId = column.BoardId,
-                    name = column.Name,
-                    position = column.Position,
-                    mapsToStatus = column.MapsToStatus,
-                    wipLimit = column.WipLimit,
-                    rowVersion = column.xmin
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ColumnCreated", new
+                    {
+                        id = column.Id,
+                        boardId = column.BoardId,
+                        name = column.Name,
+                        position = column.Position,
+                        mapsToStatus = column.MapsToStatus,
+                        wipLimit = column.WipLimit,
+                        rowVersion = column.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ColumnCreated", projectId);
+            }
 
             try
             {
@@ -71,7 +86,10 @@ namespace ProjectManager.API.Services.ColumnService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(column);
         }
@@ -110,9 +128,17 @@ namespace ProjectManager.API.Services.ColumnService
                 throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ColumnDeleted", new { columnId, boardId });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ColumnDeleted", new { columnId, boardId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ColumnDeleted", projectId);
+            }
 
             try
             {
@@ -127,7 +153,10 @@ namespace ProjectManager.API.Services.ColumnService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<List<ColumnResponseDto>> GetColumnsAsync(Guid projectId, Guid boardId)
@@ -198,17 +227,25 @@ namespace ProjectManager.API.Services.ColumnService
                     .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
                     .ToListAsync();
 
-                await _hubContext.Clients
-                    .Group($"project-{projectId}")
-                    .SendAsync("ColumnsReordered", new
-                    {
-                        boardId,
-                        columns = updatedColumns.Select(c => new {
-                            id = c.Id,
-                            position = c.Position,
-                            rowVersion = c.xmin
-                        })
-                    });
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("ColumnsReordered", new
+                        {
+                            boardId,
+                            columns = updatedColumns.Select(c => new {
+                                id = c.Id,
+                                position = c.Position,
+                                rowVersion = c.xmin
+                            })
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "ColumnsReordered", projectId);
+                }
 
                 return updatedColumns.Select(MapToDto).ToList();
             }
@@ -248,17 +285,25 @@ namespace ProjectManager.API.Services.ColumnService
                 throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ColumnUpdated", new
-                {
-                    columnId = column.Id,
-                    boardId = column.BoardId,
-                    name = column.Name,
-                    mapsToStatus = column.MapsToStatus,
-                    wipLimit = column.WipLimit,
-                    rowVersion = column.xmin
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ColumnUpdated", new
+                    {
+                        columnId = column.Id,
+                        boardId = column.BoardId,
+                        name = column.Name,
+                        mapsToStatus = column.MapsToStatus,
+                        wipLimit = column.WipLimit,
+                        rowVersion = column.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ColumnUpdated", projectId);
+            }
 
             try
             {
@@ -273,7 +318,10 @@ namespace ProjectManager.API.Services.ColumnService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(column);
         }

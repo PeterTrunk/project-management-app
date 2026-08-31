@@ -16,12 +16,18 @@ namespace ProjectManager.API.Services.GitWebhookService
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
+        private readonly ILogger<GitWebhookService> _logger;
 
-        public GitWebhookService(AppDbContext context, IHubContext<ProjectHub> hubContext, IActivityService activityService)
+        public GitWebhookService(
+            AppDbContext context, 
+            IHubContext<ProjectHub> hubContext, 
+            IActivityService activityService,
+            ILogger<GitWebhookService> logger)
         {
             _context = context;
             _hubContext = hubContext;
             _activityService = activityService;
+            _logger = logger;
         }
 
         public async Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
@@ -145,14 +151,25 @@ namespace ProjectManager.API.Services.GitWebhookService
                         .Group($"project-{projectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
 
             foreach (var task in matchedTasks)
             {
-                await _hubContext.Clients
-                    .Group($"project-{projectId}")
-                    .SendAsync("PrLinked", new { taskId = task.Id, prNumber, title, state, authorName });
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("PrLinked", new { taskId = task.Id, prNumber, title, state, authorName });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "PrLinked", projectId);
+                }
 
                 try
                 {
@@ -174,7 +191,10 @@ namespace ProjectManager.API.Services.GitWebhookService
                         .Group($"project-{projectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
         }
 
@@ -265,14 +285,26 @@ namespace ProjectManager.API.Services.GitWebhookService
                         .Group($"project-{projectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
 
             foreach (var (task, sha, message, authorName) in matchedTasks)
             {
-                await _hubContext.Clients
-                    .Group($"project-{projectId}")
-                    .SendAsync("CommitLinked", new { taskId = task.Id, sha, message, authorName });
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("CommitLinked", new { taskId = task.Id, sha, message, authorName });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "CommitLinked", projectId);
+                }
+                
 
                 try
                 {
@@ -287,7 +319,10 @@ namespace ProjectManager.API.Services.GitWebhookService
                         .Group($"project-{projectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
         }
 

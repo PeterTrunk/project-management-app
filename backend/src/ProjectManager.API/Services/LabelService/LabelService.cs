@@ -11,11 +11,16 @@ namespace ProjectManager.API.Services.LabelService
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
+        private readonly ILogger<LabelService> _logger;
 
-        public LabelService(AppDbContext context, IHubContext<ProjectHub> hubContext)
+        public LabelService(
+            AppDbContext context, 
+            IHubContext<ProjectHub> hubContext,
+            ILogger<LabelService> logger)
         {
             _context = context;
             _hubContext = hubContext;
+            _logger = logger;
         }
 
         public async Task AddLabelToTaskAsync(Guid projectId, Guid taskId, Guid labelId)
@@ -39,9 +44,18 @@ namespace ProjectManager.API.Services.LabelService
             };
             _context.LabelTasks.Add(labelTask);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("TaskLabelAdded", new { taskId, labelId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskLabelAdded", new { taskId, labelId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskLabelAdded", projectId);
+            }
         }
 
         public async Task<LabelResponseDto> CreateLabelAsync(Guid projectId, CreateLabelDto dto)
@@ -58,9 +72,18 @@ namespace ProjectManager.API.Services.LabelService
             };
             _context.Labels.Add(label);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("LabelCreated", new { label.Id, label.Name, label.Color });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("LabelCreated", new { label.Id, label.Name, label.Color });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "LabelCreated", projectId);
+            }
 
             var response = new LabelResponseDto
             {
@@ -84,9 +107,18 @@ namespace ProjectManager.API.Services.LabelService
 
             _context.Labels.Remove(label);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("LabelDeleted", new { labelId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("LabelDeleted", new { labelId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "LabelDeleted", projectId);
+            }
         }
 
         public async Task<List<LabelResponseDto>> GetLabelsAsync(Guid projectId)
@@ -124,9 +156,18 @@ namespace ProjectManager.API.Services.LabelService
 
             _context.LabelTasks.Remove(labelTask);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("TaskLabelRemoved", new { taskId, labelId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskLabelRemoved", new { taskId, labelId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskLabelRemoved", projectId);
+            }
         }
     }
 }

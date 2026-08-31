@@ -15,13 +15,20 @@ namespace ProjectManager.API.Services.CommentService
         private readonly ICurrentUserService _currentUserService;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
+        private readonly ILogger<CommentService> _logger;
 
-        public CommentService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService)
+        public CommentService(
+            AppDbContext context, 
+            ICurrentUserService currentUserService, 
+            IHubContext<ProjectHub> hubContext, 
+            IActivityService activityService,
+            ILogger<CommentService> logger)
         {
             _context = context;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
             _activityService = activityService;
+            _logger = logger;
         }
 
         public async Task<CommentResponseDto> CommentOnTaskAsync(Guid projectId, Guid taskId, CreateCommentDto dto)
@@ -49,17 +56,26 @@ namespace ProjectManager.API.Services.CommentService
             _context.Comments.Add(comment);
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("CommentAdded", new
-                {
-                    taskId,
-                    commentId = comment.Id,
-                    body = comment.Body,
-                    createdById = comment.UserId,
-                    createdByName = user.DisplayName,
-                    createdAt = comment.CreatedAt,
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("CommentAdded", new
+                    {
+                        taskId,
+                        commentId = comment.Id,
+                        body = comment.Body,
+                        createdById = comment.UserId,
+                        createdByName = user.DisplayName,
+                        createdAt = comment.CreatedAt,
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "CommentAdded", projectId);
+            }
 
             try
             {
@@ -74,8 +90,11 @@ namespace ProjectManager.API.Services.CommentService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
-            
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
+
             var response = new CommentResponseDto
             {
                 Id = comment.Id,
@@ -110,13 +129,22 @@ namespace ProjectManager.API.Services.CommentService
             _context.Comments.Remove(comment);
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("CommentDeleted", new
-                {
-                    taskId,
-                    commentId
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("CommentDeleted", new
+                    {
+                        taskId,
+                        commentId
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "CommentDeleted", projectId);
+            }
 
             try
             {
@@ -131,7 +159,10 @@ namespace ProjectManager.API.Services.CommentService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<List<CommentResponseDto>> GetCommentsAsync(Guid projectId, Guid taskId)

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
@@ -18,19 +19,22 @@ namespace ProjectManager.API.Services.TeamService
         private readonly ICurrentUserService _currentUserService;
         private readonly IActivityService _activityService;
         private readonly EmailOptions _emailOptions;
+        private readonly ILogger<TeamService> _logger;
 
         public TeamService(
             AppDbContext context, 
             IHubContext<ProjectHub> hubContext, 
             ICurrentUserService currentUserService, 
             IActivityService activityService,
-            IOptions<EmailOptions> emailOptions)
+            IOptions<EmailOptions> emailOptions,
+            ILogger<TeamService> logger)
         {
             _context = context;
             _hubContext = hubContext;
             _currentUserService = currentUserService;
             _activityService = activityService;
             _emailOptions = emailOptions.Value;
+            _logger = logger;
         }
 
         public async Task<InviteLinkResponseDto> GenerateInviteLinkAsync(Guid projectId, GenerateInviteLinkDto dto)
@@ -135,14 +139,22 @@ namespace ProjectManager.API.Services.TeamService
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == callerId);
 
-            await _hubContext.Clients
-                .Group($"project-{invite.ProjectId}")
-                .SendAsync("MemberAdded", new
-                {
-                    userId = callerId,
-                    displayName = user?.DisplayName,
-                    projectRole = "Member"
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{invite.ProjectId}")
+                    .SendAsync("MemberAdded", new
+                    {
+                        userId = callerId,
+                        displayName = user?.DisplayName,
+                        projectRole = "Member"
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "MemberAdded", invite.ProjectId);
+            }
 
             try
             {
@@ -157,7 +169,10 @@ namespace ProjectManager.API.Services.TeamService
                     .Group($"project-{invite.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return new ProjectMemberResponseDto
             {
@@ -192,9 +207,18 @@ namespace ProjectManager.API.Services.TeamService
             _context.ProjectMembers.Remove(member);
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("MemberRemoved", new { userId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("MemberRemoved", new { userId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "MemberRemoved", projectId);
+            }
 
             try
             {
@@ -210,7 +234,10 @@ namespace ProjectManager.API.Services.TeamService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<ProjectMemberResponseDto> UpdateMemberRoleAsync(Guid projectId, Guid userId, UpdateMemberRoleDto dto)
@@ -232,13 +259,21 @@ namespace ProjectManager.API.Services.TeamService
             member.ProjectRole = dto.ProjectRole;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("MemberRoleUpdated", new
-                {
-                    userId,
-                    projectRole = dto.ProjectRole
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("MemberRoleUpdated", new
+                    {
+                        userId,
+                        projectRole = dto.ProjectRole
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "MemberRoleUpdated", projectId);
+            }
 
             try
             {
@@ -253,7 +288,10 @@ namespace ProjectManager.API.Services.TeamService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return new ProjectMemberResponseDto
             {

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Hubs;
@@ -17,14 +18,22 @@ namespace ProjectManager.API.Services.ProjectService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
         private readonly IFileStorageService _fileStorageService;
+        private readonly ILogger<ProjectService> _logger;
 
-        public ProjectService(AppDbContext context, ICurrentUserService currentUserService, IHubContext<ProjectHub> hubContext, IActivityService activityService, IFileStorageService fileStorageService)
+        public ProjectService(
+            AppDbContext context, 
+            ICurrentUserService currentUserService, 
+            IHubContext<ProjectHub> hubContext, 
+            IActivityService activityService, 
+            IFileStorageService fileStorageService,
+            ILogger<ProjectService> logger)
         {
             _context = context;
             _currentUserService = currentUserService;
             _hubContext = hubContext;
             _activityService = activityService;
             _fileStorageService = fileStorageService;
+            _logger = logger;
         }
 
         public async Task DeleteProjectAsync(Guid projectId)
@@ -65,9 +74,17 @@ namespace ProjectManager.API.Services.ProjectService
 
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ProjectDeleted", new { projectId });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ProjectDeleted", new { projectId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ProjectDeleted", projectId);
+            }
         }
 
         public async Task ArchiveProjectAsync(Guid projectId)
@@ -77,10 +94,19 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található");
             project.IsArchived = true;
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ProjectArchived", new { projectId });
 
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ProjectArchived", new { projectId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ProjectArchived", projectId);
+            }
+            
             try
             {
                 var activity = await _activityService.LogActivityAsync(
@@ -94,7 +120,10 @@ namespace ProjectManager.API.Services.ProjectService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task UnarchiveProjectAsync(Guid projectId)
@@ -104,9 +133,18 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Projekt nem található!");
             project.IsArchived = false;
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ProjectUnarchived", new { projectId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ProjectUnarchived", new { projectId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ProjectUnarchived", projectId);
+            }
 
             try
             {
@@ -121,7 +159,10 @@ namespace ProjectManager.API.Services.ProjectService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<ProjectResponseDto> CreateProjectAsync(CreateProjectDto dto)
@@ -220,7 +261,10 @@ namespace ProjectManager.API.Services.ProjectService
                     .Group($"project-{project.Id}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             var response = new ProjectResponseDto
             {
@@ -299,15 +343,24 @@ namespace ProjectManager.API.Services.ProjectService
                 throw new Exception("Tulajdonos nem található");
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("ProjectUpdated", new
-                {
-                    projectId,
-                    project.Name,
-                    project.Description
-                });
 
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ProjectUpdated", new
+                    {
+                        projectId,
+                        project.Name,
+                        project.Description
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "ProjectUpdated", projectId);
+            }
+            
             try
             {
                 var activity = await _activityService.LogActivityAsync(
@@ -321,7 +374,10 @@ namespace ProjectManager.API.Services.ProjectService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             var response = new ProjectResponseDto
             {

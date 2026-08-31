@@ -16,13 +16,20 @@ namespace ProjectManager.API.Services.BoardService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ICurrentUserService _currentUserService;
         private readonly IActivityService _activityService;
+        private readonly ILogger<BoardService> _logger;
 
-        public BoardService(AppDbContext context, IHubContext<ProjectHub> hubContext, ICurrentUserService currentUserService, IActivityService activityService)
+        public BoardService(
+            AppDbContext context, 
+            IHubContext<ProjectHub> hubContext, 
+            ICurrentUserService currentUserService, 
+            IActivityService activityService,
+            ILogger<BoardService> logger)
         {
             _context = context;
             _hubContext = hubContext;
             _currentUserService = currentUserService;
             _activityService = activityService;
+            _logger = logger;
         }
         public async Task<BoardResponseDto> CreateBoardAsync(Guid projectId, CreateBoardDto dto)
         {
@@ -84,15 +91,24 @@ namespace ProjectManager.API.Services.BoardService
             _context.ColumnDefinitions.AddRange(backlogColumn, doneColumn, toDoColumn, inProgressColumn);
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("BoardCreated", new
-                {
-                    id = board.Id,
-                    name = board.Name,
-                    description = board.Description,
-                    isDefault = board.IsDefault
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("BoardCreated", new
+                    {
+                        id = board.Id,
+                        name = board.Name,
+                        description = board.Description,
+                        isDefault = board.IsDefault
+                    });
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "BoardCreated", projectId);
+            }
 
             try
             {
@@ -107,7 +123,10 @@ namespace ProjectManager.API.Services.BoardService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             var response = new BoardResponseDto
             {
@@ -142,10 +161,18 @@ namespace ProjectManager.API.Services.BoardService
             {
                 throw new Exception("A board időközben módosult, kérjük próbáld újra!");
             }
-
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("BoardDeleted", new { boardId });
+            
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("BoardDeleted", new { boardId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "BoardDeleted", projectId);
+            }
 
             try
             {
@@ -160,7 +187,10 @@ namespace ProjectManager.API.Services.BoardService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<List<BoardResponseDto>> GetBoardsAsync(
@@ -247,16 +277,25 @@ namespace ProjectManager.API.Services.BoardService
                 throw new Exception("A board időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("BoardUpdated", new
-                {
-                    boardId = board.Id,
-                    name = board.Name,
-                    description = board.Description,
-                    isDefault = board.IsDefault,
-                    rowVersion = board.xmin
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("BoardUpdated", new
+                    {
+                        boardId = board.Id,
+                        name = board.Name,
+                        description = board.Description,
+                        isDefault = board.IsDefault,
+                        rowVersion = board.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "BoardUpdated", projectId);
+            }
 
             try
             {
@@ -271,7 +310,10 @@ namespace ProjectManager.API.Services.BoardService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(board);
         }
