@@ -116,15 +116,17 @@
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         position: relative;
     }
 
-    .modal-content h1 {
-        margin-bottom: 0.5rem;
-        font-size: 1.5rem;
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
     }
 
     form {
@@ -153,6 +155,7 @@
     span {
         font-weight: bold;
         color: var(--accent-blue);
+        word-break: break-word;
     }
 
     button {
@@ -202,8 +205,9 @@
         margin-top: 1.5rem;
         margin-bottom: 0.5rem;
         font-size: 1.5rem;
+        word-break: break-word;
     }
 
     #success { color: var(--accent-green); }
-    #failed  { color: var(--accent-red); white-space: pre-line; }
+    #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 </style>

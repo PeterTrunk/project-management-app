@@ -97,8 +97,8 @@
 
 <div class="team-container">
     <!-- Toolbar -->
-    <div class="team-toolbar">
-    <h2>Csapattagok ({members.length})</h2>
+    <div class="toolbar-with-title">
+        <h2 class="toolbar-title">Csapattagok ({members.length})</h2>
         {#if canInvite}
             <div class="toolbar-actions">
                 <button class="invite-btn" on:click={() => isInviteModalOpen = true}>
@@ -106,9 +106,9 @@
                 </button>
                 <button class="invite-btn" on:click={toggleInvites}>
                     {#if invitesCollapsed}
-                        <ChevronDown size={15} /> Meghívók
-                    {:else}
                         <ChevronRight size={15} /> Meghívók
+                    {:else}
+                        <ChevronDown size={15} /> Meghívók
                     {/if}
                 </button>
             </div>
@@ -196,22 +196,6 @@
         overflow-y: auto;
     }
 
-    .team-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.5rem 1rem;
-        background: var(--bg-secondary);
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-    }
-
-    .team-toolbar h2 {
-        font-size: 1rem;
-        margin: 0;
-        color: var(--text-secondary);
-    }
-
     .invite-btn {
         display: flex;
         align-items: center;
@@ -276,11 +260,19 @@
         align-items: center;
     }
 
+    .toolbar-with-title h2 {
+        font-size: 1rem;
+        margin: 0 auto 0 0;
+        color: var(--text-secondary);
+    }
+
     .invites-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
     }
 
     .invites-title {

@@ -95,10 +95,17 @@
         padding: 2rem;
         border-radius: 8px;
         width: 400px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         position: relative;
+    }
+
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
     }
 
     form {
@@ -125,6 +132,7 @@
         display: flex;
         align-items: center;
         gap: 1rem;
+        flex-wrap: wrap;
     }
 
     button {

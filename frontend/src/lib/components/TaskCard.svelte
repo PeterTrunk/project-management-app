@@ -39,7 +39,7 @@
 </script>
 
 <div 
-    class="task-card" 
+    class="task-card card-overflow-hidden" 
     class:overdue={isOverdue} 
     class:due-soon={isDueSoon}
     class:completed={isCompleted}
@@ -120,6 +120,7 @@
     .task-title {
         font-size: 0.9rem;
         color: var(--text-primary);
+        overflow-wrap: break-word;
     }
 
     .due-date {

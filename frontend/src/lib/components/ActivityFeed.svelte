@@ -224,7 +224,7 @@
                         <svelte:component this={getEntityIcon(activity.entityType)} size={16} />
                     </span>
                     <div class="activity-content">
-                        <div class="activity-row">
+                        <div class="activity-row stack-480">
                             <p class="activity-description">
                                 {@html highlightDescription(activity)}
                             </p>
@@ -288,6 +288,7 @@
         flex-direction: column;
         gap: 0.2rem;
         flex: 1;
+        min-width: 0;
     }
 
     .activity-row {
@@ -295,6 +296,7 @@
         align-items: baseline;
         justify-content: space-between;
         gap: 1rem;
+        flex-wrap: wrap;
     }
 
     .activity-description {
@@ -302,6 +304,8 @@
         margin: 0;
         color: var(--text-secondary);
         text-align: left;
+        flex: 1;
+        min-width: 0;
     }
 
     .activity-time {
@@ -309,6 +313,7 @@
         color: var(--text-muted);
         white-space: nowrap;
         flex-shrink: 0;
+        align-self: flex-end;
     }
 
     .load-more-btn {
@@ -383,6 +388,7 @@
         color: var(--text-primary);
         padding: 0.3rem 0.5rem;
         font-size: 0.85rem;
+        max-width: 100%;
     }
 
     .filter-toolbar input[type="text"]:focus,

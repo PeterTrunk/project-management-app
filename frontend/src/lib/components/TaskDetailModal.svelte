@@ -275,10 +275,10 @@
                 <X size={16} />
             </button>
             <h1>{task.title}</h1>
-            <p class="task-meta">{task.taskKey} ·
+            <p class="task-meta">{task.taskKey} -
                 {#if !isBacklogTask}
-                    {#if sprintName}{sprintName} · {/if}
-                    {#if boardName}{boardName} · {task.status}{:else}Nincs Boardhoz rendelve{/if}
+                    {#if sprintName}{sprintName} - {/if}
+                    {#if boardName}{boardName} - {task.status}{:else}Nincs Boardhoz rendelve{/if}
                 {:else}
                     Projekt Backlog
                 {/if}
@@ -288,7 +288,7 @@
         <div class="modal-body">
             {#if !isEditing}
                 <div class="tabs-wrapper">
-                    <div class="tabs">
+                    <div class="tabs scroll-x">
                         <button class="tab-btn" class:active={activeDetailTab === 'details'}
                             on:click={() => activeDetailTab = 'details'}>
                             <Info size={14} /> Részletek
@@ -428,7 +428,9 @@
                             {#if task.commitLinks.length > 0}
                                 <div class="git-list">
                                     {#each task.commitLinks as commit (commit.id)}
-                                        <CommitCard {commit} />
+                                        <div class="git-item">
+                                            <CommitCard {commit} />
+                                        </div>
                                     {/each}
                                 </div>
                             {:else}
@@ -440,7 +442,9 @@
                             {#if task.prLinks.length > 0}
                                 <div class="git-list">
                                     {#each task.prLinks as pr (pr.id)}
-                                        <PrCard {pr} />
+                                        <div class="git-item">
+                                            <PrCard {pr} />
+                                        </div>
                                     {/each}
                                 </div>
                             {:else}
@@ -467,7 +471,7 @@
                         <div class="member-list">
                             {#each members as member}
                                 <div class="member-row">
-                                    <span class="assignee-name">{member.displayName}</span>
+                                    <span class="assignee-name truncate">{member.displayName}</span>
                                     {#if task.assigneeIds.includes(member.userId)}
                                         <button class="label-remove-btn"
                                             on:click={() => handleRemoveAssignee(member.userId)}>
@@ -598,7 +602,13 @@
         flex-direction: column;
         overflow: hidden;
     }
-    
+
+    @media (max-width: 480px) {
+        .modal-header {
+            padding-top: 4.5rem;
+        }
+    }
+        
     /* ── Header ── */
     .modal-header {
         padding: 3.25rem 2rem 1rem;
@@ -610,6 +620,7 @@
     .modal-content h1 {
         font-size: 1.5rem;
         margin-bottom: 0.35rem;
+        word-break: break-word;
     }
 
     .task-meta {
@@ -624,6 +635,8 @@
         display: flex;
         gap: 0.5rem;
         z-index: 10;
+        flex-wrap: wrap;
+        right: 2.75rem;
     }
 
     .edit-btn, .delete-task-btn {
@@ -665,6 +678,7 @@
         border-radius: 5px;
         background: var(--bg-secondary);
         border: 1px solid var(--border);
+        gap: 0.5rem;
     }
 
     .edit-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -705,8 +719,10 @@
 
     .tabs {
         display: flex;
+        padding: 0.65rem;
         gap: 0.25rem;
         border-bottom: 1px solid var(--border);
+        overflow-y: hidden;
     }
 
     .tab-btn {
@@ -936,6 +952,7 @@
     .assignee-name {
         font-size: 0.9rem;
         color: var(--text-primary);
+        flex: 1;
     }
 
     /* Label szerkesztő sorok */
@@ -953,6 +970,9 @@
         border-radius: 5px;
         background: var(--bg-secondary);
         border: 1px solid var(--border);
+        max-width: 100%;
+        min-width: 0;
+        gap: 0.5rem;
     }
 
     /* ── Attachments ── */
@@ -987,12 +1007,20 @@
         gap: 0.4rem;
     }
 
+    .git-item {
+        padding: 0.5rem 0.75rem;
+        background: var(--bg-hover);
+        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+    }
+
     /* ── Priority ── */
     .priority {
         padding: 0.15rem 0.5rem;
         border-radius: 4px;
         font-size: 0.8rem;
         font-weight: 500;
+        text-transform: uppercase;
     }
 
     .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
@@ -1003,7 +1031,7 @@
     /* ── Misc ── */
     .msg { font-size: 0.875rem; }
     .msg.success { color: var(--accent-green); }
-    .msg.error   { color: var(--accent-red); white-space: pre-line; }
+    .msg.error   { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 
     .empty {
         font-size: 0.85rem;

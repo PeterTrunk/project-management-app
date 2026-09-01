@@ -68,7 +68,10 @@ namespace ProjectManager.API.Services.AttachmentService
                     .Group($"project-{attachment.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task DownloadAttachmentAsync(Guid projectId, Guid attachmentId, Stream destination, CancellationToken ct = default)
@@ -142,8 +145,11 @@ namespace ProjectManager.API.Services.AttachmentService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
-            
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
+
             return MapToDto(attachment);
         }
 
@@ -185,7 +191,10 @@ namespace ProjectManager.API.Services.AttachmentService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(attachment);
         }
@@ -283,6 +292,10 @@ namespace ProjectManager.API.Services.AttachmentService
             //Log megjelölése confirmált-ként
             log.Confirmed = true;
 
+            //Attachment betöltése UploadedBy-jal
+            attachment.UploadedBy = (await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == attachment.UploadedById))!;
+
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
@@ -301,11 +314,10 @@ namespace ProjectManager.API.Services.AttachmentService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
-
-            //Attachment betöltése UploadedBy-jal
-            attachment.UploadedBy = (await _context.Users
-                .FirstOrDefaultAsync(u => u.Id == attachment.UploadedById))!;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(attachment);
         }

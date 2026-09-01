@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { onDestroy } from 'svelte';
+
     import type { TaskResponse } from '../api/taskApi';
     import type { SprintResponse } from '../api/sprintApi';
     import type { BoardResponse } from '../api/boardApi';
@@ -24,8 +26,6 @@
     let allLabels: LabelResponse[] = [];
     let members: MemberResponse[] = [];
     let isMenuOpen = false;
-    
-
 
     $: selectedBoardId = task.boardId ?? '';
     $: selectedSprintId = task.sprintId ?? '';
@@ -75,6 +75,20 @@
         && (new Date(task.dueDate).getTime() - new Date().getTime()) < 1 * 24 * 60 * 60 * 1000;
     
     $: isCompleted = task.completedAt != null;
+
+    function handleOutsideClick() {
+        isMenuOpen = false;
+    }
+
+    $: if (isMenuOpen) {
+        window.addEventListener('click', handleOutsideClick);
+    } else {
+        window.removeEventListener('click', handleOutsideClick);
+    }
+
+    onDestroy(() => {
+        window.removeEventListener('click', handleOutsideClick);
+    });
 </script>
 
 <div 
@@ -92,7 +106,7 @@
         <div class="card-header">
             <span class="task-key">{task.taskKey}</span>
             {#if task.priority}
-                <span class="priority priority-{task.priority}">{task.priority}</span>
+                <span class="priority priority-{task.priority}">{(task.priority)}</span>
             {/if}
             <span class="task-title">{task.title}</span>
             <!-- Hamburger menü -->
@@ -230,18 +244,18 @@
         gap: 0.25rem;
         margin-top: 0.25rem;
     }
-
+    
     .priority {
         font-size: 0.75rem;
         padding: 0.2rem 0.4rem;
         border-radius: 4px;
+        text-transform: uppercase;
     }
 
     .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
     .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
     .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
     .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
-    .priority-normal   { background: var(--bg-hover);         color: var(--text-muted); }
 
     .backlog-task-card.overdue   { border-left: 3px solid var(--accent-red); }
     .backlog-task-card.due-soon  { border-left: 3px solid var(--accent-yellow); }

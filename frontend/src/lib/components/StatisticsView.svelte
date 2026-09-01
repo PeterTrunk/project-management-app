@@ -172,7 +172,7 @@
     <div class="statistics-content">
         <!-- Első sor: Task státusz + Workload -->
         <div class="charts-row">
-            <div class="chart-card">
+            <div class="chart-card scroll-x">
                 {#if loadingStatus}
                     <div class="loading">Betöltés...</div>
                 {:else if taskStatusData.length === 0}
@@ -182,7 +182,7 @@
                 {/if}
             </div>
 
-            <div class="chart-card">
+            <div class="chart-card scroll-x">
                 {#if loadingWorkload}
                     <div class="loading">Betöltés...</div>
                 {:else if workloadData.length === 0}
@@ -209,27 +209,31 @@
                     </button>
                 </div>
             </div>
-            {#if !selectedSprintId}
-                <div class="empty">Válassz egy sprintet a burndown/burnup megjelenítéséhez!</div>
-            {:else if loadingBurndown}
-                <div class="loading">Betöltés...</div>
-            {:else if burndownData.length === 0}
-                <div class="empty">Nincs adat</div>
-            {:else}
-                <SprintBurndownChart data={burndownData} mode={burndownMode} />
-            {/if}
+            <div class="chart-scroll scroll-x">
+                {#if !selectedSprintId}
+                    <div class="empty">Válassz egy sprintet a burndown/burnup megjelenítéséhez!</div>
+                {:else if loadingBurndown}
+                    <div class="loading">Betöltés...</div>
+                {:else if burndownData.length === 0}
+                    <div class="empty">Nincs adat</div>
+                {:else}
+                    <SprintBurndownChart data={burndownData} mode={burndownMode} />
+                {/if}
+            </div>
         </div>
 
         <!-- Harmadik sor: Velocity -->
-        <div class="chart-card full-width">
-            {#if loadingVelocity}
+         <div class="chart-card full-width">
+            <div class="chart-scroll scroll-x">
+                {#if loadingVelocity}
                 <div class="loading">Betöltés...</div>
             {:else if velocityData.length === 0}
                 <div class="empty">Nincs befejezett sprint</div>
             {:else}
                 <VelocityChart data={velocityData} />
             {/if}
-        </div>
+            </div>
+         </div>
 
         <!-- Negyedik sor: CFD -->
         <div class="chart-card full-width">
@@ -257,13 +261,15 @@
                     </select>
                 </div>
             </div>
-            {#if loadingCFD}
-                <div class="loading">Betöltés...</div>
-            {:else if cumulativeFlowData.length === 0}
-                <div class="empty">Nincs adat a megadott intervallumra</div>
-            {:else}
-                <CumulativeFlowChart data={cumulativeFlowData} />
-            {/if}
+            <div class="chart-scroll scroll-x">
+                {#if loadingCFD}
+                    <div class="loading">Betöltés...</div>
+                {:else if cumulativeFlowData.length === 0}
+                    <div class="empty">Nincs adat a megadott intervallumra</div>
+                {:else}
+                    <CumulativeFlowChart data={cumulativeFlowData} />
+                {/if}
+            </div>
         </div>
     </div>
 </div>
@@ -280,7 +286,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.5rem 1rem;
+        padding: var(--toolbar-padding);
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
@@ -327,7 +333,7 @@
     }
 
     .statistics-content {
-        padding: 1rem;
+        padding: var(--content-padding);
         overflow-y: auto;
         flex: 1;
         display: flex;
@@ -341,11 +347,17 @@
         gap: 1rem;
     }
 
+    @media (max-width: 480px) {
+        .charts-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
     .chart-card {
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 1rem;
+        padding: var(--card-padding);
     }
 
     .chart-card.full-width {
@@ -354,7 +366,7 @@
 
     .chart-header {
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start;
         margin-bottom: 0.5rem;
         gap: 1rem;
         align-items: center;
@@ -386,6 +398,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .date-filters label {

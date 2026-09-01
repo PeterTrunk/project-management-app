@@ -185,45 +185,43 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> RefreshTokenAsync(string refreshToken)
         {
-            var refreshTokenEntry = await _context.RefreshTokens.FirstOrDefaultAsync(rf =>
-                rf.Token == refreshToken);
+            //Feltételes UPDATE - csak akkor állítja is_revoked = true-ra
+            //ha is_revoked még false, ettől atomikus: nem lehet race condition!
+            var rowsAffected = await _context.RefreshTokens
+                .Where(rf => rf.Token == refreshToken && !rf.IsRevoked)
+                .ExecuteUpdateAsync(s => s.SetProperty(rf => rf.IsRevoked, true));
 
-            if (refreshTokenEntry == null)
+            if (rowsAffected == 0)
             {
-                _logger.LogWarning("Érvénytelen refresh token használata - token nem található");
-                throw new Exception("Token nem található!");
+                _logger.LogWarning("Visszavont vagy nem létező refresh token használata");
+                throw new Exception("Token nem található vagy már felhasználva!");
             }
-                
-            if (refreshTokenEntry.IsRevoked)
-            {
-                _logger.LogWarning("Visszavont refresh token használata | UserId: {UserId}", refreshTokenEntry.UserId);
-                throw new Exception("Token felfüggesztve!");
-            }
-                
-            if (refreshTokenEntry.ExpiresAt < DateTime.UtcNow)
+
+            //Token adatainak lekérése
+            var refreshTokenEntry = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rf => rf.Token == refreshToken);
+
+            if (refreshTokenEntry!.ExpiresAt < DateTime.UtcNow)
             {
                 _logger.LogWarning("Lejárt refresh token használata | UserId: {UserId}", refreshTokenEntry.UserId);
                 throw new Exception("Token lejárt!");
             }
-               
 
-            var user = await _context.Users.FirstOrDefaultAsync(u =>
-                u.Id == refreshTokenEntry.UserId);
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == refreshTokenEntry.UserId);
 
             if (user == null)
-                throw new Exception("Felhasználó nem található");
+                throw new Exception("Felhasználó nem található!");
 
             var accessToken = CreateToken(user);
 
-            RefreshToken newRefreshTokenEntry = new RefreshToken
+            var newRefreshTokenEntry = new RefreshToken
             {
-                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
             };
 
-            //Egy Transaction: - Token rotation
-            refreshTokenEntry.IsRevoked = true;
             await _context.RefreshTokens.AddAsync(newRefreshTokenEntry);
             await _context.SaveChangesAsync();
 

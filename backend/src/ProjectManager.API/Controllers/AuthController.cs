@@ -330,7 +330,7 @@ namespace ProjectManager.API.Controllers
             {
                 HttpOnly = true,
                 Secure = isProd,
-                SameSite = isProd ? SameSiteMode.None : SameSiteMode.Lax,
+                SameSite = isProd ? SameSiteMode.Strict : SameSiteMode.Lax,
                 Domain = isProd ? ".trunkpeter.com" : null,
                 Path = "/api/auth",
                 Expires = DateTime.UtcNow.AddDays(30)

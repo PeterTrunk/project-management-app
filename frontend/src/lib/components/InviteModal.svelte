@@ -163,6 +163,12 @@
         gap: 1.5rem;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     h1 {
         font-size: 1.3rem;
         margin: 0;
@@ -212,6 +218,7 @@
         justify-content: flex-end;
         gap: 0.75rem;
         margin-top: 0.5rem;
+        flex-wrap: wrap;
     }
 
     button {
@@ -251,6 +258,7 @@
         padding: 0.75rem 1rem;
         display: flex;
         gap: 2rem;
+        flex-wrap: wrap;
     }
 
     .invite-info p {
@@ -262,6 +270,7 @@
     .invite-link {
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .invite-link input {
@@ -272,6 +281,7 @@
         color: var(--text-secondary);
         padding: 0.5rem;
         font-size: 0.85rem;
+        min-width: 0;
     }
 
     .copy-btn {

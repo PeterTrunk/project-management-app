@@ -27,7 +27,7 @@
 </script>
 
 <div class="backlog-container">
-    <div class="backlog-header">
+    <div class="backlog-header wrap-480">
         <button class="section-toggle" on:click={() => isCollapsed = !isCollapsed}>
             {#if isCollapsed}
                 <ChevronRight size={14} />
@@ -107,6 +107,7 @@
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
         border-radius: 8px 8px 0 0;
+        gap: 0.5rem;
     }
 
     .section-toggle {
@@ -121,6 +122,7 @@
         font-weight: bold;
         padding: 0;
         transition: color 0.15s;
+        text-align: left;
     }
 
     .section-toggle:hover { color: var(--text-primary); }

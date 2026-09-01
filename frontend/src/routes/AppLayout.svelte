@@ -265,7 +265,7 @@
                 >
                     <FolderOpen size={18} />
                     {#if !sidebarCollapsed}
-                        <span>{project.name}</span>
+                        <span class="truncate">{project.name}</span>
                     {/if}
                 </button>
             {/each}
@@ -290,7 +290,7 @@
                 <div class="username">
                     <User size={16} />
                     {#if !sidebarCollapsed}
-                        <span>{displayName}</span>
+                        <span class="truncate">{displayName}</span>
                     {/if}
                 </div>
             {/if}
@@ -518,12 +518,12 @@
 
     .sidebar-projects {
         display: flex;
-        padding: 0 0.25rem;
+        padding: 0.3rem 0.25rem 0;
         flex-direction: column;
         gap: 0.25rem;
         flex: 1;
-        overflow-y: auto;
         overflow-x: hidden;
+        overflow-y: auto;
     }
 
     .sidebar-projects h2 {
@@ -551,6 +551,7 @@
         transition: background 0.15s, color 0.15s;
         white-space: nowrap;
         overflow: hidden;
+        
     }
 
     .project-btn:hover {
@@ -688,7 +689,7 @@
 
     .content.scrollable {
         overflow-y: auto;
-        padding: 1rem;
+        padding: var(--content-padding);
     }
 
     .content.no-padding {
@@ -723,19 +724,21 @@
         }
     }
 
-    /*
-    @media (max-width: 768px) {
-        .sidebar {
-            width: 60px;
-            min-width: 60px;
-            padding: 1rem 0.5rem;
+    @media (max-width: 425px) {
+        .sidebar:not(.collapsed) {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            min-width: 100%;
+            height: 100vh;
+            z-index: 200;
         }
 
-        .nav-label {
-            display: none;
+        .sidebar:not(.collapsed) .collapse-btn {
+            right: 0.75rem;
         }
     }
-    */
+    
     .nav-label.hidden {
         display: none;
     }
@@ -751,6 +754,7 @@
         font-size: 0.85rem;
         border-bottom: 1px solid var(--accent-yellow);
         flex-shrink: 0;
+        flex-wrap: wrap;
     }
 
     .totp-banner {
@@ -763,6 +767,7 @@
         font-size: 0.85rem;
         border-bottom: 1px solid var(--accent-yellow);
         flex-shrink: 0;
+        flex-wrap: wrap;
     }
 
     .totp-banner-settings {
@@ -806,6 +811,7 @@
         font-size: 0.85rem;
         border-bottom: 1px solid var(--accent-blue);
         flex-shrink: 0;
+        flex-wrap: wrap;
     }
 
     .email-banner-resend {

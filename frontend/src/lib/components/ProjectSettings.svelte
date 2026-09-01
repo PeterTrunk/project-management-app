@@ -130,7 +130,7 @@
 <div class="settings-container">
     <h1>{project.name}</h1>
 
-    <div class="tabs">
+    <div class="tabs scroll-x">
         <button
             class="tab-btn"
             class:active={activeTab === 'general'}
@@ -186,7 +186,7 @@
                 <h3>Veszélyzóna</h3>
                 <div class="danger-actions">
                     {#if project.isArchived}
-                        <div class="danger-row">
+                        <div class="danger-row stack-480">
                             <div>
                                 <p class="danger-title">Projekt dearchiválása</p>
                                 <p class="danger-desc">A projekt újra aktív lesz.</p>
@@ -198,7 +198,7 @@
                             )}>Dearchiválás</button>
                         </div>
                     {:else}
-                        <div class="danger-row">
+                        <div class="danger-row stack-480">
                             <div>
                                 <p class="danger-title">Projekt archiválása</p>
                                 <p class="danger-desc">A projekt csak olvasható módba kerül.</p>
@@ -210,7 +210,7 @@
                             )}>Archiválás</button>
                         </div>
                     {/if}
-                    <div class="danger-row">
+                    <div class="danger-row stack-480">
                         <div>
                             <p class="danger-title">Projekt törlése</p>
                             <p class="danger-desc">Végleges törlés, visszavonhatatlan művelet.</p>
@@ -227,7 +227,7 @@
 
         {#if activeTab === 'labels'}
             <div class="tab-section">
-                <div class="section-header">
+                <div class="section-header stack-480 wrap-480">
                     <h2>Labelek</h2>
                     <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
                         <Plus size={15} />
@@ -248,7 +248,7 @@
 
         {#if activeTab === 'git'}
             <div class="tab-section">
-                <div class="section-header">
+                <div class="section-header stack-480 wrap-480">
                     <h2>Git Integráció</h2>
                     <button class="btn-add" on:click={() => isCreateIntegrationOpen = true}>
                         <Plus size={15} />
@@ -302,7 +302,7 @@
     .settings-container {
         width: 100%;
         margin: 0;
-        padding: 2rem;
+        padding: var(--content-padding);
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
@@ -325,19 +325,21 @@
         margin-bottom: 0.75rem;
     }
 
-    /* ── Tabs ── */
     .tabs {
         display: flex;
         gap: 0.25rem;
+        padding: 0.7rem;
         border-bottom: 1px solid var(--border);
         padding-bottom: 0;
+        flex-wrap: nowrap;
+        overflow-y: hidden;
     }
 
     .tab-btn {
         display: flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.5rem 1rem;
+        padding: 0.7rem 1rem;
         border: none;
         border-bottom: 2px solid transparent;
         background: transparent;

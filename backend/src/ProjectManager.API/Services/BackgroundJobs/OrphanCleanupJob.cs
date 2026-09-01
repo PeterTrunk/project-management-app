@@ -50,17 +50,24 @@ namespace ProjectManager.API.Services.BackgroundJobs
             {
                 try
                 {
+                    //Külön transaction-ökben egyenkénti törlések.
                     await fileStorage.DeleteFileAsync(orphan.StorageKey);
                     context.PresignedUrlLogs.Remove(orphan);
+                    await context.SaveChangesAsync();
                     _logger.LogInformation("Orphan törölve: {StorageKey}", orphan.StorageKey);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    //Több replika esetén, ha párhuzamosan futtatták akkor nem csak skip
+                    _logger.LogInformation("Orphan már törölve másik replika által: {StorageKey}", orphan.StorageKey);
+                    context.ChangeTracker.Clear();
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Orphan törlési hiba: {StorageKey}", orphan.StorageKey);
+                    context.ChangeTracker.Clear();
                 }
             }
-
-            await context.SaveChangesAsync();
         }
     }
 }

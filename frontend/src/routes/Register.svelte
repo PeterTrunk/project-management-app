@@ -249,10 +249,17 @@
         border-radius: 12px;
         padding: 2.5rem;
         width: 400px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         border: 1px solid var(--border-subtle);
+    }
+
+    @media (max-width: 480px) {
+        .auth-card {
+            padding: 1.5rem;
+        }
     }
 
     h1 {
@@ -277,6 +284,7 @@
         color: var(--accent-red);
         font-size: 0.8rem;
         margin: 0;
+        word-break: break-word;
     }
 
     input {
@@ -395,6 +403,7 @@
         flex: 1;
         font-size: 0.75rem;
         padding: 0.5rem;
+        min-width: 0;
     }
 
     .copy-btn {

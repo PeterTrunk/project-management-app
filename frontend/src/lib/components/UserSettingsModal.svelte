@@ -4,6 +4,7 @@
     import { validateDisplayName, validatePassword } from '../validators';
     import { setupTotpAsync, verifyTotpAsync, disableTotpAsync } from '../api/authApi';
     import ConfirmModal from './ConfirmModal.svelte';
+    import { tokenStore } from '../stores/tokenStore';
 
     import { themeStore, toggleTheme } from '../stores/themeStore';
     import { X, User, KeyRound, Pencil, Sun, Moon, ShieldCheck, Copy, Check, ShieldAlert } from 'lucide-svelte';
@@ -80,15 +81,13 @@
         error = '';
         success = '';
         const displayNameError = validateDisplayName(newDisplayName);
-        if(displayNameError!=null){
+        if (displayNameError != null) {
             error = displayNameError;
             return;
         }
         try {
             var response = await updateProfileAsync({ displayName: newDisplayName });
-            const token = localStorage.getItem('token') ?? '';
-            const refreshToken = localStorage.getItem('refreshToken') ?? '';
-            login(token, refreshToken, {
+            login(tokenStore.get() ?? '', {
                 userId: response.userId,
                 email: response.email,
                 displayName: response.displayName,
@@ -96,9 +95,7 @@
                 isEmailVerified: $authStore.user?.isEmailVerified ?? false
             });
             success = 'Profil frissítve!';
-        } catch (e) {
-            
-        }
+        } catch (e) { }
     }
 
     async function handleSetupTotp() {
@@ -118,9 +115,7 @@
         try {
             await verifyTotpAsync(totpToken);
             isTotpEnabled = true;
-            const token = localStorage.getItem('token') ?? '';
-            const refreshToken = localStorage.getItem('refreshToken') ?? '';
-            login(token, refreshToken, {
+            login(tokenStore.get() ?? '', {
                 userId: $authStore.user?.userId ?? '',
                 email: $authStore.user?.email ?? '',
                 displayName: $authStore.user?.displayName ?? '',
@@ -140,9 +135,7 @@
         try {
             await disableTotpAsync();
             isTotpEnabled = false;
-            const token = localStorage.getItem('token') ?? '';
-            const refreshToken = localStorage.getItem('refreshToken') ?? '';
-            login(token, refreshToken, {
+            login(tokenStore.get() ?? '', {
                 userId: $authStore.user?.userId ?? '',
                 email: $authStore.user?.email ?? '',
                 displayName: $authStore.user?.displayName ?? '',
@@ -167,9 +160,8 @@
     async function refreshUserProfile() {
         try {
             const user = await meAsync();
-            const token = localStorage.getItem('token') ?? '';
-            const refreshToken = localStorage.getItem('refreshToken') ?? '';
-            login(token, refreshToken, {
+            const currentToken = tokenStore.get() ?? '';
+            login(currentToken, {
                 userId: user.userId,
                 email: user.email,
                 displayName: user.displayName,
@@ -184,7 +176,7 @@
 </script>
 
 <div class="modal-overlay">
-    <div class="modal-content">
+    <div class="modal-content stack-480">
         <button class="close-btn" on:click={() => isUserSettingsOpen = false}>
             <X size={16} />
         </button>
@@ -361,9 +353,11 @@
         position: relative;
         background: var(--bg-card);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: var(--border-radius-lg);
         width: 1200px;
+        max-width: 95vw;
         height: 800px;
+        max-height: 90vh;
         display: flex;
         overflow: hidden;
     }
@@ -397,12 +391,27 @@
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--border);
+        overflow: hidden;
+    }
+
+    @media (max-width: 480px) {
+        .sidebar {
+            width: 100%;
+            min-width: 0;
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+            padding: var(--card-padding);
+            max-height: 40vh;
+        }
     }
 
     .sidebar-options {
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        overflow-y: auto;
+        min-height: 0;
+        padding: 0.3rem;
     }
 
     .sidebar-options h2 {
@@ -453,15 +462,23 @@
         flex: 1;
         display: flex;
         flex-direction: column;
+        min-height: 0;
     }
 
     .content {
         flex: 1;
-        padding: 2rem;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         overflow-y: auto;
+        padding: 2rem;
+        min-height: 0;
+    }
+
+    @media (max-width: 480px) {
+        .content {
+            padding: var(--card-padding);
+        }
     }
 
     .content h1 {
@@ -501,7 +518,7 @@
 
     .qrImg {
         width: 100%; 
-        max-width: 500px; 
+        max-width: 480px;
         height: auto;
         margin: auto;
     }
@@ -515,6 +532,7 @@
     .copy-row input {
         flex: 1;
         font-size: 0.8rem;
+        min-width: 0;
     }
 
     .totp-status {

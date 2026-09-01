@@ -55,6 +55,8 @@ namespace ProjectManager.API.Services.CounterService
                 }
                 catch (PostgresException ex) when (ex.SqlState == "40001") //serialization failure a PG-ben
                 {
+                    _context.ChangeTracker.Clear();
+
                     if (attempt == maxRetries - 1)
                         throw new Exception("A task létrehozása nem sikerült, kérjük próbáld újra!");
 

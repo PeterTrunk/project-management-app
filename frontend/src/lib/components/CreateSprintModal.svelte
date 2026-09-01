@@ -127,16 +127,24 @@
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         position: relative;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     .modal-content h1 {
         margin-top: 1.5rem;
         margin-bottom: 0.5rem;
         font-size: 1.5rem;
+        word-break: break-word;
     }
 
     form {
@@ -204,5 +212,5 @@
     }
 
     #success { color: var(--accent-green); }
-    #failed  { color: var(--accent-red); white-space: pre-line; }
+    #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 </style>

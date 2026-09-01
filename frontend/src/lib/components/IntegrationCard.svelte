@@ -104,22 +104,22 @@
     }
 </script>
 
-<div class="integration-card">
-    <div class="card-header">
-        <div class="card-title">
+<div class="integration-card card-overflow-hidden">
+    <div class="card-header stack-480">
+        <div class="card-title wrap-480">
             <span class="provider-icon">
                 <svelte:component this={getProviderIcon(integration.provider)} size={18} />
             </span>
             <span class="provider">{integration.provider}</span>
-            <span class="repo">{integration.repoFullName}</span>
+            <span class="repo truncate">{integration.repoFullName}</span>
         </div>
-        <div class="card-badges">
+        <div class="card-badges flags">
             {#if integration.isVerified}
-                <span class="badge verified"><CircleCheck size={12} /> Verified</span>
+                <span class="badge badge-green"><CircleCheck size={12} /> Verified</span>
             {:else}
-                <span class="badge unverified"><Clock size={12} /> Nem ellenőrzött</span>
+                <span class="badge badge-yellow"><Clock size={12} /> Nem ellenőrzött</span>
             {/if}
-            <span class="badge" class:enabled={integration.isEnabled} class:disabled={!integration.isEnabled}>
+            <span class="badge" class:badge-green={integration.isEnabled} class:disabled={!integration.isEnabled}>
                 {#if integration.isEnabled}
                     <ToggleRight size={12} /> Aktív
                 {:else}
@@ -133,7 +133,7 @@
         <div class="info-row">
             <label>Webhook URL:
                 <div class="copy-row">
-                    <input type="text" readonly value={integration.webhookUrl} />
+                    <input type="text" class="truncate" readonly value={integration.webhookUrl} />
                     <button class="copy-btn" on:click={copyUrl}>
                         {#if copiedUrl}
                             <Check size={14} /> Másolva!
@@ -151,7 +151,7 @@
     </button>
 
     {#if showGuide}
-        <div class="guide">
+        <div class="guide word-break">
             {#if integration.provider === 'GitHub'}
                 <ol>
                     <li>Menj a repo <strong>Settings/Webhooks/Add webhook</strong> menüjébe</li>
@@ -257,16 +257,29 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        min-width: 0;
+        flex: 1;
     }
 
     .provider-icon {
         display: flex;
         align-items: center;
         color: var(--text-secondary);
+        flex-shrink: 0;
     }
 
-    .provider { font-weight: bold; font-size: 0.95rem; color: var(--text-primary); }
-    .repo { color: var(--text-muted); font-size: 0.9rem; }
+    .provider {
+        font-weight: bold;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .repo {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        flex: 1 1 100%;
+    }
 
     .card-badges {
         display: flex;
@@ -283,9 +296,6 @@
         font-weight: bold;
     }
 
-    .verified   { background: var(--accent-green-bg);  color: var(--accent-green); }
-    .unverified { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
-    .enabled    { background: var(--accent-green-bg);  color: var(--accent-green); }
     .disabled   { background: var(--bg-hover);         color: var(--text-muted); }
 
     .webhook-info {
@@ -354,6 +364,7 @@
         padding: 0.75rem 1rem;
         font-size: 0.85rem;
         color: var(--text-secondary);
+        overflow: hidden;
     }
 
     .guide ol {
@@ -400,6 +411,7 @@
         display: flex;
         justify-content: flex-end;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .confirm-reset-btn {

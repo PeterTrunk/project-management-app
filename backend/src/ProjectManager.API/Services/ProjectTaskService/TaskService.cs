@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.DTOs.Git;
@@ -22,6 +23,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
         private readonly ICounterService _counterService;
+        private readonly ILogger<TaskService> _logger;
 
         public TaskService(
             AppDbContext context, 
@@ -29,7 +31,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
             ICurrentUserService currentUserService, 
             IHubContext<ProjectHub> hubContext, 
             IActivityService activityService,
-            ICounterService counterService)
+            ICounterService counterService,
+            ILogger<TaskService> logger)
         {
             _context = context;
             _lexorankService = lexorankService;
@@ -37,6 +40,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             _hubContext = hubContext;
             _activityService = activityService;
             _counterService = counterService;
+            _logger = logger;
         }
         
         public async Task<TaskResponseDto> CreateTaskAsync(Guid projectId, CreateTaskDto dto)
@@ -108,26 +112,33 @@ namespace ProjectManager.API.Services.ProjectTaskService
             });
 
             await _context.SaveChangesAsync();
-            
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("TaskCreated", new
-                {
-                    id = task.Id,
-                    boardId = task.BoardId,
-                    columnId = task.ColumnId,
-                    sprintId = task.SprintId,
-                    taskKey = task.TaskKey,
-                    title = task.Title,
-                    priority = task.Priority,
-                    dueDate = task.DueDate,
-                    estimateInMinutes = task.EstimateInMinutes,
-                    position = task.Position,
-                    createdAt = task.CreatedAt,
-                    completedAt = task.CompletedAt,
-                    rowVersion = task.xmin
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskCreated", new
+                    {
+                        id = task.Id,
+                        boardId = task.BoardId,
+                        columnId = task.ColumnId,
+                        sprintId = task.SprintId,
+                        taskKey = task.TaskKey,
+                        title = task.Title,
+                        priority = task.Priority,
+                        dueDate = task.DueDate,
+                        estimateInMinutes = task.EstimateInMinutes,
+                        position = task.Position,
+                        createdAt = task.CreatedAt,
+                        completedAt = task.CompletedAt,
+                        rowVersion = task.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskCreated", projectId);
+            }
 
             try
             {
@@ -142,7 +153,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToTaskResponseDto(
                 task,
@@ -175,12 +189,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("A task időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{task.ProjectId}")
-                .SendAsync("TaskDeleted", new
-                {
-                    taskId
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("TaskDeleted", new
+                    {
+                        taskId
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskDeleted", task.ProjectId);
+            }
 
             try
             {
@@ -195,7 +217,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{task.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", task.ProjectId);
+            }
         }
 
         public async Task<List<TaskResponseDto>> GetTasksAsync(
@@ -453,19 +478,27 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("A task időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{task.ProjectId}")
-                .SendAsync("TaskMoved", new
-                {
-                    taskId = task.Id,
-                    boardId = task.BoardId,
-                    columnId = task.ColumnId,
-                    sprintId = task.SprintId,
-                    position = task.Position,
-                    completedAt = task.CompletedAt,
-                    triggeredBy = task.CreatedById,
-                    rowVersion = task.xmin
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("TaskMoved", new
+                    {
+                        taskId = task.Id,
+                        boardId = task.BoardId,
+                        columnId = task.ColumnId,
+                        sprintId = task.SprintId,
+                        position = task.Position,
+                        completedAt = task.CompletedAt,
+                        triggeredBy = task.CreatedById,
+                        rowVersion = task.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskMoved", projectId);
+            }
 
             if (isLastColumn)
             {
@@ -482,7 +515,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         .Group($"project-{projectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
 
             // NeedsRebalancing ellenőrzés a mentés után
@@ -546,18 +582,26 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 throw new Exception("A task időközben módosult, kérjük próbáld újra!");
             }
 
-            await _hubContext.Clients
-                .Group($"project-{task.ProjectId}")
-                .SendAsync("TaskUpdated", new
-                {
-                    taskId = task.Id,
-                    title = task.Title,
-                    description = task.Description,
-                    priority = task.Priority,
-                    dueDate = task.DueDate,
-                    estimateInMinutes = task.EstimateInMinutes,
-                    rowVersion = task.xmin
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{task.ProjectId}")
+                    .SendAsync("TaskUpdated", new
+                    {
+                        taskId = task.Id,
+                        title = task.Title,
+                        description = task.Description,
+                        priority = task.Priority,
+                        dueDate = task.DueDate,
+                        estimateInMinutes = task.EstimateInMinutes,
+                        rowVersion = task.xmin
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskUpdated", task.ProjectId);
+            }
 
             try
             {
@@ -572,7 +616,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{task.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", task.ProjectId);
+            }
 
             var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
@@ -639,17 +686,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     throw new Exception("A task időközben módosult, kérjük próbáld újra!");
                 }
 
-                await _hubContext.Clients
-                    .Group($"project-{projectId}")
-                    .SendAsync("TaskUpdated", new
-                    {
-                        taskId = task.Id,
-                        boardId = (Guid?)null,
-                        columnId = (Guid?)null,
-                        position = task.Position,
-                        rowVersion = task.xmin
-                    });
-
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("TaskUpdated", new
+                        {
+                            taskId = task.Id,
+                            boardId = (Guid?)null,
+                            columnId = (Guid?)null,
+                            position = task.Position,
+                            rowVersion = task.xmin
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "TaskUpdated", projectId);
+                }
             }
             else
             {
@@ -735,16 +789,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     throw new Exception("A task időközben módosult, kérjük próbáld újra!");
                 }
 
-                await _hubContext.Clients
-                    .Group($"project-{projectId}")
-                    .SendAsync("TaskUpdated", new
-                    {
-                        taskId = task.Id,
-                        boardId = task.BoardId,
-                        columnId = task.ColumnId,
-                        position = task.Position,
-                        rowVersion = task.xmin
-                    });
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{projectId}")
+                        .SendAsync("TaskUpdated", new
+                        {
+                            taskId = task.Id,
+                            boardId = task.BoardId,
+                            columnId = task.ColumnId,
+                            position = task.Position,
+                            rowVersion = task.xmin
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "TaskUpdated", projectId);
+                }
 
                 try
                 {
@@ -759,7 +821,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         .Group($"project-{task.ProjectId}")
                         .SendAsync("ActivityCreated", activity);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+                }
             }
 
             // Response összerakása
@@ -824,18 +889,27 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                await _hubContext.Clients
-                    .Group($"project-{column!.Board.ProjectId}")
-                    .SendAsync("TasksRebalanced", new
-                    {
-                        boardId = column.BoardId,
-                        columnId,
-                        tasks = allTasksInColumn.Select(t => new {
-                            id = t.Id,
-                            position = t.Position,
-                            rowVersion = t.xmin
-                        })
-                    });
+                try
+                {
+                    await _hubContext.Clients
+                        .Group($"project-{column!.Board.ProjectId}")
+                        .SendAsync("TasksRebalanced", new
+                        {
+                            boardId = column.BoardId,
+                            columnId,
+                            tasks = allTasksInColumn.Select(t => new {
+                                id = t.Id,
+                                position = t.Position,
+                                rowVersion = t.xmin
+                            })
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                        "TasksRebalanced", column!.Board.ProjectId);
+                }
+                
             }
             catch (Exception)
             {
@@ -867,10 +941,19 @@ namespace ProjectManager.API.Services.ProjectTaskService
             });
 
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("TaskAssigneeAdded", new { taskId, userId });
 
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskAssigneeAdded", new { taskId, userId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskAssigneeAdded", projectId);
+            }
+            
             try
             {
                 var activity = await _activityService.LogActivityAsync(
@@ -884,7 +967,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
@@ -907,9 +993,18 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
             _context.TaskAssignments.Remove(assignment);
             await _context.SaveChangesAsync();
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("TaskAssigneeRemoved", new { taskId, userId });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("TaskAssigneeRemoved", new { taskId, userId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "TaskAssigneeRemoved", projectId);
+            }
 
             try
             {
@@ -924,7 +1019,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         private TaskResponseDto MapToTaskResponseDto(

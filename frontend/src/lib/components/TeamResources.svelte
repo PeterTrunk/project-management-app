@@ -82,24 +82,24 @@
 
 <div class="team-resources-container">
     <div class="resources-toolbar">
-        <h2>Projekt dokumentumok ({attachments.length})</h2>
-        <label class="upload-btn" class:loading={isUploading}>
-            {isUploading ? `Feltöltés... ${uploadProgress > 0 ? uploadProgress + '%' : ''}` : '+ Feltöltés'}
-            <input
-                type="file"
-                style="display: none"
-                multiple
-                on:change={handleFileUpload}
-                disabled={isUploading}
-            />
-        </label>
-
+        <div class="toolbar-row wrap-480">
+            <h2>Projekt dokumentumok ({attachments.length})</h2>
+            <label class="upload-btn btn-icon-text" class:loading={isUploading}>
+                {#if isUploading}
+                    Feltöltés... {uploadProgress > 0 ? uploadProgress + '%' : ''}
+                {:else}
+                    +<span class="btn-text"> Feltöltés</span>
+                {/if}
+                <input type="file" style="display: none" multiple on:change={handleFileUpload} disabled={isUploading} />
+            </label>
+        </div>
+        
         {#if isUploading && uploadProgress > 0}
             <div class="progress-bar">
                 <div class="progress-fill" style="width: {uploadProgress}%"></div>
             </div>
         {/if}
-
+        
         {#if uploadError}
             <p class="msg error">{uploadError}</p>
         {/if}
@@ -158,12 +158,44 @@
 
     .resources-toolbar {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.5rem 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: var(--toolbar-padding);
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
+    }
+
+    .toolbar-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .msg {
+        font-size: 0.9rem;
+        padding: 0.5rem 0;
+    }
+
+    .msg.error {
+        color: var(--accent-red);
+        white-space: pre-line;
+        width: 100%;
+    }
+
+    .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: var(--bg-input);
+        border-radius: var(--border-radius);
+        overflow: hidden;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: var(--accent-green);
+        transition: width 0.2s ease;
     }
 
     .resources-toolbar h2 {
@@ -173,7 +205,7 @@
     }
 
     .resources-content {
-        padding: 1rem;
+        padding: var(--content-padding);
         overflow-y: auto;
         flex: 1;
     }

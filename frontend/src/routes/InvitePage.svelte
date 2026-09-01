@@ -112,6 +112,17 @@
         padding: 1rem;
     }
 
+    .status p {
+        white-space: pre-line;
+        word-break: break-word;
+    }
+    
+    @media (max-width: 480px) {
+        .invite-card {
+            padding: 1.5rem;
+        }
+    }
+
     @keyframes spin {
         to { transform: rotate(360deg); }
     }

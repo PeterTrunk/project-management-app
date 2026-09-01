@@ -76,7 +76,7 @@
                         {#if task.priority}
                             <span class="priority priority-{task.priority}">{task.priority}</span>
                         {/if}
-                        <span class="task-title">{task.title}</span>
+                        <span class="task-title truncate">{task.title}</span>
                     </div>
                 {/each}
             </div>
@@ -146,10 +146,17 @@
         gap: 1rem;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     h1 {
         font-size: 1.3rem;
         border-bottom: 1px solid var(--border);
         padding-bottom: 0.75rem;
+        word-break: break-word;
     }
 
     .warning {
@@ -185,6 +192,7 @@
     .task-key {
         color: var(--text-muted);
         min-width: 60px;
+        flex-shrink: 0;
     }
 
     .options {
@@ -229,6 +237,7 @@
         justify-content: flex-end;
         gap: 0.75rem;
         margin-top: 0.5rem;
+        flex-wrap: wrap;
     }
 
     button {
@@ -280,5 +289,5 @@
     .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
     .priority-normal   { background: var(--bg-hover);         color: var(--text-muted); }
 
-    #failed { color: var(--accent-red); white-space: pre-line; }
+    #failed { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 </style>

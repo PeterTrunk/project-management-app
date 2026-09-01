@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Integration;
@@ -20,6 +21,7 @@ namespace ProjectManager.API.Services.IntegrationService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IEncryptionService _encryptionService;
         private readonly ApiOptions _apiOptions;
+        private readonly ILogger<IntegrationService> _logger;
 
         public IntegrationService(
             AppDbContext context, 
@@ -27,7 +29,8 @@ namespace ProjectManager.API.Services.IntegrationService
             IActivityService activityService, 
             IHubContext<ProjectHub> hubContext,
             IEncryptionService encryptionService,
-            IOptions<ApiOptions> apiOptions)
+            IOptions<ApiOptions> apiOptions,
+            ILogger<IntegrationService> logger)
         {
             _context = context;
             _currentUserService = currentUserService;
@@ -35,6 +38,7 @@ namespace ProjectManager.API.Services.IntegrationService
             _hubContext = hubContext;
             _encryptionService = encryptionService;
             _apiOptions = apiOptions.Value;
+            _logger = logger;
         }
 
         public async Task<IntegrationResponseDto> CreateIntegrationAsync(Guid projectId, CreateIntegrationDto dto)
@@ -69,18 +73,27 @@ namespace ProjectManager.API.Services.IntegrationService
             await _context.Integrations.AddAsync(integration);
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("IntegrationCreated", new
-                {
-                    integrationId = integration.Id,
-                    provider = integration.Provider,
-                    repoFullName = integration.RepoFullName,
-                    isEnabled = integration.IsEnabled,
-                    isVerified = integration.IsVerified,
-                    webhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
-                    createdAt = integration.CreatedAt
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationCreated", new
+                    {
+                        integrationId = integration.Id,
+                        provider = integration.Provider,
+                        repoFullName = integration.RepoFullName,
+                        isEnabled = integration.IsEnabled,
+                        isVerified = integration.IsVerified,
+                        webhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
+                        createdAt = integration.CreatedAt
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationCreated", projectId);
+            }
+            
 
             try
             {
@@ -95,7 +108,10 @@ namespace ProjectManager.API.Services.IntegrationService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(integration);
         }
@@ -109,13 +125,21 @@ namespace ProjectManager.API.Services.IntegrationService
 
             _context.Integrations.Remove(integration);
             await _context.SaveChangesAsync();
-            
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("IntegrationDeleted", new
-                {
-                    integrationId = integration.Id
-                });
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationDeleted", new
+                    {
+                        integrationId = integration.Id
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationDeleted", projectId);
+            }
 
             try
             {
@@ -130,7 +154,10 @@ namespace ProjectManager.API.Services.IntegrationService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task EnableDisableIntegrationAsync(Guid projectId, Guid integrationId, bool isEnabled)
@@ -144,13 +171,21 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("IntegrationUpdated", new
-                {
-                    integrationId = integration.Id,
-                    isEnabled = integration.IsEnabled
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        isEnabled = integration.IsEnabled
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
 
             try
             {
@@ -165,7 +200,10 @@ namespace ProjectManager.API.Services.IntegrationService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
         }
 
         public async Task<Integration?> GetByWebhookTokenAsync(string webhookToken)
@@ -196,13 +234,22 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("IntegrationUpdated", new
-                {
-                    integrationId = integration.Id,
-                    isVerified = integration.IsVerified
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        isVerified = integration.IsVerified
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
+            
 
             try
             {
@@ -217,8 +264,10 @@ namespace ProjectManager.API.Services.IntegrationService
                     .Group($"project-{projectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
-
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
 
             return MapToDto(integration);
         }
@@ -234,13 +283,21 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.IsVerified = false;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{projectId}")
-                .SendAsync("IntegrationUpdated", new
-                {
-                    integrationId = integration.Id,
-                    isVerified = false
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        isVerified = false
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
         }
 
         public async Task VerifyIntegrationAsync(Guid integrationId)
@@ -254,13 +311,22 @@ namespace ProjectManager.API.Services.IntegrationService
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients
-                .Group($"project-{integration.ProjectId}")
-                .SendAsync("IntegrationVerified", new
-                {
-                    integrationId = integration.Id,
-                    projectId = integration.ProjectId
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{integration.ProjectId}")
+                    .SendAsync("IntegrationVerified", new
+                    {
+                        integrationId = integration.Id,
+                        projectId = integration.ProjectId
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationVerified", integration.ProjectId);
+            }
+            
 
             try
             {
@@ -275,7 +341,10 @@ namespace ProjectManager.API.Services.IntegrationService
                     .Group($"project-{integration.ProjectId}")
                     .SendAsync("ActivityCreated", activity);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", integration.ProjectId);
+            }
         }
 
         private IntegrationResponseDto MapToDto(Integration integration)

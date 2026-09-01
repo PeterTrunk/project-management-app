@@ -10,9 +10,9 @@
 
 </script>
 
-<div class="label-card" class:small>
+<div class="label-card card-overflow-hidden" class:small>
     <div class="label-color" style="background-color: {label.color}"></div>
-    <span class="label-name">{label.name}</span>
+    <span class="label-name truncate">{label.name}</span>
     {#if showDelete}
         <button class="delete-btn" on:click={() => onDelete(label.id)}>
             <Trash2 size={14} />
@@ -52,6 +52,7 @@
         flex: 1;
         font-size: 0.9rem;
         color: var(--text-primary);
+        min-width: 0;
     }
 
     .delete-btn {
@@ -63,6 +64,7 @@
         cursor: pointer;
         padding: 0.15rem;
         border-radius: 3px;
+        flex-shrink: 0;
     }
 
     .delete-btn:hover {

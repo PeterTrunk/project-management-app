@@ -64,6 +64,7 @@
         margin: 0;
         text-transform: uppercase;
         letter-spacing: 0.05em;
+        overflow-wrap: break-word;
     }
 
     .stat-value {
