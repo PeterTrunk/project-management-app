@@ -114,6 +114,12 @@
         position: relative;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     form {
         display: flex;
         flex-direction: column;
@@ -149,5 +155,9 @@
     }
 
     #success { color: var(--accent-green); }
-    #failed  { color: var(--accent-red); white-space: pre-line; }
+    #failed  { 
+        color: var(--accent-red); 
+        white-space: pre-line; 
+        word-break: break-word; 
+    }
 </style>

@@ -353,7 +353,7 @@
     {/if}
 </div>
 
-<div class="board-container">
+<div class="board-container" class:no-vertical-scroll={isReordering}>
     <h1>{activeBoard?.name}</h1>
     <div class="columns-container"
         use:dndzone={{
@@ -459,16 +459,19 @@
     .board-container {
         flex: 1;
         overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: auto;
         padding: 1rem;
-        padding-bottom: 1rem;
+    }
+
+    .board-container.no-vertical-scroll {
+        overflow-y: hidden;
     }
 
     .columns-container {
         display: flex;
         gap: 1rem;
         align-items: flex-start;
-        height: calc(95vh - 165px);
+        height: 100%;
         min-width: min-content;
     }
 
@@ -584,6 +587,7 @@
         padding: 0.3rem 0.6rem 0.3rem 1.75rem;
         font-size: 0.85rem;
         width: 180px;
+        max-width: 100%;
     }
 
     .search-input:focus {

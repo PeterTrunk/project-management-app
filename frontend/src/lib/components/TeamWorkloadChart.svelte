@@ -90,6 +90,7 @@
 <style>
     .chart-container {
         width: 100%;
+        min-width: 480px;
         height: 350px;
     }
 </style>

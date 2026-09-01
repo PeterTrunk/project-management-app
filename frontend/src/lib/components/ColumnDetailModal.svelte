@@ -169,16 +169,24 @@
         padding: 2rem;
         border-radius: 8px;
         width: 500px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         position: relative;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     .modal-content h1 {
         margin-top: 2.5rem;
         padding-bottom: 1rem;
         border-bottom: 1px solid var(--border);
+        word-break: break-word;
     }
 
     .header-actions {
@@ -187,6 +195,8 @@
         left: 0.75rem;
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
+        right: 2.75rem;
     }
 
     .edit-btn, .delete-btn {
@@ -262,7 +272,11 @@
         color: #fff;
     }
 
-    span { font-weight: bold; color: var(--text-primary); }
+    span { 
+        font-weight: bold; 
+        color: var(--text-primary);
+        word-break: break-word;
+    }
     #success { color: var(--accent-green); }
-    #failed  { color: var(--accent-red); white-space: pre-line; }
+    #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 </style>

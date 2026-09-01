@@ -157,9 +157,15 @@
         gap: 1.5rem;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     h1 {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.5rem;
         font-size: 1.3rem;
         margin: 0;
@@ -221,6 +227,7 @@
         justify-content: flex-end;
         gap: 0.75rem;
         margin-top: 0.5rem;
+        flex-wrap: wrap;
     }
 
     button {

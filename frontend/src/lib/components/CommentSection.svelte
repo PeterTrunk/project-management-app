@@ -90,7 +90,7 @@
         {#each comments as comment}
             <div class="comment">
                 <div class="comment-header">
-                    <span class="comment-author">{comment.userName}</span>
+                    <span class="comment-author truncate">{comment.userName}</span>
                     <span class="comment-date">{formatDate(comment.createdAt)}</span>
                     {#if comment.userId === currentUserId}
                         <button class="delete-btn" on:click={() => handleDeleteComment(comment.id)}>
@@ -140,17 +140,21 @@
         align-items: center;
         gap: 0.5rem;
         margin-bottom: 0.25rem;
+        flex-wrap: wrap;
     }
 
     .comment-author {
         font-weight: bold;
         font-size: 0.9rem;
         color: var(--text-primary);
+        min-width: 0;
+        flex: 1;
     }
 
     .comment-date {
         font-size: 0.75rem;
         color: var(--text-muted);
+        flex-shrink: 0;
     }
 
     .delete-btn {
@@ -163,6 +167,7 @@
         align-items: center;
         padding: 0.15rem;
         border-radius: 3px;
+        flex-shrink: 0;
     }
 
     .delete-btn:hover {
@@ -210,5 +215,6 @@
         color: var(--accent-red);
         white-space: pre-line;
         font-size: 0.85rem;
+        word-break: break-word;
     }
 </style>

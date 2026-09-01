@@ -68,17 +68,11 @@
                          class:completed={sprint.state === 'Completed'}
 >
     <div class="sprint-header">
-        <div class="sprint-title">
+        <div class="sprint-title-row">
             {#if sprint.state === 'Active'}
                 <span class="active-badge">AKTÍV</span>
             {/if}
-            <h2>{sprint.name}</h2>
-        </div>
-
-        <div class="sprint-dates">
-            {sprint.startDate ? new Date(sprint.startDate).toLocaleDateString('hu-HU') : '?'}
-            —
-            {sprint.endDate ? new Date(sprint.endDate).toLocaleDateString('hu-HU') : '?'}
+            <h2 class="sprint-title truncate" title={sprint.name}>{sprint.name}</h2>
         </div>
         <div class="sprint-actions">
             <button class="collapse-btn" on:click={() => collapsed = !collapsed}>
@@ -119,7 +113,14 @@
                 </button>
             {/if}
         </div>
+        
     </div>
+    <div class="sprint-dates">
+        {sprint.startDate ? new Date(sprint.startDate).toLocaleDateString('hu-HU') : '?'}
+        —
+        {sprint.endDate ? new Date(sprint.endDate).toLocaleDateString('hu-HU') : '?'}
+    </div>
+
     {#if sprint.goal}
         <p class="sprint-goal">Cél: {sprint.goal}</p>
     {/if}
@@ -187,7 +188,7 @@
     .sprint-card {
         background: var(--bg-card);
         border-radius: 8px;
-        padding: 1rem;
+        padding: var(--card-padding);
         border: 1px solid var(--border-subtle);
         margin-bottom: 0.75rem;
     }
@@ -205,32 +206,38 @@
         display: flex;
         align-items: center;
         gap: 1rem;
-        margin-bottom: 0.5rem;
         flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+    }
+
+    .sprint-title-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex: 1;
+        min-width: 0;
     }
 
     .sprint-title {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex: 1;
-    }
-
-    .sprint-title h2 {
         font-size: 1rem;
         margin: 0;
         color: var(--text-primary);
+        flex: 1;
+        min-width: 0;
     }
 
     .active-badge {
         color: var(--accent-yellow);
         font-size: 0.85rem;
         font-weight: bold;
+        flex-shrink: 0;
     }
 
     .sprint-dates {
         font-size: 0.85rem;
         color: var(--text-muted);
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .sprint-actions {

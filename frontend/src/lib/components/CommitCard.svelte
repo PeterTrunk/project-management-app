@@ -15,28 +15,31 @@
 </script>
 
 <div class="commit-card">
-    <span class="commit-icon">
-        <GitCommitHorizontal size={15} />
-    </span>
-    <div class="commit-info">
-        <div class="commit-main">
-            {#if commit.commitUrl}
-                <a href={commit.commitUrl} target="_blank" class="commit-sha">
-                    {shortenSha(commit.commitSha)}
-                </a>
-            {:else}
-                <span class="commit-sha">{shortenSha(commit.commitSha)}</span>
-            {/if}
-            <span class="commit-message">{commit.message.split('\n')[0]}</span>
-        </div>
-        <div class="commit-meta">
-            <span>{commit.authorName}</span>
-            <span>·</span>
-            <span>{commit.authorEmail}</span>
-            <span>·</span>
-            <span>{formatDate(commit.committedAt)}</span>
+    <div class="commit-main-row">
+        <span class="commit-icon">
+            <GitCommitHorizontal size={15} />
+        </span>
+        <div class="commit-info">
+            <div class="commit-main">
+                {#if commit.commitUrl}
+                    <a href={commit.commitUrl} target="_blank" class="commit-sha">
+                        {shortenSha(commit.commitSha)}
+                    </a>
+                {:else}
+                    <span class="commit-sha">{shortenSha(commit.commitSha)}</span>
+                {/if}
+                <span class="commit-message">{commit.message.split('\n')[0]}</span>
+            </div>
+            <div class="commit-meta">
+                <span>{commit.authorName}</span>
+                <span>·</span>
+                <span>{commit.authorEmail}</span>
+                <span>·</span>
+                <span>{formatDate(commit.committedAt)}</span>
+            </div>
         </div>
     </div>
+    <slot name="actions" />
 </div>
 
 <style>
@@ -44,15 +47,6 @@
         display: flex;
         align-items: flex-start;
         gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
-        background: var(--bg-hover);
-        border-radius: 6px;
-        border: 1px solid var(--border-subtle);
-        transition: border-color 0.15s;
-    }
-
-    .commit-card:hover {
-        border-color: var(--border-hover);
     }
 
     .commit-icon {
@@ -103,5 +97,6 @@
         gap: 0.4rem;
         font-size: 0.75rem;
         color: var(--text-muted);
+        flex-wrap: wrap;
     }
 </style>

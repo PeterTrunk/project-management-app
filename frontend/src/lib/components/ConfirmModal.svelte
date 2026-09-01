@@ -37,7 +37,7 @@
 >
     <div class="modal-content">
         <h2>{title}</h2>
-        <p>{message}</p>
+        <p class="word-break">{message}</p>
         <div class="buttons">
             <button class="cancel" on:click={handleCancel}>{cancelText}</button>
             <button class="confirm" on:click={handleConfirm}>{confirmText}</button>
@@ -64,16 +64,24 @@
         border: 1px solid var(--border);
         padding: 2rem;
         border-radius: 8px;
-        min-width: 350px;
+        width: 350px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         gap: 1rem;
+    }
+    
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
     }
 
     .buttons {
         display: flex;
         justify-content: flex-end;
         gap: 1rem;
+        flex-wrap: wrap;
     }
 
     .confirm {

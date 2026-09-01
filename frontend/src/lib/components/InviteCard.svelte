@@ -27,14 +27,12 @@
     $: isMaxed = invite.maxUses !== null && invite.useCount >= invite.maxUses;
 </script>
 
-<div class="invite-card" class:expired={isExpired || isMaxed}>
+<div class="invite-card card-overflow-hidden" class:expired={isExpired || isMaxed}>
     <div class="invite-info">
         <div class="invite-row">
-            <span class="invite-url">
-                <a href={invite.inviteUrl} target="_blank" rel="noopener noreferrer" class="invite-url">
-                    {invite.inviteUrl}
-                </a>
-            </span>
+            <a href={invite.inviteUrl} target="_blank" rel="noopener noreferrer" class="invite-url truncate">
+                {invite.inviteUrl}
+            </a>
         </div>
         <div class="invite-meta">
             <span>Lejár: {formatExpiry(invite.expiresAt)}</span>
@@ -72,6 +70,7 @@
         background: var(--bg-hover);
         border: 1px solid var(--border-subtle);
         gap: 1rem;
+        flex-wrap: wrap;
     }
 
     .invite-card.expired {
@@ -87,11 +86,14 @@
 
     .invite-url {
         font-size: 0.8rem;
-        color: var(--text-secundary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 300px;
+        color: var(--text-secondary);
+        display: block;
+    }
+
+
+    .invite-row {
+        display: flex;
+        min-width: 0;
     }
 
     .invite-meta {
@@ -100,6 +102,7 @@
         gap: 0.75rem;
         font-size: 0.75rem;
         color: var(--text-muted);
+        flex-wrap: wrap;
     }
 
     .badge {
@@ -133,7 +136,7 @@
     .copy-btn, .delete-btn {
         background: transparent;
         border: 1px solid var(--border-hover);
-        color: var(--text-secundary);
+        color: var(--text-secondary);
         border-radius: 6px;
         padding: 0.4rem;
         cursor: pointer;

@@ -87,11 +87,11 @@
     </div>
 
     <div class="member-info">
-        <span class="member-name">{member.displayName}</span>
-        <span class="member-email">{member.email}</span>
+        <span class="member-name truncate" title={member.displayName}>{member.displayName}</span>
+        <span class="member-email truncate" title={member.email}>{member.email}</span>
     </div>
 
-    <div class="member-actions">
+    <div class="member-actions wrap-480">
         {#if canModify}
             <select 
                 class="role-select"
@@ -137,6 +137,8 @@
         border-radius: 8px;
         border: 1px solid var(--border-subtle);
         transition: border-color 0.15s;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .member-card:hover {
@@ -163,6 +165,7 @@
         gap: 0.1rem;
         flex: 1;
         text-align: left;
+        min-width: 120px;
     }
 
     .member-name {
@@ -180,6 +183,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        
     }
 
     .role-select {
@@ -224,5 +228,7 @@
         color: var(--accent-red);
         font-size: 0.85rem;
         margin-top: 0.25rem;
+        white-space: pre-line;
+        word-break: break-word;
     }
 </style>

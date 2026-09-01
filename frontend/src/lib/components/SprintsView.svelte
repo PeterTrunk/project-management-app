@@ -332,7 +332,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 1rem;
+        padding: var(--toolbar-padding);
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
@@ -374,6 +374,8 @@
         letter-spacing: 0.03em;
         text-transform: uppercase;
         transition: color 0.15s, background 0.15s;
+        word-break: break-word;
+        text-align: left;
     }
 
     .section-toggle:hover {

@@ -62,15 +62,6 @@
         display: flex;
         align-items: flex-start;
         gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
-        background: var(--bg-hover);
-        border-radius: 6px;
-        border: 1px solid var(--border-subtle);
-        transition: border-color 0.15s;
-    }
-
-    .pr-card:hover {
-        border-color: var(--border-hover);
     }
 
     .pr-icon {
@@ -133,5 +124,6 @@
         gap: 0.4rem;
         font-size: 0.75rem;
         color: var(--text-muted);
+        flex-wrap: wrap;
     }
 </style>

@@ -210,6 +210,12 @@
         position: relative;
     }
 
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: var(--card-padding);
+        }
+    }
+
     .modal-content h1 {
         margin-bottom: 0.5rem;
         font-size: 1.5rem;
@@ -282,6 +288,7 @@
         margin-top: 1.5rem;
         margin-bottom: 0.5rem;
         font-size: 1.5rem;
+        word-break: break-word;
     }
 
     button[type="submit"] {
@@ -327,6 +334,8 @@
         display: flex;
         align-items: center;
         gap: 0.25rem;
+        max-width: 100%;
+        min-width: 0;
     }
 
     .label-remove-btn {

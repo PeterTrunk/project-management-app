@@ -53,7 +53,7 @@
         padding: 1rem;
         width: 250px;
         border: 1px solid var(--border-subtle);
-        height: calc(100% - 8px);
+        height: calc(100% - 48px);
         display: flex;
         flex-direction: column;
     }
@@ -71,6 +71,7 @@
         margin-bottom: 0.5rem;
         flex-shrink: 0;
         transition: color 0.15s;
+        overflow-wrap: break-word;
     }
 
     .column-title-btn:hover:not(:disabled) {

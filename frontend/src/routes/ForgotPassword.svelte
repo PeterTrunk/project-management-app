@@ -62,12 +62,19 @@
         border-radius: 12px;
         padding: 2.5rem;
         width: 400px;
+        max-width: 95vw;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 1rem;
         border: 1px solid var(--border-subtle);
         text-align: center;
+    }
+
+    @media (max-width: 480px) {
+        .auth-card {
+            padding: 1.5rem;
+        }
     }
 
     h1 {

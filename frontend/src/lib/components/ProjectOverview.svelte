@@ -208,7 +208,7 @@
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
-        padding: 1.5rem;
+        padding: var(--content-padding);
         overflow-y: auto;
         height: 100%;
     }
@@ -260,6 +260,12 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 1.5rem;
+    }
+
+    @media (max-width: 480px) {
+        .overview-content {
+            grid-template-columns: 1fr;
+        }
     }
 
     .section h3 {

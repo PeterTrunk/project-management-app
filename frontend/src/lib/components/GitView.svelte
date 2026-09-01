@@ -113,17 +113,19 @@
                         {#each integrations as integration (integration.id)}
                             <div class="integration-item">
                                 <span class="provider-icon"><GitBranch size={16} /></span>
-                                <span class="repo">{integration.repoFullName}</span>
-                                <span class="badge" class:enabled={integration.isEnabled} class:disabled={!integration.isEnabled}>
-                                    {#if integration.isEnabled}
-                                        <ToggleRight size={12} /> Aktív
-                                    {:else}
-                                        <ToggleLeft size={12} /> Inaktív
+                                <span class="repo truncate">{integration.repoFullName}</span>
+                                <div class="flags">
+                                    <span class="badge" class:badge-green={integration.isEnabled} class:disabled={!integration.isEnabled}>
+                                        {#if integration.isEnabled}
+                                            <ToggleRight size={12} /> Aktív
+                                        {:else}
+                                            <ToggleLeft size={12} /> Inaktív
+                                        {/if}
+                                    </span>
+                                    {#if integration.isVerified}
+                                        <span class="badge badge-green"><CircleCheck size={12} /> Verified</span>
                                     {/if}
-                                </span>
-                                {#if integration.isVerified}
-                                    <span class="badge verified"><CircleCheck size={12} /> Verified</span>
-                                {/if}
+                                </div>
                             </div>
                         {/each}
                     </div>
@@ -279,6 +281,7 @@
         background: var(--bg-card);
         border-radius: 6px;
         border: 1px solid var(--border-subtle);
+        flex-wrap: wrap;
     }
 
     .provider-icon {
@@ -291,6 +294,7 @@
         flex: 1;
         font-size: 0.9rem;
         color: var(--text-secondary);
+        min-width: 0;
     }
 
     .badge {
@@ -303,9 +307,7 @@
         font-weight: bold;
     }
 
-    .enabled  { background: var(--accent-green-bg); color: var(--accent-green); }
     .disabled { background: var(--bg-hover);        color: var(--text-muted); }
-    .verified { background: var(--accent-green-bg); color: var(--accent-green); }
 
     .git-list {
         display: flex;
@@ -317,13 +319,24 @@
         display: flex;
         flex-direction: column;
         gap: 0.4rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--bg-hover);
+        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+        transition: border-color 0.15s;
+    }
+
+    .unmatched-item:hover {
+        border-color: var(--border-hover);
     }
 
     .assign-row {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding-left: 0.5rem;
+        flex-wrap: wrap;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border-subtle);
     }
 
     select {
@@ -334,6 +347,7 @@
         color: var(--text-primary);
         padding: 0.4rem 0.5rem;
         font-size: 0.85rem;
+        min-width: 0;
     }
 
     select:focus {
