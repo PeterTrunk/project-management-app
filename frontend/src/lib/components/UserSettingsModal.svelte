@@ -391,6 +391,7 @@
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--border);
+        overflow: hidden;
     }
 
     @media (max-width: 480px) {
@@ -400,6 +401,7 @@
             border-right: none;
             border-bottom: 1px solid var(--border);
             padding: var(--card-padding);
+            max-height: 40vh;
         }
     }
 
@@ -407,6 +409,9 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        overflow-y: auto;
+        min-height: 0;
+        padding: 0.3rem;
     }
 
     .sidebar-options h2 {
@@ -457,6 +462,7 @@
         flex: 1;
         display: flex;
         flex-direction: column;
+        min-height: 0;
     }
 
     .content {
@@ -466,6 +472,7 @@
         gap: 1rem;
         overflow-y: auto;
         padding: 2rem;
+        min-height: 0;
     }
 
     @media (max-width: 480px) {
@@ -511,7 +518,7 @@
 
     .qrImg {
         width: 100%; 
-        max-width: 500px; 
+        max-width: 480px;
         height: auto;
         margin: auto;
     }
