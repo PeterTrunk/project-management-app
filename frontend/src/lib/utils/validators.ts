@@ -1,4 +1,4 @@
-import { required, maxLength, minLength, emailFormat, passwordStrength, dateOrder } from './validationHelpers';
+import { dateNotPast, required, maxLength, minLength, emailFormat, passwordStrength, dateOrder } from './validationHelpers';
 
 export function validateLogin(email: string, password: string): string | null {
     const errors: string[] = [];
@@ -165,8 +165,7 @@ export function validateTaskDescription(desc: string): string | null {
 
 export function validateTaskDueDate(date: Date): string | null {
     if (!date) return null;
-    if (new Date(date) < new Date()) return 'Határidő nem lehet múltbeli!';
-    return null;
+    return dateNotPast(date.toString(), 'Határidő');
 }
 
 export function validateSprintName(name: string): string | null {
@@ -221,13 +220,19 @@ export function validateUpdateBoard(name?: string | null, description?: string |
     return errors.length > 0 ? errors.join('\n') : null;
 }
 
-export function validateCreateColumn(name: string, mapsToStatus: string): string | null {
+export function validateCreateColumn(name: string, mapsToStatus: string, position: number): string | null {
     const errors: string[] = [];
     const nameError = validateColumnName(name);
     if (nameError) errors.push(nameError);
     const statusError = validateColumnStatus(mapsToStatus);
     if (statusError) errors.push(statusError);
+    if (position <= 0) errors.push('A 0-ás pozíció a Backlog oszlopnak van fenntartva!');
     return errors.length > 0 ? errors.join('\n') : null;
+}
+
+export function validateColumnOrder(position: number): string | null {
+    if (position <= 0) return 'A 0-ás pozíció a Backlog oszlopnak van fenntartva!';
+    return null;
 }
 
 export function validateUpdateColumn(name?: string | null, mapsToStatus?: string | null): string | null {
@@ -259,13 +264,17 @@ export function validateCreateIntegration(provider: string, repoFullName: string
     
     const providerReq = required(provider, 'Provider');
     if (providerReq) errors.push(providerReq);
-    else if (!['GitHub', 'GitLab'].includes(provider)) 
+    else if (!['GitHub', 'GitLab'].includes(provider))
         errors.push('Érvénytelen provider! Lehetséges értékek: GitHub, GitLab');
     
     const repoReq = required(repoFullName, 'Repository');
     if (repoReq) errors.push(repoReq);
-    else if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoFullName))
-        errors.push('Érvénytelen repository formátum! (owner/repo)');
+    else {
+        const repoMax = maxLength(repoFullName, 200, 'Repository');
+        if (repoMax) errors.push(repoMax);
+        if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoFullName))
+            errors.push('Érvénytelen repository formátum! (owner/repo)');
+    }
     
     const secretReq = required(webhookSecret, 'Webhook secret');
     if (secretReq) errors.push(secretReq);
@@ -457,5 +466,25 @@ export function validateInviteLink(maxUses?: number | null, expiresInDays?: numb
         if (expiresInDays < 1) errors.push('A lejárati idő legalább 1 nap kell legyen!');
         if (expiresInDays > 30) errors.push('A lejárati idő maximum 30 nap lehet!');
     }
+    return errors.length > 0 ? errors.join('\n') : null;
+}
+
+export function validateTotpToken(token: string): string | null {
+    const errors: string[] = [];
+    const req = required(token, 'TOTP kód');
+    if (req) errors.push(req);
+    else {
+        if (token.length !== 6) errors.push('A TOTP kódnak pontosan 6 karakter hosszúnak kell lennie!');
+        if (!/^[0-9]+$/.test(token)) errors.push('A TOTP kód csak számokat tartalmazhat!');
+    }
+    return errors.length > 0 ? errors.join('\n') : null;
+}
+
+export function validateChangePassword(currentPassword: string, newPassword: string): string | null {
+    const errors: string[] = [];
+    const currentReq = required(currentPassword, 'Jelenlegi jelszó');
+    if (currentReq) errors.push(currentReq);
+    const newError = validatePassword(newPassword);
+    if (newError) errors.push(newError);
     return errors.length > 0 ? errors.join('\n') : null;
 }

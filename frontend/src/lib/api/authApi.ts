@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { validateLogin, validateRegister, validatePassword, validateDisplayName, validateEmail } from '../utils/validators';
+import { validateTotpToken, validateChangePassword, validateLogin, validateRegister, validatePassword, validateDisplayName, validateEmail } from '../utils/validators';
 
 interface LoginRequest {
     email: string;
@@ -79,7 +79,7 @@ export async function meAsync(): Promise<AuthResponse> {
 }
 
 export async function changePasswordAsync(data: ChangePasswordRequest): Promise<void> {
-    const error = validatePassword(data.newPassword);
+    const error = validateChangePassword(data.currentPassword, data.newPassword);
     if (error) throw new Error(error);
 
     await apiClient.post('/auth/changepassword', data);
@@ -100,6 +100,9 @@ export async function setupTotpAsync(): Promise<TotpSetupResponse> {
 }
 
 export async function verifyTotpAsync(token: string): Promise<void> {
+    const error = validateTotpToken(token);
+    if (error) throw new Error(error);
+    
     await apiClient.post('/auth/totp/verify', { token });
 }
 
@@ -108,6 +111,13 @@ export async function disableTotpAsync(): Promise<void> {
 }
 
 export async function loginWithTotpAsync(data: LoginWithTotpRequest): Promise<AuthResponse> {
+    const errors: string[] = [];
+    const loginError = validateLogin(data.email, data.password);
+    if (loginError) errors.push(loginError);
+    const totpError = validateTotpToken(data.totpToken);
+    if (totpError) errors.push(totpError);
+    if (errors.length > 0) throw new Error(errors.join('\n'));
+    
     const response = await apiClient.post('/auth/totp/login', data);
     return response.data;
 }
