@@ -3,7 +3,7 @@
     import * as echarts from 'echarts';
     import type { VelocityDataPoint } from '../api/statisticsApi';
 
-    import { getChartColors } from '../cssVars';
+    import { getChartColors } from '../utils/cssVars';
     import { themeStore } from '../stores/themeStore';
 
     export let data: VelocityDataPoint[] = [];

@@ -3,7 +3,7 @@
     import * as echarts from 'echarts';
     import type { BurndownDataPoint } from '../api/statisticsApi';
 
-    import { getChartColors } from '../cssVars';
+    import { getChartColors } from '../utils/cssVars';
     import { themeStore } from '../stores/themeStore';  
 
     $: if (chart && data && $themeStore) {
