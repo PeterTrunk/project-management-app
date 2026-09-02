@@ -134,11 +134,11 @@
         try {
             await resendVerificationAsync($authStore.user?.email ?? '');
             resendSent = true;
-        } catch (e) {
-            console.error('Hiba az email újraküldésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba az email újraküldésekor!');
         }
     }
-
+    
     onDestroy(async () => {
         unregisterSignalREvents();
         await signalRService.disconnect();
@@ -194,7 +194,8 @@
             currentProjectId = state.activeProject.id;
             activeView = 'overview';
             
-            signalRService.joinProject(state.activeProject.id).catch(console.error);
+            signalRService.joinProject(state.activeProject.id)
+                .catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekthez csatlakozáskor!'));
 
             // Párhuzamos initial load
             Promise.all([
@@ -216,7 +217,7 @@
                     .then(members => setMembers(members)),
                 getIntegrationsAsync(state.activeProject.id)
                     .then(integrations => setIntegrations(integrations))
-            ]).catch(console.error);
+            ]).catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!'));
         }
     });
 
@@ -225,8 +226,8 @@
         try {
             const data = await getProjectsAsync();
             setProjects(data);
-        } catch (e) {
-            console.error('Hiba a projektek lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a projektek lekérésekor!');
         }
     }
 

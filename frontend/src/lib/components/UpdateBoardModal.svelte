@@ -2,13 +2,14 @@
     import { onMount } from 'svelte';
     import { boardStore, setActiveBoard, setBoards } from '../stores/boardStore';
     import { updateBoardAsync, getBoardsAsync } from '../api/boardApi';
-    import { validateBoardName, validateBoardDescription } from '../validators';
     import type { BoardResponse } from '../api/boardApi';
 
     import { deleteBoardAsync } from '../api/boardApi';
     import ConfirmModal from './ConfirmModal.svelte';
 
     import { X, Trash2 } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let isUpdateBoardOpen = false;
     export let projectId: string;
@@ -51,19 +52,6 @@
     async function handleUpdateBoard() {
         error = '';
         success = '';
-        let errorOccured = false;
-        const nameError = validateBoardName(name);
-        const descError = validateBoardDescription(description);
-        if (nameError) {
-            error = error + nameError;
-            errorOccured = true;
-        }
-        if (descError) {
-            error = error + descError;
-            errorOccured = true;
-        }
-        if (errorOccured) return;
-
         try {
             const response = await updateBoardAsync(projectId, activeBoard!.id, { 
                 name, 
@@ -72,11 +60,14 @@
                 rowVersion: activeBoard!.rowVersion ?? ''
             });
             success = 'Board módosítva!';
+            notify.success('Board módosítva!');
             setActiveBoard(response);
             const boards = await getBoardsAsync(projectId);
             setBoards(boards);
-        } catch (e) {
-            error = 'Hiba történt a board módosítása során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a board módosítása során!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -90,13 +81,17 @@
             } else {
                 setActiveBoard(null);
             }
+            notify.success('Board törölve!');
             closeModal();
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a board törlése során!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a board törlése során!';
+            error = message;
+            notify.error(message);
         }
     }
 
 </script>
+
 <div class="modal-overlay" on:click|self={closeModal}
     bind:this={modalRef}
     on:keydown={(e) => e.key === 'Escape' && closeModal()}

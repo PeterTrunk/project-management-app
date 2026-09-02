@@ -10,6 +10,8 @@
 
     import { UserPlus, ChartNoAxesColumn, ChevronRight, ChevronDown, RefreshCw } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let projectId: string;
 
     let members: MemberResponse[] = [];
@@ -44,7 +46,7 @@
             lastRefreshTrigger = state.refreshTrigger;
         }
     });
-
+    
     // Rendezés: Owner első, utána Admin, Member, Viewer ABC sorrendben
     $: sortedMembers = [...members].sort((a, b) => {
         const roleOrder = { Owner: 0, Admin: 1, Member: 2, Viewer: 3 };
@@ -61,8 +63,8 @@
             try {
                 invites = await getInvitationsAsync(projectId);
                 invitesLoaded = true;
-            } catch (e) {
-                console.error('Hiba a meghívók lekérésekor!');
+            } catch (e: any) {
+                notify.error(e.response?.data ?? e.message ?? 'Hiba a meghívók lekérésekor!');
             } finally {
                 invitesLoading = false;
             }
@@ -73,8 +75,11 @@
         try {
             await deleteInvitationAsync(projectId, token);
             invites = invites.filter(i => i.token !== token);
-        } catch (e) {
-            console.error('Hiba a meghívó törlésekor!');
+            notify.success('Meghívó törölve!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba a meghívó törlésekor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -82,8 +87,8 @@
         invitesLoading = true;
         try {
             invites = await getInvitationsAsync(projectId);
-        } catch (e) {
-            console.error('Hiba a meghívók frissítésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a meghívók frissítésekor!');
         } finally {
             invitesLoading = false;
         }

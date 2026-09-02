@@ -5,6 +5,8 @@
 
     import { UserMinus } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let member: MemberResponse;
     export let projectId: string;
     export let currentUserRole: string;
@@ -39,8 +41,11 @@
                 try {
                     await updateMemberRoleAsync(projectId, member.userId, { projectRole: newRole });
                     await onRefresh();
+                    notify.success('Szerepkör módosítva!');
                 } catch (e: any) {
-                    error = e.response?.data ?? 'Hiba történt!';
+                    const message = e.response?.data ?? e.message ?? 'Hiba történt!';
+                    error = message;
+                    notify.error(message);
                 }
             }
         );
@@ -54,8 +59,11 @@
                 try {
                     await removeMemberAsync(projectId, member.userId);
                     await onRefresh();
+                    notify.success('Tag eltávolítva!');
                 } catch (e: any) {
-                    error = e.response?.data ?? 'Hiba történt!';
+                    const message = e.response?.data ?? e.message ?? 'Hiba történt!';
+                    error = message;
+                    notify.error(message);
                 }
             }
         );

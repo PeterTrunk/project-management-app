@@ -5,6 +5,8 @@
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let projectId: string;
 
     let taskAttachments: { task: TaskResponse, attachments: AttachmentResponse[] }[] = [];
@@ -12,17 +14,14 @@
     let attachments: AttachmentResponse[] = [];
     let loading = true;
     let isUploading = false;
-    let uploadError = '';
-    let error = '';
     let uploadProgress = 0;
-
+    
     onMount(async () => {
         await loadAttachments();
     });
 
     async function loadAttachments() {
         loading = true;
-        error = '';
         try {
             // Projekt szintű attachmentek
             attachments = await getProjectAttachmentsAsync(projectId);
@@ -35,7 +34,7 @@
                 attachments: t.attachments
             }));
         } catch (e: any) {
-            error = 'Hiba történt a fájlok lekérésekor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a fájlok lekérésekor!');
         } finally {
             loading = false;
         }
@@ -47,7 +46,6 @@
 
         const files = Array.from(input.files);
         isUploading = true;
-        uploadError = '';
 
         for (const file of files) {
             try {
@@ -68,9 +66,10 @@
                 // 3. Confirm
                 const uploaded = await confirmProjectUploadAsync(projectId, { storageKey });
                 attachments = [uploaded, ...attachments];
+                notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
-                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+                notify.error(e.response?.data ?? e.message ?? 'Hiba történt a feltöltéskor!');
             }
         }
 
@@ -98,10 +97,6 @@
             <div class="progress-bar">
                 <div class="progress-fill" style="width: {uploadProgress}%"></div>
             </div>
-        {/if}
-        
-        {#if uploadError}
-            <p class="msg error">{uploadError}</p>
         {/if}
     </div>
     <div class="resources-content">
@@ -171,17 +166,6 @@
         align-items: center;
         justify-content: space-between;
         gap: 0.75rem;
-    }
-
-    .msg {
-        font-size: 0.9rem;
-        padding: 0.5rem 0;
-    }
-
-    .msg.error {
-        color: var(--accent-red);
-        white-space: pre-line;
-        width: 100%;
     }
 
     .progress-bar {

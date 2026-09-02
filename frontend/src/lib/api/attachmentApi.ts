@@ -1,6 +1,6 @@
 import apiClient from './client';
 import axios from 'axios';
-import { validateFileUpload } from '../utils/validators';
+import { validateFileUpload } from '../utils/validators.ts';
 
 export interface AttachmentResponse {
     id: string;

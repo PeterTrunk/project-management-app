@@ -1,11 +1,12 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { boardStore, setActiveBoard } from '../stores/boardStore';
+    import { boardStore } from '../stores/boardStore';
     import { createColumnAsync, reorderColumnsAsync } from '../../lib/api/columnApi';
-    import { validateColumnStatus, validateColumnName } from '../validators';
     import type { ColumnResponse } from '../../lib/api/columnApi';
 
     import { X } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let isColumnCreationOpen = false;
     export let projectId: string;
@@ -35,20 +36,6 @@
     async function handleCreateColumn() {
         error = '';
         success = '';
-        let errorOccured = false;
-        const columnNameError = validateColumnName(name);
-        const columnStatusError = validateColumnStatus(mapsToStatus);
-        if(columnNameError != null){
-            error = error + columnNameError;
-            errorOccured = true;
-        }
-        if(columnStatusError != null){
-            error = error + columnStatusError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             const newColumn = await createColumnAsync(projectId, boardId, {
                 boardId,
@@ -61,7 +48,8 @@
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             success = 'Oszlop létrehozva!\n';
-
+            notify.success('Oszlop létrehozva!');
+            
             // Új sorrend összerakása
             let ordered = [...columns];
             const insertAfterIndex = afterColumnId 
@@ -80,13 +68,17 @@
             try {
                 await reorderColumnsAsync(projectId, boardId, order);
                 success = success + 'Rendezés sikeres!';
-            } catch (e) {
-                error = error + 'Rendezés sikeretelen!';
+                notify.success('Rendezés sikeres!');
+            } catch (e: any) {
+                const message = e.response?.data ?? e.message ?? 'Rendezés sikeretelen!';
+                error = error + message;
+                notify.error(message);
             }
             
         } catch (e: any) {
-            error = 'Hiba történt az oszlop létrehozásakor!';
-            console.error('Backend hiba:', e.response?.data);
+            const message = e.response?.data ?? e.message ?? 'Hiba történt az oszlop létrehozásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 

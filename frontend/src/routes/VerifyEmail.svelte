@@ -21,7 +21,7 @@
             setTimeout(() => push('/'), 3000);
         } catch (e: any) {
             status = 'error';
-            error = e.response?.data ?? 'Érvénytelen vagy lejárt token!';
+            error = e.response?.data ?? e.message ?? 'Érvénytelen vagy lejárt token!';
         }
     });
 </script>

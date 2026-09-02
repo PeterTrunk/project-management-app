@@ -488,3 +488,18 @@ export function validateChangePassword(currentPassword: string, newPassword: str
     if (newError) errors.push(newError);
     return errors.length > 0 ? errors.join('\n') : null;
 }
+
+export function validateFileUpload(fileName: string, sizeBytes: number, contentType: string): string | null {
+    const errors: string[] = [];
+    
+    const nameMax = maxLength(fileName, 255, 'Fájlnév');
+    if (nameMax) errors.push(nameMax);
+    
+    if (sizeBytes <= 0) errors.push('A fájl mérete nem lehet nulla!');
+    if (sizeBytes > 64 * 1024 * 1024) errors.push('A fájl mérete maximum 64MB lehet!');
+    
+    const typeReq = required(contentType, 'Fájl típus');
+    if (typeReq) errors.push(typeReq);
+    
+    return errors.length > 0 ? errors.join('\n') : null;
+}

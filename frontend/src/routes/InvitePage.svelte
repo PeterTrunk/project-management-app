@@ -4,7 +4,7 @@
     import { joinProjectAsync } from '../lib/api/teamApi';
     import { authStore } from '../lib/stores/authStore';
     import { getProjectsAsync } from '../lib/api/projectApi';
-    import { setProjects, setActiveProject } from '../lib/stores/projectStore';
+    import { setProjects } from '../lib/stores/projectStore';
 
     import { CircleCheckBig, CircleX, Loader } from 'lucide-svelte';
 
@@ -45,7 +45,7 @@
             // 2 másodperc után redirect az appba
             setTimeout(() => push('/app'), 2000);
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a csatlakozáskor!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt a csatlakozáskor!';
         } finally {
             loading = false;
         }

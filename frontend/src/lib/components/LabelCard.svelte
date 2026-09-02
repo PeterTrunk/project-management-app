@@ -3,6 +3,8 @@
 
     import { Trash2 } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let label: LabelResponse;
     export let onDelete: (labelId: string) => void = () => {};
     export let showDelete: boolean = true;

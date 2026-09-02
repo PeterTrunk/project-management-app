@@ -15,14 +15,6 @@
     let chartContainer: HTMLDivElement;
     let chart: echarts.ECharts | null = null;
 
-    const statusColors: Record<string, string> = {
-        'Backlog': '#555555',
-        'ToDo': '#4a9eff',
-        'InProgress': '#f0a500',
-        'Done': '#4caf50',
-        'default': '#b39ddb'
-    };
-
     onMount(() => {
         chart = echarts.init(chartContainer, 'dark');
         renderChart();

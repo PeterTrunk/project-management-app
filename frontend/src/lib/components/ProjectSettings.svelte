@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { ProjectResponse } from '../api/projectApi';
-    import { validateDescription, validateProjName } from '../validators';
     import { projectStore, setLabels } from '../../lib/stores/projectStore';
     import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject } from '../../lib/api/projectApi'
     import ConfirmModal from '../components/ConfirmModal.svelte';
@@ -14,6 +13,8 @@
 
     import { Settings2, Tag, GitBranch, Plus } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     let activeTab: 'general' | 'labels' | 'git' = 'general';
 
     export let project: ProjectResponse;
@@ -25,7 +26,7 @@
     integrationStore.subscribe(state => {
         integrations = state.integrations;
     });
-
+    
     projectStore.subscribe(state => {
         labels = state.labels;
     });
@@ -42,8 +43,11 @@
     async function handleDeleteLabel(labelId: string) {
         try {
             await deleteLabelAsync(project.id, labelId);
-        } catch (e) {
-            error = 'Hiba történt a label törlésekor!';
+            notify.success('Label törölve!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a label törlésekor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -52,14 +56,14 @@
     let confirmTitle = '';
     let confirmMessage = '';
     let confirmAction: () => Promise<void> = async () => {};
-
+    
     function openConfirm(title: string, message: string, action: () => Promise<void>) {
         confirmTitle = title;
         confirmMessage = message;
         confirmAction = action;
         isConfirmOpen = true;
     }
-
+    
     let success = '';
     let error = '';
 
@@ -68,61 +72,40 @@
     let isArchived = project.isArchived;
 
     async function handleUpdate() {
-        error ='';
-        success = '';
-        let errorOccured: boolean = false;
-        const descError = validateDescription(description);
-        const nameError = validateProjName(name);
-        if(descError!=null){
-            error = error + descError;
-            errorOccured = true;
-        }
-        if(nameError!=null){
-            error = error + nameError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             const response = await updateProjectAsync({ name, description, isArchived }, project.id);
-            success = 'Módosítások mentve';
+            notify.success('Projekt módosítva!');
             return;
-        } catch (e) {
-            error = 'Hiba történt a módosítás során!';
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!');
         }
     }
 
     async function handleArchive() {
-        success = '';
-        error = '';
         try {
             const response = await archiveProjectAsync(project.id);
-            success = 'Projekt arhiválva!';
+            notify.success('Projekt archiválva!');
             return;
-        } catch (e) {
-            error = 'Hiba történt az arhiválás során!'
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az archiválás során!');
         }
     }
 
     async function handleUnarchive() {
-        success = '';
-        error = '';
         try {
             const response = await unarchiveProjectAsync(project.id);
-            success = 'Projekt aktiválva!';
+            notify.success('Projekt aktiválva!');
             return;
-        } catch (e) {
-            error = 'Hiba történt az aktiválás során!'
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az aktiválás során!');
         }
     }
 
     async function handleDelete() {
-        error = '';
         try {
             await deleteProject(project.id);
-        } catch (e) {
-            error = 'Hiba történt a törlés során!';
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a törlés során!');
         }
     }
 </script>

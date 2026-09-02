@@ -1,9 +1,10 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { updateColumnAsync, deleteColumnAsync } from '../api/columnApi';
-    import { validateColumnName, validateColumnStatus } from '../validators';
     import type { ColumnResponse } from '../api/columnApi';
     import ConfirmModal from './ConfirmModal.svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     import { X, Pencil, Trash2 } from 'lucide-svelte';
 
@@ -47,15 +48,6 @@
     }
 
     async function handleUpdate() {
-        error = '';
-        success = '';
-        let errorOccured = false;
-        const nameError = validateColumnName(editName);
-        const statusError = validateColumnStatus(editMapsToStatus);
-        if (nameError) { error += nameError; errorOccured = true; }
-        if (statusError) { error += statusError; errorOccured = true; }
-        if (errorOccured) return;
-
         try {
             await updateColumnAsync(projectId, boardId, column.id, {
                 name: editName,
@@ -64,18 +56,24 @@
                 rowVersion: column.rowVersion ?? ''
             });
             success = 'Oszlop módosítva!';
+            notify.success('Oszlop módosítva!');
             isEditing = false;
-        } catch (e) {
-            error = 'Hiba történt a módosítás során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
+            error = message;
+            notify.error(message);
         }
     }
 
     async function handleDelete() {
         try {
             await deleteColumnAsync(projectId, boardId, column.id);
+            notify.success('Oszlop törölve!');
             closeModal();
-        } catch (e) {
-            error = 'Hiba történt a törlés során! (Lehet hogy taskok vannak az oszlopban)';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a törlés során! (Lehet hogy taskok vannak az oszlopban)';
+            error = message;
+            notify.error(message);
         }
     }
 </script>

@@ -4,6 +4,8 @@
 
     import { X } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let isOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
@@ -24,21 +26,16 @@
     async function handleCreateLabel() {
         error = '';
         success = '';
-        if (name.trim() === '') {
-            error = 'Név szükséges!';
-            return;
-        }
-        if(name.length> 40){
-            error = 'Név nem lehet 40 karakternél hosszabb!'
-            return;
-        }
         try {
             await createLabelAsync(projectId, { name, color });
             success = 'Label létrehozva!';
+            notify.success('Label hozzáadva!');
             name = '';
             color = '#3a86ff';
-        } catch (e) {
-            error = 'Hiba történt a label létrehozásakor!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a label létrehozásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 </script>

@@ -62,7 +62,7 @@
             hasMore = data.length === PAGE_SIZE;
             page = 1;
         } catch (e: any) {
-            error = 'Hiba történt az aktivitások lekérésekor!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt az aktivitások lekérésekor!';
         } finally {
             loading = false;
         }
@@ -85,7 +85,7 @@
             hasMore = data.length === PAGE_SIZE;
             page = nextPage;
         } catch (e: any) {
-            error = 'Hiba történt a betöltéskor!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt a betöltéskor!';
         } finally {
             loadingMore = false;
         }

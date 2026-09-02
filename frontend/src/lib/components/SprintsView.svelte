@@ -14,21 +14,23 @@
     import CompleteSprintModal from './CompleteSprintModal.svelte';
     import ConfirmModal from './ConfirmModal.svelte';
     import { getTasksAsync } from '../api/taskApi';
-
+    
     import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+    
     export let projectId: string;
-
+    
     let isCreateSprintOpen = false;
     let isUpdateSprintOpen = false;
     let isCompleteSprintOpen = false;
     let isConfirmOpen = false;
-
+    
     let confirmTitle = '';
     let confirmMessage = '';
     let confirmText = '';
     let confirmAction: () => Promise<void> = async () => {};
-
+    
     let sprints: SprintResponse[] = [];
     let activeSprint: SprintResponse | null = null;
     let allTasks: TaskResponse[] = [];
@@ -59,11 +61,21 @@
                 \nEzek a taskok nem fognak megjelenni egyik boardon se ameddig nincsenek valamely boardhoz hozzárendelve.`,
                 'Aktiválás',
                 async () => {
-                    await activateSprintAsync(projectId, sprintId);
+                    try {
+                        await activateSprintAsync(projectId, sprintId);
+                        notify.success('Sprint aktiválva!');
+                    } catch (e: any) {
+                        notify.error(e.response?.data ?? e.message ?? 'Hiba történt a sprint aktiválásakor!');
+                    }
                 }
             );
         } else {
-            await activateSprintAsync(projectId, sprintId);
+            try {
+                await activateSprintAsync(projectId, sprintId);
+                notify.success('Sprint aktiválva!');
+            } catch (e: any) {
+                notify.error(e.response?.data ?? e.message ?? 'Hiba történt a sprint aktiválásakor!');
+            }
         }
     }
 
@@ -73,7 +85,12 @@
         'Biztosan visszatervezed a sprintet? Az összes task visszakerül a Board Backlog oszlopba!',
         'Megerősítés',
         async () => {
-            await planSprintAsync(projectId, sprintId);
+            try {
+                await planSprintAsync(projectId, sprintId);
+                notify.success('Sprint visszatervezve!');
+            } catch (e: any) {
+                notify.error(e.response?.data ?? e.message ?? 'Hiba történt a sprint visszatervezésekor!');
+            }
         });
     }
 
@@ -83,27 +100,42 @@
             'Biztosan törölni szeretnéd a sprintet?',
             'Törlés',
             async () => {
-                await deleteSprintAsync(projectId, sprintId);
+                try {
+                    await deleteSprintAsync(projectId, sprintId);
+                    notify.success('Sprint törölve!');
+                } catch (e: any) {
+                    notify.error(e.response?.data ?? e.message ?? 'Hiba történt a sprint törlésekor!');
+                }
             }
         );
     }
 
     async function handleAssignToSprint(taskId: string, sprintId: string) {
-        if (sprintId === '') {
-            // Backlogba visszarakás
-            const task = allTasks.find(t => t.id === taskId);
-            if (task?.sprintId) {
-                await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, task.rowVersion ?? 0);
+        try {
+            if (sprintId === '') {
+                // Backlogba visszarakás
+                const task = allTasks.find(t => t.id === taskId);
+                if (task?.sprintId) {
+                    await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, task.rowVersion ?? 0);
+                }
+            } else {
+                const task = allTasks.find(t => t.id === taskId);
+                await assignTaskToSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
             }
-        } else {
-            const task = allTasks.find(t => t.id === taskId);
-            await assignTaskToSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
+            notify.success('Task módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a task sprinthez rendelésekor!');
         }
     }
 
     async function handleRemoveFromSprint(taskId: string, sprintId: string) {
-        const task = allTasks.find(t => t.id === taskId);
-        await removeTaskFromSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
+        try {
+            const task = allTasks.find(t => t.id === taskId);
+            await removeTaskFromSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
+            notify.success('Task módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a task sprintből eltávolításakor!');
+        }
     }
 
     function openEditSprint(sprint: SprintResponse) {
@@ -117,7 +149,7 @@
             unfinishedTasks = await getUnfinishedTasksAsync(projectId, sprint.id);
             isCompleteSprintOpen = true;
         } catch (e: any) {
-            console.error('Backend hiba:', e.response?.data);
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a befejezetlen taskok lekérésekor!');
         }
     }
 
@@ -127,7 +159,12 @@
             'Biztosan törölni szeretnéd a taskot? Ez a művelet nem visszavonható!',
             'Törlés',
             async () => {
-                await deleteTaskAsync(projectId, taskId);
+                try {
+                    await deleteTaskAsync(projectId, taskId);
+                    notify.success('Task törölve!');
+                } catch (e: any) {
+                    notify.error(e.response?.data ?? e.message ?? 'Hiba történt a task törlésekor!');
+                }
             }
         );
     }
@@ -135,31 +172,39 @@
     async function toggleCompleted() {
         completedCollapsed = !completedCollapsed;
         if (!completedCollapsed && !completedSprintsLoaded) {
-            const completedSprints = await getSprintsAsync(projectId, 'completed');
-            // Merge a meglévő sprintekkel (ne írja felül az active/planning-et)
-            sprintStore.update(state => ({
-                ...state,
-                sprints: [
-                    ...state.sprints.filter(s => s.state !== 'Completed'),
-                    ...completedSprints
-                ]
-            }));
-            completedSprintsLoaded = true;
+            try {
+                const completedSprints = await getSprintsAsync(projectId, 'completed');
+                // Merge a meglévő sprintekkel (ne írja felül az active/planning-et)
+                sprintStore.update(state => ({
+                    ...state,
+                    sprints: [
+                        ...state.sprints.filter(s => s.state !== 'Completed'),
+                        ...completedSprints
+                    ]
+                }));
+                completedSprintsLoaded = true;
+            } catch (e: any) {
+                notify.error(e.response?.data ?? e.message ?? 'Hiba történt a lezárt sprintek lekérésekor!');
+            }
         }
     }
 
     let completedSprintTasksLoaded = new Set<string>();
-
+    
     async function handleLoadCompletedSprintTasks(sprintId: string) {
-        const tasks = await getTasksAsync(projectId, undefined, sprintId);
-        taskStore.update(state => ({
-            ...state,
-            tasks: [
-                ...state.tasks.filter(t => t.sprintId !== sprintId),
-                ...tasks
-            ]
-        }));
-        completedSprintTasksLoaded = new Set([...completedSprintTasksLoaded, sprintId]);
+        try {
+            const tasks = await getTasksAsync(projectId, undefined, sprintId);
+            taskStore.update(state => ({
+                ...state,
+                tasks: [
+                    ...state.tasks.filter(t => t.sprintId !== sprintId),
+                    ...tasks
+                ]
+            }));
+            completedSprintTasksLoaded = new Set([...completedSprintTasksLoaded, sprintId]);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a sprint taskjainak lekérésekor!');
+        }
     }
     
     function openConfirm(title: string, message: string, text: string, action: () => Promise<void>) {

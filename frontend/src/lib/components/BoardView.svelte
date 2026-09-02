@@ -17,6 +17,8 @@
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
 
+    import { notify } from '../stores/notificationStore';
+
     import ColumnCard from './ColumnCard.svelte';
 
     import CreateColumnModal from './CreateColumnModal.svelte';
@@ -202,7 +204,12 @@
             //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
             //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
-        await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
+        try {
+            await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
+            notify.success('Oszlopok sorrendje módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba az oszlopok átrendezésekor!');
+        }
     }
 
     function handleTaskConsider(e: CustomEvent, columnId: string) {
@@ -250,7 +257,7 @@
             distributeTasks(updatedTasks);
 
         } catch (err: any) {
-            console.error('Backend hiba:', err.response?.data);
+            notify.error(err.response?.data ?? err.message ?? 'Hiba a task mozgatásakor!');
             isDragging = false;
             // Nem kell API újrahívás, a store már naprakész.
             distributeTasks(tasks);

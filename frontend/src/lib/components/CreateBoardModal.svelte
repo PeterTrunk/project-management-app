@@ -2,10 +2,11 @@
     import { onMount } from 'svelte';
     import { boardStore } from '../stores/boardStore';
     import { createBoardAsync } from '../api/boardApi';
-    import { validateBoardDescription, validateBoardName, validateColumnName } from '../validators';
     import type { BoardResponse } from '../api/boardApi';
     import type { ProjectResponse } from '../api/projectApi';
 
+    import { notify } from '../stores/notificationStore';
+    
     import { X } from 'lucide-svelte';
 
     export let onClose: () => void = () => {};
@@ -37,30 +38,20 @@
 
     let error = '';
     let success = '';
+    
     async function handleCreateBoard() {
         error = '';
         success = '';
-        let errorOccured = false;
-        let boardNameError = validateBoardName(name);
-        let boardDescriptionError = validateBoardDescription(description);
-        if(boardNameError){
-            error = error + boardNameError;
-            errorOccured = true;
-        }
-        if(boardDescriptionError){
-            error = error + boardDescriptionError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             await createBoardAsync(projectId, { projectId, name, description, isDefault });
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             success = 'Board létrehozva!';
-        } catch (e) {
-            error = 'Hiba történt az task létrehozásakor!';
+            notify.success('Board létrehozva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a board létrehozásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 </script>

@@ -5,6 +5,8 @@
     import { setSprints } from '../stores/sprintStore';
     import { setTasks } from '../stores/taskStore';
 
+    import { notify } from '../stores/notificationStore';
+
     import { TriangleAlert, CircleCheck, X } from 'lucide-svelte';
 
     export let isCompleteSprintOpen = false;
@@ -43,10 +45,12 @@
             const _tasks = await getTasksAsync(projectId);
             setTasks(_tasks);
             
+            notify.success('Sprint lezárva!');
             closeModal();
         } catch (e: any) {
-            //console.error('Backend hiba részletek:', JSON.stringify(e.response?.data));
-            error = e.response?.data ?? 'Hiba történt a sprint lezárásakor!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a sprint lezárásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 </script>

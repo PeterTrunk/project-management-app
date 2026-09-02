@@ -2,14 +2,12 @@
     import { onMount } from 'svelte';
     import { resetPasswordAsync } from '../lib/api/authApi';
     import { push } from 'svelte-spa-router';
-    import { KeyRound, CheckCircle } from 'lucide-svelte';
-    import { validatePassword } from '../lib/validators';
+    import { KeyRound, CircleCheckBig } from 'lucide-svelte';
 
     let token = '';
     let newPassword = '';
     let newPasswordConfirm = '';
     let error = '';
-    let passwordError = '';
     let success = false;
 
     onMount(() => {
@@ -21,16 +19,8 @@
 
     async function handleResetPassword() {
         error = '';
-        passwordError = '';
-
-        const passwordErr = validatePassword(newPassword);
-        if (passwordErr) {
-            passwordError = passwordErr;
-            return;
-        }
-
         if (newPassword !== newPasswordConfirm) {
-            passwordError = 'A két jelszó nem egyezik!';
+            error = 'A két jelszó nem egyezik!';
             return;
         }
 
@@ -39,7 +29,7 @@
             success = true;
             setTimeout(() => push('/'), 3000);
         } catch (e: any) {
-            error = e.response?.data ?? 'Érvénytelen vagy lejárt token!';
+            error = e.response?.data ?? e.message ?? 'Érvénytelen vagy lejárt token!';
         }
     }
 </script>
@@ -47,7 +37,7 @@
 <div class="auth-container">
     <div class="auth-card">
         {#if success}
-            <CheckCircle size={32} color="var(--accent-green)" />
+            <CircleCheckBig size={32} color="var(--accent-green)" />
             <h1>Jelszó megváltoztatva!</h1>
             <p class="desc">Sikeresen megváltoztattad a jelszavad! Átirányítás a bejelentkezési oldalra...</p>
         {:else}
@@ -68,9 +58,6 @@
                         placeholder="Új jelszó megerősítése" 
                         bind:value={newPasswordConfirm}
                     />
-                    {#if passwordError}
-                        <p class="field-error">{passwordError}</p>
-                    {/if}
                 </div>
                 {#if error}
                     <p id="failed">{error}</p>
@@ -139,14 +126,6 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
-    }
-
-    .field-error {
-        color: var(--accent-red);
-        font-size: 0.8rem;
-        margin: 0;
-        text-align: left;
-        word-break: break-word;
     }
 
     input {

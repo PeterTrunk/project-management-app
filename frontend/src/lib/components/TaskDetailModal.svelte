@@ -4,7 +4,6 @@
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
-    import { validateTaskTitle, validateTaskDescription } from '../validators';
     import CommentSection from './CommentSection.svelte';
     import { getLabelsAsync, addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
     import { projectStore, setLabels } from '../stores/projectStore';
@@ -23,6 +22,8 @@
 
     import { X, Pencil, Trash2, Info, Paperclip, GitBranch, Plus, MessageSquare } from 'lucide-svelte';
     
+    import { notify } from '../stores/notificationStore';
+
     let activeDetailTab: 'details' | 'attachments' | 'git' | 'comments' = 'details';
 
     export let task: TaskResponse;
@@ -88,8 +89,12 @@
     onMount(async () => {
         modalRef?.focus();
         
-        const data = await getLabelsAsync(projectId);
-        setLabels(data);
+        try {
+            const data = await getLabelsAsync(projectId);
+            setLabels(data);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a labelek lekérésekor!');
+        }
     });
     
     let isConfirmOpen = false;
@@ -110,20 +115,6 @@
     async function handleEdit() {
         error = '';
         success = '';
-        let errorOccured: boolean = false;
-        const titleError = validateTaskTitle(editTitle)
-        const descError = validateTaskDescription(editDescription);
-        if(titleError){
-            error = error + titleError;
-            errorOccured = true;
-        }
-        if(descError){
-            error = error + descError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             const response = await updateTaskAsync(
                 projectId, 
@@ -137,19 +128,25 @@
                     rowVersion: task.rowVersion ?? 0
                 });
             success = "Módosítva";
+            notify.success('Task módosítva!');
             setActiveTask(response);
             isEditing = false;
-        } catch (e) {
-            error = 'Hiba történt a módosítás során!'
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
+            error = message;
+            notify.error(message);
         }
     }
     
     async function handleDelete() {
         try {
             await deleteTaskAsync(projectId, task.id);
+            notify.success('Task törölve!');
             closeModal();
-        } catch (e) {
-            error = 'Hiba történt a törlés során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a törlés során!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -162,8 +159,9 @@
             const updated = { ...task, labelIds: [...task.labelIds, labelId] };
             setActiveTask(updated);
             task = updated;
-        } catch (e) {
-            console.error('Hiba:', e);
+            notify.success('Label hozzáadva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag hozzáadásakor!');
         } finally {
             isUpdatingLabels = false;
         }
@@ -176,8 +174,9 @@
             const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
             setActiveTask(updated);
             task = updated;
-        } catch (e) {
-            console.error('Hiba:', e);
+            notify.success('Label eltávolítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag eltávolításakor!');
         } finally {
             isUpdatingLabels = false;
         }
@@ -187,8 +186,9 @@
         try {
             await addAssigneeAsync(projectId, task.id, userId);
             task = { ...task, assigneeIds: [...task.assigneeIds, userId] };
-        } catch (e) {
-            console.error('Hiba az assignee hozzáadásakor!');
+            notify.success('Task módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee hozzáadásakor!');
         }
     }
 
@@ -196,8 +196,9 @@
         try {
             await removeAssigneeAsync(projectId, task.id, userId);
             task = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
-        } catch (e) {
-            console.error('Hiba az assignee eltávolításakor!');
+            notify.success('Task módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee eltávolításakor!');
         }
     }
 
@@ -228,12 +229,15 @@
                 // 3. Confirm
                 const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
                 task = { ...task, attachments: [...task.attachments, uploaded] };
+                notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
-                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+                const message = e.response?.data ?? e.message ?? 'Hiba történt a feltöltéskor!';
+                uploadError = message;
+                notify.error(message);
             }
         }
-
+        
         isUploading = false;
         uploadProgress = 0;
         input.value = '';

@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     import type { TaskResponse } from '../api/taskApi';
     import type { SprintResponse } from '../api/sprintApi';
     import type { BoardResponse } from '../api/boardApi';
@@ -49,15 +51,15 @@
     }
     
     async function handleAssignToBoard() {
-        console.log('handleAssignToBoard called, selectedBoardId:', selectedBoardId);
         try {
             const response = await assignTaskToBoardAsync(projectId, task.id, {
                 boardId: selectedBoardId === '' ? null : selectedBoardId,
                 rowVersion: task.rowVersion ?? 0
             });
             await onBoardAssigned();
+            notify.success('Task módosítva!');
         } catch (e: any) {
-            console.error('Hiba:', e.response?.data);
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a task board hozzárendelésekor!');
         }
     }
 

@@ -2,7 +2,8 @@
     import { onMount, onDestroy } from 'svelte';
     import { signalRService } from '../services/signalRService';
     import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
-    import { validateCommentBody } from '../validators';
+
+    import { notify } from '../stores/notificationStore';
 
     import { Trash2 } from 'lucide-svelte';
 
@@ -12,6 +13,7 @@
 
     let comments: CommentResponse[] = [];
     let newComment = '';
+    let error ='';
 
     onMount(async () => {
         await loadComments();
@@ -41,35 +43,38 @@
     async function loadComments() {
         try {
             comments = await getCommentsAsync(projectId, taskId);
-        } catch (e) {
-            console.error('Hiba a kommentek lekérésekor!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba a kommentek lekérésekor!';
+            error = message;
+            notify.error(message);
         }
     }
 
-    let error ='';
+
     async function handleAddComment() {
         error = '';
-        if (newComment.trim() === '') return;
-        const bodyError = validateCommentBody(newComment);
-        if(bodyError){
-            error = bodyError;
-            return;
-        }
         try {
             const comment = await createCommentAsync(projectId, taskId, { body: newComment });
             comments = [...comments, comment];
             newComment = '';
-        } catch (e) {
-            console.error('Hiba a komment hozzáadásakor!');
+            notify.success('Komment hozzáadva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba a komment hozzáadásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 
     async function handleDeleteComment(commentId: string) {
+        error = '';
         try {
             await deleteCommentAsync(projectId, taskId, commentId);
             comments = comments.filter(c => c.id !== commentId);
-        } catch (e) {
-            console.error('Hiba a komment törlésekor!');
+            notify.success('Komment törölve!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba a komment törlésekor!';
+            error = message;
+            notify.error(message);
         }
     }
 

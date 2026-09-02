@@ -4,6 +4,8 @@
 
     import { Image, FileText, Sheet, FilePen, Paperclip, Download, Trash2, Check, X } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let attachment: AttachmentResponse;
     export let projectId: string;
     export let taskId: string | null = null;
@@ -31,8 +33,8 @@
     async function handleDownload() {
         try {
             await downloadAttachmentAsync(projectId, attachment.id, attachment.fileName);
-        } catch (e) {
-            console.error('Hiba a letöltéskor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a letöltéskor!');
         }
     }
 
@@ -41,8 +43,9 @@
         try {
             await deleteAttachmentAsync(projectId, attachment.id);
             onDelete(attachment.id);
-        } catch (e) {
-            console.error('Hiba a törléskor!');
+            notify.success('File törlése sikeres!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a törléskor!');
         } finally {
             deleting = false;
             showConfirm = false;

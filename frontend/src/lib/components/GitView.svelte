@@ -12,6 +12,8 @@
 
     import { GitBranch, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let projectId: string;
 
     let unmatchedCommits: CommitLinkResponse[] = [];
@@ -50,12 +52,11 @@
 
     async function loadAll() {
         loading = true;
-        error = '';
         try {
             unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
             unmatchedPrs = await getUnmatchedPrsAsync(projectId);
         } catch (e: any) {
-            error = 'Hiba történt a git adatok lekérésekor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
         } finally {
             loading = false;
         }
@@ -68,8 +69,9 @@
             unmatchedCommits = unmatchedCommits.filter(c => c.id !== commitId);
             selectedCommitId = null;
             selectedTaskId = '';
+            notify.success('Commit hozzárendelve!');
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a hozzárendeléskor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
         }
     }
 
@@ -80,8 +82,9 @@
             unmatchedPrs = unmatchedPrs.filter(p => p.id !== prId);
             selectedPrId = null;
             selectedTaskId = '';
+            notify.success('PR hozzárendelve!');
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a hozzárendeléskor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
         }
     }
     

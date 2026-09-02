@@ -23,6 +23,8 @@
     import type { BoardResponse } from '../api/boardApi';
     import { boardStore } from '../stores/boardStore';
 
+    import { notify } from '../stores/notificationStore';
+
     export let projectId: string;
 
     // Szűrők
@@ -77,8 +79,8 @@
                 projectId,
                 selectedSprintId || undefined
             );
-        } catch (e) {
-            console.error('Hiba a task státusz lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a task státusz adatok lekérésekor!');
         } finally {
             loadingStatus = false;
         }
@@ -89,8 +91,8 @@
         loadingBurndown = true;
         try {
             burndownData = await getBurndownAsync(projectId, selectedSprintId);
-        } catch (e) {
-            console.error('Hiba a burndown lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a burndown lekérésekor!');
         } finally {
             loadingBurndown = false;
         }
@@ -103,8 +105,8 @@
                 projectId,
                 selectedSprintId || undefined
             );
-        } catch (e) {
-            console.error('Hiba a workload lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a workload lekérésekor!');
         } finally {
             loadingWorkload = false;
         }
@@ -114,8 +116,8 @@
         loadingVelocity = true;
         try {
             velocityData = await getVelocityAsync(projectId);
-        } catch (e) {
-            console.error('Hiba a velocity lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a velocity lekérésekor!');
         } finally {
             loadingVelocity = false;
         }
@@ -129,8 +131,8 @@
                 projectId, dateFrom, dateTo, selectedBoardId
             );
             console.log('CFD data:', cumulativeFlowData);
-        } catch (e) {
-            console.error('Hiba a CFD lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a CFD lekérésekor!');
         } finally {
             loadingCFD = false;
         }
