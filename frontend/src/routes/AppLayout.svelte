@@ -22,6 +22,9 @@
     import { getSprintsAsync } from '../lib/api/sprintApi';
     import { setSprints } from '../lib/stores/sprintStore';
 
+    import NotificationContainer from '../lib/components/NotificationContainer.svelte';
+    import { notify } from '../lib/stores/notificationStore';
+
     import { tokenStore } from '../lib/stores/tokenStore';
     import { scheduleTokenRefresh, cancelTokenRefresh } from '../lib/services/tokenRefreshService';
 
@@ -282,6 +285,14 @@
                     <span>Új projekt</span>
                 {/if}
             </button>
+            <!-- Notif teszt gombok
+            <div style="display:flex; flex-direction:column; gap:0.25rem; margin-bottom:0.5rem;">
+                <button on:click={() => notify.success('Siker!')}>Success</button>
+                <button on:click={() => notify.error('Hiba!')}>Error</button>
+                <button on:click={() => notify.warning('Figyelem!')}>Warning</button>
+                <button on:click={() => notify.info('Info!')}>Info</button>
+            </div>
+            -->
         </div>
 
         <!-- User info -->
@@ -424,6 +435,9 @@
         </div>
     </div>
 </div>
+
+<NotificationContainer />
+
 <!--Modals-->
 {#if isProjectCreationOpen}
 <CreateProjectModal 
