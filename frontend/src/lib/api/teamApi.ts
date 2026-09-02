@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateMemberRole, validateInviteLink } from "../utils/validators";
 
 export interface MemberResponse {
     userId: string;
@@ -35,11 +36,17 @@ export async function removeMemberAsync(projectId: string, userId: string): Prom
 }
 
 export async function updateMemberRoleAsync(projectId: string, userId: string, data: UpdateMemberRoleRequest): Promise<MemberResponse> {
+    const error = validateMemberRole(data.projectRole);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.patch(`/projects/${projectId}/members/${userId}/role`, data);
     return response.data;
 }
 
 export async function generateInviteLinkAsync(projectId: string, data: GenerateInviteLinkRequest): Promise<InviteLinkResponse> {
+    const error = validateInviteLink(data.maxUses, data.expiresInDays);
+    if (error) throw new Error(error);
+
     const response = await apiClient.post(`/projects/${projectId}/members/invite`, data);
     return response.data;
 }

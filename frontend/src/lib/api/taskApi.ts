@@ -1,5 +1,6 @@
 import type { AttachmentResponse } from './attachmentApi';
 import apiClient from './client';
+import { validateCreateTask, validateUpdateTask } from "../utils/validators";
 
 interface CreateTaskRequest {
     title: string;
@@ -97,17 +98,23 @@ export async function getTasksAsync(projectId: string, boardId?: string, sprintI
 }
 
 export async function createTaskAsync(projectId: string, data: CreateTaskRequest): Promise<TaskResponse> {
+    const error = validateCreateTask(data.title, data.description, data.dueDate);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post('/projects/' + projectId + '/tasks', data);
     return response.data;
 }
 
 export async function updateTaskAsync(projectId: string, taskId: string, data: UpdateTaskRequest): Promise<TaskResponse> {
+    const error = validateUpdateTask(data.title, data.description, data.dueDate);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.patch('/projects/' + projectId + '/tasks/' + taskId, data);
     return response.data;
 }
 
 export async function deleteTaskAsync(projectId: string, taskId: string) {
-    const response = await apiClient.delete('/projects/' + projectId + '/tasks/' + taskId);
+    await apiClient.delete('/projects/' + projectId + '/tasks/' + taskId);
 }
 
 export async function moveTaskAsync(projectId: string, taskId: string, data: MoveTaskRequest): Promise<TaskResponse> {

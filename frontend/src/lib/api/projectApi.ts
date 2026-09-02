@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateCreateProject, validateUpdateProject } from "../utils/validators";
 
 interface CreateProjectRequest {
     name: string;
@@ -34,6 +35,9 @@ export async function getProjectByIdAsync(id: string): Promise<ProjectResponse> 
 }
 
 export async function createProjectAsync(data: CreateProjectRequest): Promise<ProjectResponse> {
+    const error = validateCreateProject(data.name, data.projKey, data.description);
+    if (error) throw new Error(error);
+
     const response = await apiClient.post('/project', data);
     return response.data;  
 }
@@ -43,6 +47,9 @@ export async function deleteProjectAsync(id: string): Promise<void> {
 }
 
 export async function updateProjectAsync(data:UpdateProjectRequest, id: string): Promise<ProjectResponse> {
+    const error = validateUpdateProject(data.name, data.description);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.put('/project/' + id, data);
     return response.data;
 }

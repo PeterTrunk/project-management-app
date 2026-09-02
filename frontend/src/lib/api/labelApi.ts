@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import { validateLabel } from "../utils/validators";
 
 interface CreateLabelRequest {
     name: string;
@@ -13,6 +14,9 @@ export interface LabelResponse {
 }
 
 export async function createLabelAsync(projectId:string, data:CreateLabelRequest): Promise<LabelResponse> {
+    const error = validateLabel(data.name, data.color);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post('/projects/' + projectId + '/labels', data);
     return response.data;
 }

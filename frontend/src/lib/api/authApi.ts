@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateLogin, validateRegister, validatePassword, validateDisplayName, validateEmail } from '../utils/validators';
 
 interface LoginRequest {
     email: string;
@@ -48,11 +49,17 @@ interface LoginWithTotpRequest {
 }
 
 export async function loginAsync(data: LoginRequest): Promise<AuthResponse> {
+    const error = validateLogin(data.email, data.password);
+    if (error) throw new Error(error);
+
     const response = await apiClient.post('/auth/login', data);
     return response.data;
 }
 
 export async function registerAsync(data: RegisterRequest): Promise<AuthResponse> {
+    const error = validateRegister(data.email, data.displayName, data.password);
+    if (error) throw new Error(error);
+
     const response = await apiClient.post('/auth/register', data);
     return response.data;
 }
@@ -72,10 +79,16 @@ export async function meAsync(): Promise<AuthResponse> {
 }
 
 export async function changePasswordAsync(data: ChangePasswordRequest): Promise<void> {
+    const error = validatePassword(data.newPassword);
+    if (error) throw new Error(error);
+
     await apiClient.post('/auth/changepassword', data);
 }
 
 export async function updateProfileAsync(data: UpdateProfileRequest): Promise<UserProfileResponse> {
+    const error = validateDisplayName(data.displayName);
+    if (error) throw new Error(error);
+
     const response = await apiClient.patch('/auth/profile', data);
     return response.data;
 }
@@ -104,9 +117,15 @@ export async function resendVerificationAsync(email: string): Promise<void> {
 }
 
 export async function forgotPasswordAsync(email: string): Promise<void> {
+    const error = validateEmail(email);
+    if (error) throw new Error(error);
+
     await apiClient.post('/auth/forgot-password', { email });
 }
 
 export async function resetPasswordAsync(token: string, newPassword: string): Promise<void> {
+    const error = validatePassword(newPassword);
+    if (error) throw new Error(error);
+
     await apiClient.post('/auth/reset-password', { token, newPassword });
 }
