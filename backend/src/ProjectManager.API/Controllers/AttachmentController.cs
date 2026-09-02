@@ -121,7 +121,8 @@ namespace ProjectManager.API.Controllers
                 if (attachment == null)
                     return NotFound();
 
-                Response.Headers["Content-Disposition"] = $"attachment; filename=\"{attachment.FileName}\"";
+                var encodedFileName = Uri.EscapeDataString(attachment.FileName);
+                Response.Headers["Content-Disposition"] =$"attachment; filename*=UTF-8''{encodedFileName}";
                 Response.Headers["X-Content-Type-Options"] = "nosniff";
                 Response.ContentType = attachment.ContentType;
 
