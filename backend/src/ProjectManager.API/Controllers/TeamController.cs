@@ -13,10 +13,14 @@ namespace ProjectManager.API.Controllers
     public class TeamController : ControllerBase
     {
         private readonly ITeamService _teamService;
+        private readonly ILogger<TeamController> _logger;
 
-        public TeamController(ITeamService teamService)
+        public TeamController(
+            ITeamService teamService,
+            ILogger<TeamController> logger)
         {
             _teamService = teamService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -32,6 +36,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -49,6 +54,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -66,6 +72,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -83,6 +90,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -100,6 +108,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -117,6 +126,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

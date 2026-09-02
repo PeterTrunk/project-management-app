@@ -12,10 +12,14 @@ namespace ProjectManager.API.Controllers
     public class ProjectController : ControllerBase
     {
         private readonly IProjectService _projectservice;
+        private readonly ILogger<ProjectController> _logger;
 
-        public ProjectController(IProjectService projectservice)
+        public ProjectController(
+            IProjectService projectservice,
+            ILogger<ProjectController> logger)
         {
             _projectservice = projectservice;
+            _logger = logger;
         }
         
         [HttpPost]
@@ -31,6 +35,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -48,6 +53,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -65,6 +71,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -83,6 +90,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -100,6 +108,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -117,6 +126,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -134,6 +144,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

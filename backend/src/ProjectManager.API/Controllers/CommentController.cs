@@ -13,10 +13,14 @@ namespace ProjectManager.API.Controllers
     public class CommentController : ControllerBase
     {
         private readonly ICommentService _commentService;
+        private readonly ILogger<CommentController> _logger;
 
-        public CommentController(ICommentService commentService)
+        public CommentController(
+            ICommentService commentService,
+            ILogger<CommentController> logger)
         {
             _commentService = commentService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -32,6 +36,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -49,6 +54,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -66,6 +72,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

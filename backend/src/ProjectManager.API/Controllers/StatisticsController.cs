@@ -11,10 +11,14 @@ namespace ProjectManager.API.Controllers
     public class StatisticsController : ControllerBase
     {
         private readonly IStatisticsService _statisticsService;
+        private readonly ILogger<StatisticsController> _logger;
 
-        public StatisticsController(IStatisticsService statisticsService)
+        public StatisticsController(
+            IStatisticsService statisticsService,
+            ILogger<StatisticsController> logger)
         {
             _statisticsService = statisticsService;
+            _logger = logger;
         }
         
         [HttpGet("task-status")]
@@ -29,6 +33,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -45,6 +50,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -61,6 +67,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -77,6 +84,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -98,6 +106,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

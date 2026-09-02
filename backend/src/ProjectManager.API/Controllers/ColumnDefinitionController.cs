@@ -14,10 +14,14 @@ namespace ProjectManager.API.Controllers
     public class ColumnDefinitionController : ControllerBase
     {
         private readonly IColumnService _columnService;
+        private readonly ILogger<ColumnDefinitionController> _logger;
 
-        public ColumnDefinitionController(IColumnService columnService)
+        public ColumnDefinitionController(
+            IColumnService columnService, 
+            ILogger<ColumnDefinitionController> logger)
         {
             _columnService = columnService;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -33,6 +37,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -50,6 +55,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -68,6 +74,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -85,6 +92,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -102,6 +110,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

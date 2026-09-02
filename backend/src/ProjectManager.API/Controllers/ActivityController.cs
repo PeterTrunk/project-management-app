@@ -11,10 +11,14 @@ namespace ProjectManager.API.Controllers
     public class ActivityController : ControllerBase
     {
         private readonly IActivityService _activityService;
+        private readonly ILogger<ActivityController> _logger;
 
-        public ActivityController(IActivityService activityService)
+        public ActivityController(
+            IActivityService activityService,
+            ILogger<ActivityController> logger)
         {
             _activityService = activityService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -38,6 +42,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

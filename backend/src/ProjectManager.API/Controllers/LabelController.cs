@@ -14,10 +14,14 @@ namespace ProjectManager.API.Controllers
     public class LabelController : ControllerBase
     {
         private readonly ILabelService _labelService;
+        private readonly ILogger<LabelController> _logger;
 
-        public LabelController(ILabelService labelService)
+        public LabelController(
+            ILabelService labelService,
+            ILogger<LabelController> logger)
         {
             _labelService = labelService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -33,6 +37,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -50,6 +55,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -67,6 +73,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -84,6 +91,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -101,6 +109,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

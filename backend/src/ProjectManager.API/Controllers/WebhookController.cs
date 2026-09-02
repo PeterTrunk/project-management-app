@@ -13,15 +13,18 @@ namespace ProjectManager.API.Controllers
         private readonly IGitWebhookService _gitWebhookService;
         private readonly IIntegrationService _integrationService;
         private readonly IEncryptionService _encryptionService;
+        private readonly ILogger<WebhookController> _logger;
 
         public WebhookController(
             IGitWebhookService gitWebhookService, 
             IIntegrationService integrationService,
-            IEncryptionService encryptionService)
+            IEncryptionService encryptionService,
+            ILogger<WebhookController> logger)
         {
             _gitWebhookService = gitWebhookService;
             _integrationService = integrationService;
             _encryptionService = encryptionService;
+            _logger = logger;
         }
 
         [HttpPost("{webhookToken}")]
@@ -114,6 +117,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

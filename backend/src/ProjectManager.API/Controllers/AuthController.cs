@@ -13,10 +13,14 @@ namespace ProjectManager.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authservice)
+        public AuthController(
+            IAuthService authservice,
+            ILogger<AuthController> logger)
         {
             _authService = authservice;
+            _logger = logger;
         }
 
         [HttpPost("register")]
@@ -34,10 +38,12 @@ namespace ProjectManager.API.Controllers
             }
             catch (RateLimitException ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
 
@@ -60,10 +66,12 @@ namespace ProjectManager.API.Controllers
             }
             catch (RateLimitException ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -86,7 +94,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
-
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -98,7 +106,6 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-
                 var refreshToken = Request.Cookies["refreshToken"];
                 if (!string.IsNullOrEmpty(refreshToken))
                     await _authService.LogoutAsync(refreshToken);
@@ -111,7 +118,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
-
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -130,6 +137,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -148,7 +156,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
-
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -167,6 +175,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -185,6 +194,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -205,6 +215,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -223,6 +234,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -243,10 +255,12 @@ namespace ProjectManager.API.Controllers
             }
             catch (RateLimitException ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -263,6 +277,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -279,6 +294,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -296,10 +312,12 @@ namespace ProjectManager.API.Controllers
             }
             catch (RateLimitException ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return StatusCode(429, ex.Message);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -316,6 +334,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
