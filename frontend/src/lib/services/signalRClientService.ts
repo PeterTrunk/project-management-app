@@ -124,4 +124,6 @@ export function unregisterSignalREvents() {
     signalRService.off('LabelCreated');
     signalRService.off('LabelDeleted');
     signalRService.off('ActivityCreated');
+    signalRService.off('AttachmentUploaded');
+    signalRService.off('AttachmentDeleted');
 }

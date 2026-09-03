@@ -1,5 +1,6 @@
 import * as signalR from '@microsoft/signalr';
 import { tokenStore } from '../stores/tokenStore';
+import { notify } from '../stores/notificationStore';
 
 const HUB_URL = import.meta.env.VITE_API_URL 
     ? `${import.meta.env.VITE_API_URL}/hubs/project`
@@ -7,7 +8,6 @@ const HUB_URL = import.meta.env.VITE_API_URL
 
 const KEEPALIVE_ENABLED = import.meta.env.VITE_SIGNALR_KEEPALIVE_ENABLED === 'true';
 const KEEPALIVE_MS = parseInt(import.meta.env.VITE_SIGNALR_KEEPALIVE_SECONDS ?? '15') * 1000;
-
 
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
@@ -23,27 +23,27 @@ class SignalRService {
 
         if (KEEPALIVE_ENABLED) {
             builder.withKeepAliveInterval(KEEPALIVE_MS);
-            console.log(`SignalR keepalive: ${KEEPALIVE_MS / 1000}s`);
+            //console.log(`SignalR keepalive: ${KEEPALIVE_MS / 1000}s`);
         }
 
         this.connection = builder.build();
 
-        this.connection.onreconnecting(() => console.log('SignalR reconnecting...'));
-        this.connection.onreconnected(() => console.log('SignalR reconnected!'));
-        this.connection.onclose(() => console.log('SignalR connection closed!'));
+        this.connection.onreconnecting(() => notify.warning('Kapcsolat megszakadt, újracsatlakozás...'));
+        this.connection.onreconnected(() => notify.success('Kapcsolat helyreállt!'));
+        this.connection.onclose(() => notify.error('A kapcsolat megszakadt!'));
 
         try {
             await this.connection.start();
             console.log('SignalR connected!');
-        } catch (e) {
-            console.error('SignalR connection error:', e);
+        } catch (e: any) {
+            notify.error(e.message ?? 'Nem sikerült csatlakozni a szerverhez!');
         }
     }
 
     async joinProject(projectId: string) {
         await this.connection?.invoke('JoinProject', projectId);
     }
-
+    
     async leaveProject(projectId: string) {
         await this.connection?.invoke('LeaveProject', projectId);
     }
