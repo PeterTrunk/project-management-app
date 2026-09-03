@@ -107,9 +107,9 @@
     >
         <div class="card-header">
             <span class="task-key">{task.taskKey}</span>
-            {#if task.priority}
-                <span class="priority priority-{task.priority}">{(task.priority)}</span>
-            {/if}
+            {#if task.priority !== 'none' && task.priority !== 'normal'}
+                <span class="priority priority-{task.priority}">{task.priority}</span>
+            {/if} 
             <span class="task-title">{task.title}</span>
             <!-- Hamburger menü -->
              {#if showMenu}

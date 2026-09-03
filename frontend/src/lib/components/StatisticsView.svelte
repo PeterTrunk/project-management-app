@@ -14,6 +14,7 @@
         type VelocityDataPoint,
         type CumulativeFlowDataPoint
     } from '../api/statisticsApi';
+    import { getSprintsAsync } from '../api/sprintApi';
 
     import TaskStatusPieChart from './TaskStatusPieChart.svelte';
     import SprintBurndownChart from './SprintBurndownChart.svelte';
@@ -49,10 +50,7 @@
     let loadingCFD = false;
     let selectedBoardId: string ='';
 
-    let sprints: SprintResponse[] = [];
-    sprintStore.subscribe(state => {
-        sprints = state.sprints;
-    });
+    let allSprints: SprintResponse[] = [];
 
     let boards: BoardResponse[] = [];
     boardStore.subscribe(state => {
@@ -60,6 +58,12 @@
     });
 
     onMount(async () => {
+        //Completed sprintek is kellenek a szűrőhöz, (scope = null-ként kérjük)
+        try {
+            allSprints = await getSprintsAsync(projectId);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a sprintek lekérésekor!');
+        }
         await loadAll();
     });
 
@@ -163,7 +167,7 @@
                     bind:value={selectedSprintId}
                     on:change={handleSprintChange}>
                     <option value="">Összes sprint</option>
-                    {#each sprints as sprint}
+                    {#each allSprints as sprint}
                         <option value={sprint.id}>{sprint.name}</option>
                     {/each}
                 </select>
@@ -187,6 +191,8 @@
             <div class="chart-card scroll-x">
                 {#if loadingWorkload}
                     <div class="loading">Betöltés...</div>
+                {:else if selectedSprintId && allSprints.find(s => s.id === selectedSprintId)?.state === 'Completed'}
+                    <div class="empty">A Sprint befejezett, így nincs megjeleníthető adat.</div>
                 {:else if workloadData.length === 0}
                     <div class="empty">Nincs hozzárendelt task</div>
                 {:else}

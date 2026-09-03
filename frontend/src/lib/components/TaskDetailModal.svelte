@@ -380,7 +380,11 @@
                                 <span class="meta-value">{task.description ?? 'Nincs leírás'}</span>
                                 <span class="meta-label">Prioritás</span>
                                 <span class="meta-value">
-                                    <span class="priority priority-{task.priority}">{task.priority ?? 'Nincs'}</span>
+                                    {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
+                                        <span class="priority priority-{task.priority}">{task.priority}</span>
+                                    {:else}
+                                        <span>Nincs</span>
+                                    {/if}
                                 </span>
                                 <span class="meta-label">Becsült idő</span>
                                 <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
@@ -535,7 +539,7 @@
                         <div class="field">
                             <label>Prioritás 
                                 <select bind:value={editPriority}>
-                                    <option value="">Nincs prioritás</option>
+                                    <option value="none">Nincs prioritás</option>
                                     <option value="low">Alacsony</option>
                                     <option value="medium">Közepes</option>
                                     <option value="high">Magas</option>
@@ -780,7 +784,7 @@
     .edit-title {
         font-size: 1.1rem;
         color: var(--text-primary);
-        padding: 1.5rem 2rem 0;
+        margin: 0;
     }
 
     /* ── Meta grid ── */
@@ -1031,6 +1035,7 @@
         text-transform: uppercase;
     }
 
+    
     .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
     .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
     .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
