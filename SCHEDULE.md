@@ -2928,7 +2928,7 @@ Egységes error handling pattern:
 - Minden catch blokkban: e.response?.data ?? e.message ?? fallback
 - Sikeres műveleteknél notify.success()
 - Form validációs hibák maradnak inline
-- console.error() → notify.error() mindenhol
+- console.error() -> notify.error() mindenhol
 
 ### Backend és frontend validációs konzisztencia javítása
 
@@ -2939,7 +2939,7 @@ AppDbContext konfiguráció és modell osztályok között.
 **Megoldás:**
 
 DB/modell javítások (migration):
-- Task Priority default: "normal" → "none" (TaskPriority.None konstans hozzáadva)
+- Task Priority default: "normal" -> "none" (TaskPriority.None konstans hozzáadva)
 - Task Position default: 0.0 eltávolítva (LexoRank kezeli)
 - EstimateInMinutes default: 0 eltávolítva (null szemantikailag helyes)
 - Nullable navigation property-k: Actor?, Board?, ColumnDefinition?, Sprint?
@@ -2971,6 +2971,67 @@ Frontend:
 - ProjectResources: task attachment törlés UI frissítés javítva
 - CommentSection: dupla komment megjelenés javítva (commentId alapú deduplikáció)
 - TaskDetailModal: assignee hozzáadás/eltávolítás setActiveTask mintára javítva
+
+### Bejelentkezve maradok funkció
+
+**Probléma:**
+Nem volt lehetőség bejelentkezve maradni böngésző újraindítás után,
+minden session cookie volt ami bezáráskor törlődött.
+
+**Megoldás:**
+
+Backend:
+- RefreshToken modell: RememberMe mező hozzáadva (bool, default false)
+- Migration: AddRememberMeToRefreshToken
+- LoginDto és LoginWithTotpDto: RememberMe mező hozzáadva
+- AuthResponseDto: RememberMe mező hozzáadva
+- SetRefreshTokenCookie: RememberMe alapján persistent (30 nap) vagy session cookie
+- RefreshTokenAsync: új token örökli az előző RememberMe értékét
+- LoginWithTotpAsync: ExpiresAt hardcoded 30 nap -> jwtOptions használata
+
+Frontend:
+- Login oldal: "Bejelentkezve maradok" checkbox hozzáadva
+- authApi.ts: LoginRequest és LoginWithTotpRequest RememberMe mezővel bővítve
+- apiClient: withCredentials: true bekapcsolva (ki volt kommentelve!)
+- AppLayout: loadCurrentUser await-elve loadProjects előtt (felesleges 401 errorok csökkentése)
+
+**Biztonsági megfontolások:**
+- RememberMe értéke szerver oldalon tárolódik (DB) nem kliens oldalon
+- Kliens nem befolyásolhatja a cookie élettartamát
+- Token rotation során az új token örökli a RememberMe értéket
+- Meglévő tokenek migration után default false értéket kapnak
+
+### Különböző UI és UX javítások
+
+**Priority megjelenítés egységesítése:**
+- TaskPriority.None konstans hozzáadva ("none" érték)
+- TaskCard: csak high/critical prioritás jelenik meg board nézetben
+- BacklogTaskCard: none/normal prioritás elrejtve
+- TaskDetailModal: none/normal esetén "Nincs" szöveg stílus nélkül
+- BoardView prioritás szűrő: marad ahogy van (összes lefedi a none-t)
+
+**Statistics view javítások:**
+- Completed sprintek betöltése az oldal megnyitásakor
+- Completed sprint kiválasztásakor helyes üzenet megjelenítése
+- sprintStore subscription eltávolítva (lokális lekérés helyette)
+
+**SignalR kapcsolat visszajelzések:**
+- onreconnecting -> notify.warning()
+- onreconnected -> notify.success()
+- onclose -> notify.error()
+- Kapcsolódási hiba -> notify.error()
+
+### ActivityFeed projekt váltás javítás
+
+**Probléma:**
+Overview nézetben projekt váltáskor az ActivityFeed nem töltötte újra az aktivitásokat,
+mert csak onMount-ban volt az adatlekérés.
+
+**Megoldás:**
+- onMount eltávolítva
+- Reaktív $: if (projectId) blokk hozzáadva
+- Projekt váltáskor automatikusan újratölti az aktivitásokat
+- Első renderkor is lefut → onMount felesleges lett
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
