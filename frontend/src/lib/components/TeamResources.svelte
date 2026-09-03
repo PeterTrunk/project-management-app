@@ -132,7 +132,12 @@
                                     {attachment}
                                     {projectId}
                                     taskId={task.id}
-                                    onDelete={() => {}}
+                                    onDelete={(id) => {
+                                        taskAttachments = taskAttachments.map(ta => ({
+                                            ...ta,
+                                            attachments: ta.attachments.filter(a => a.id !== id)
+                                        })).filter(ta => ta.attachments.length > 0);
+                                    }}
                                 />
                             {/each}
                         </div>

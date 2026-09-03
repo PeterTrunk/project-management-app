@@ -209,3 +209,54 @@ export function handlePrLinked(payload: {
         )
     }));
 }
+
+export function handleAttachmentUploaded(payload: {
+    attachmentId: string;
+    projectId: string;
+    taskId: string | null;
+    fileName: string;
+}) {
+    if (!payload.taskId) return;
+    
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(task =>
+            task.id === payload.taskId
+                ? {
+                    ...task,
+                    attachments: [...(task.attachments ?? []), {
+                        id: payload.attachmentId,
+                        projectId: payload.projectId,
+                        taskId: payload.taskId,
+                        fileName: payload.fileName,
+                        contentType: '',
+                        sizeBytes: 0,
+                        attachmentType: '',
+                        uploadedByName: '',
+                        createdAt: new Date().toISOString()
+                    }]
+                }
+                : task
+        )
+    }));
+}
+
+export function handleAttachmentDeleted(payload: {
+    attachmentId: string;
+    projectId: string;
+    taskId: string | null;
+}) {
+    if (!payload.taskId) return;
+    
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(task =>
+            task.id === payload.taskId
+                ? {
+                    ...task,
+                    attachments: task.attachments.filter(a => a.id !== payload.attachmentId)
+                }
+                : task
+        )
+    }));
+}

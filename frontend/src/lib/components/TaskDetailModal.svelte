@@ -38,7 +38,7 @@
     $: sprintName = task.sprintId
         ? (sprints.find(s => s.id === task.sprintId)?.name ?? 'Ismeretlen sprint')
         : null;
-
+    
     $: currentTask = $taskStore.activeTask ?? task;
 
     export let projectId: string;
@@ -185,8 +185,10 @@
     async function handleAddAssignee(userId: string) {
         try {
             await addAssigneeAsync(projectId, task.id, userId);
-            task = { ...task, assigneeIds: [...task.assigneeIds, userId] };
-            notify.success('Task módosítva!');
+            const updated = { ...task, assigneeIds: [...task.assigneeIds, userId] };
+            setActiveTask(updated);
+            task = updated;
+            notify.success('Tag hozzárendelve!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee hozzáadásakor!');
         }
@@ -195,8 +197,10 @@
     async function handleRemoveAssignee(userId: string) {
         try {
             await removeAssigneeAsync(projectId, task.id, userId);
-            task = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
-            notify.success('Task módosítva!');
+            const updated = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
+            setActiveTask(updated);
+            task = updated;
+            notify.success('Tag hozzárendelés eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee eltávolításakor!');
         }

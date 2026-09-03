@@ -57,6 +57,23 @@ namespace ProjectManager.API.Services.AttachmentService
 
             try
             {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("AttachmentDeleted", new
+                    {
+                        attachmentId = attachment.Id,
+                        projectId = attachment.ProjectId,
+                        taskId = attachment.TaskId
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "AttachmentDeleted", projectId);
+            }
+
+            try
+            {
                 var activity = await _activityService.LogActivityAsync(
                     attachment.TaskId.HasValue ? attachment.ProjectId : attachment.ProjectId,
                     attachment.TaskId.HasValue ? "Task" : "Project",
@@ -177,7 +194,7 @@ namespace ProjectManager.API.Services.AttachmentService
 
             await _context.Attachments.AddAsync(attachment);
             await _context.SaveChangesAsync();
-
+            
             try
             {
                 var activity = await _activityService.LogActivityAsync(
@@ -299,6 +316,24 @@ namespace ProjectManager.API.Services.AttachmentService
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("AttachmentUploaded", new
+                    {
+                        attachmentId = attachment.Id,
+                        projectId = attachment.ProjectId,
+                        taskId = attachment.TaskId,
+                        fileName = attachment.FileName
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "AttachmentUploaded", projectId);
+            }
 
             //Activity log
             try

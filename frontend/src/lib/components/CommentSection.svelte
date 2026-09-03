@@ -26,6 +26,7 @@
 
         signalRService.on('CommentAdded', async (data) => {
             if (data.taskId !== taskId) return;  // csak az aktuális task kommentjei
+            if (comments.some(c => c.id === data.commentId)) return;
             await loadComments();
         });
 
