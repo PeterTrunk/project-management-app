@@ -2894,6 +2894,84 @@ Az ActivityCreated broadcast-oknál üres catch blokk volt -> hibák elnyelve, n
 - ActivityCreated broadcast-oknál üres catch -> LogError-re cserélve
 - AttachmentService ConfirmUploadAsync: UploadedBy betöltése SaveChangesAsync elé helyezve
 
+### Frontend validáció egységesítése
+
+**Probléma:**
+Hiányzó és inkonzisztens frontend validáció, API hívások előtt nem volt ellenőrzés vagy csak részbeli ellenőrzés történt,
+hibakezelés nem volt egységes.
+
+**Megoldás:**
+
+Validációs réteg átszervezése:
+- validationHelpers.ts létrehozva általános helper function-ökkel (required, maxLength, minLength, emailFormat, passwordStrength, dateNotPast, dateOrder)
+- validators.ts áthelyezve utils/ mappába, átírva helper function-ökkel
+- Minden (Ahova kellett, Get-ek esetében nem kell stb) API fájlba validáció bekötve hívás előtt
+- Aggregált hibák (minden mező egyszerre validálva)
+- Meglévő validációk egységesítése, nem meglévők pótlása
+
+### Egységes error handling és toast notification rendszer
+
+**Probléma:**
+Nem egységes hibakezelés, sikeres műveleteknél nincs visszajelzés,
+console.error() hívások production kódban.
+
+**Megoldás:**
+
+Toast notification rendszer:
+- notificationStore.ts létrehozva (success/error/warning/info típusok)
+- Auto-dismiss: success (5mp), info (8mp), error/warning manuális bezárás
+- NotificationContainer.svelte komponens (slide-in animáció)
+- Desktop: jobb alsó sarok, mobil: felső közép
+- Max 2 toast mobilon, 4 desktopon
+
+Egységes error handling pattern:
+- Minden catch blokkban: e.response?.data ?? e.message ?? fallback
+- Sikeres műveleteknél notify.success()
+- Form validációs hibák maradnak inline
+- console.error() → notify.error() mindenhol
+
+### Backend és frontend validációs konzisztencia javítása
+
+**Probléma:**
+Inkonzisztenciák a frontend validáció, backend FluentValidation validátorok,
+AppDbContext konfiguráció és modell osztályok között.
+
+**Megoldás:**
+
+DB/modell javítások (migration):
+- Task Priority default: "normal" → "none" (TaskPriority.None konstans hozzáadva)
+- Task Position default: 0.0 eltávolítva (LexoRank kezeli)
+- EstimateInMinutes default: 0 eltávolítva (null szemantikailag helyes)
+- Nullable navigation property-k: Actor?, Board?, ColumnDefinition?, Sprint?
+
+Backend validátor javítások:
+- CreateIntegrationDtoValidator: RepoFullName maxLength(200) hozzáadva
+
+Szándékos döntések dokumentálva:
+- WipLimit: csak megjelenítési adat, kikényszerítés tervezett fejlesztés
+- Sprint.Goal minLength(3): szándékos UX döntés (backend nem követeli)
+- MoveTaskAsync ColumnId.HasValue: nem okoz hibát, kihagyva
+- Board.Description: string.Empty megközelítés helyes
+
+### SignalR konzisztencia javítások
+
+**Probléma:**
+Attachment feltöltés/törlés, komment duplikáció és assignee hozzárendelés
+UI szinkronizációs problémák.
+
+**Megoldás:**
+
+Backend:
+- AttachmentUploaded SignalR broadcast hozzáadva ConfirmUploadAsync-ban
+- AttachmentDeleted SignalR broadcast hozzáadva DeleteAttachmentAsync-ban
+
+Frontend:
+- handleAttachmentUploaded és handleAttachmentDeleted hozzáadva taskStore-ba
+- AttachmentUploaded/Deleted események regisztrálva signalRClientService-ben
+- ProjectResources: task attachment törlés UI frissítés javítva
+- CommentSection: dupla komment megjelenés javítva (commentId alapú deduplikáció)
+- TaskDetailModal: assignee hozzáadás/eltávolítás setActiveTask mintára javítva
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
