@@ -11,6 +11,10 @@
 
     export let projectId: string;
 
+    $: if (projectId) {
+        loadActivities();
+    }
+
     let activities: ActivityResponse[] = [];
     let loading = true;
     let loadingMore = false;
@@ -39,10 +43,6 @@
         ? activities
         : [...liveActivities, ...activities]
             .filter((a, i, arr) => arr.findIndex(b => b.id === a.id) === i);
-
-    onMount(async () => {
-        await loadActivities();
-    });
 
     async function loadActivities() {
         loading = true;
