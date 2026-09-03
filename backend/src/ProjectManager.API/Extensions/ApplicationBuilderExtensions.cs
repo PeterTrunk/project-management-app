@@ -66,7 +66,7 @@ namespace ProjectManager.API.Extensions
             {
                 try
                 {
-                    ///Ha már titkosított Decrypt sikeres lesz, kihagyjuk
+                    //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
                     encryption.Decrypt(integration.WebhookSecret);
                 }
                 catch

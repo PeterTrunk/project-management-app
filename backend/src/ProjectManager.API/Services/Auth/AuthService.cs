@@ -83,7 +83,8 @@ namespace ProjectManager.API.Services.Auth
             {
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes)
+                ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
+                RememberMe = dto.RememberMe
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
@@ -97,7 +98,8 @@ namespace ProjectManager.API.Services.Auth
                 UserId = user.Id,
                 Email = user.Email,
                 DisplayName = user.DisplayName,
-                RefreshToken = refreshTokenEntry.Token
+                RefreshToken = refreshTokenEntry.Token,
+                RememberMe = refreshTokenEntry.RememberMe
             };
         }
 
@@ -160,7 +162,7 @@ namespace ProjectManager.API.Services.Auth
             {
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
@@ -220,6 +222,7 @@ namespace ProjectManager.API.Services.Auth
                 ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
+                RememberMe = refreshTokenEntry.RememberMe
             };
 
             await _context.RefreshTokens.AddAsync(newRefreshTokenEntry);
@@ -233,7 +236,8 @@ namespace ProjectManager.API.Services.Auth
                 Token = accessToken,
                 Email = user.Email,
                 UserId = user.Id,
-                RefreshToken = newRefreshTokenEntry.Token
+                RefreshToken = newRefreshTokenEntry.Token,
+                RememberMe = refreshTokenEntry.RememberMe
             };
         }
 
@@ -421,7 +425,8 @@ namespace ProjectManager.API.Services.Auth
             {
                 Token = Guid.NewGuid().ToString(),
                 UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
+                RememberMe = dto.RememberMe
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
@@ -436,7 +441,8 @@ namespace ProjectManager.API.Services.Auth
                 Email = user.Email,
                 DisplayName = user.DisplayName,
                 RefreshToken = refreshTokenEntry.Token,
-                IsTotpEnabled = true
+                IsTotpEnabled = true,
+                RememberMe = refreshTokenEntry.RememberMe
             };
         }
 

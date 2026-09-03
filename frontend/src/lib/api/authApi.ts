@@ -4,6 +4,14 @@ import { validateTotpToken, validateChangePassword, validateLogin, validateRegis
 interface LoginRequest {
     email: string;
     password: string;
+    rememberMe: boolean;
+}
+
+interface LoginWithTotpRequest {
+    email: string;
+    password: string;
+    totpToken: string;
+    rememberMe: boolean;
 }
 
 interface RegisterRequest {
@@ -40,12 +48,6 @@ interface AuthResponse {
 interface TotpSetupResponse {
     secretKey: string;
     otpAuthUri: string;
-}
-
-interface LoginWithTotpRequest {
-    email: string;
-    password: string;
-    totpToken: string;
 }
 
 export async function loginAsync(data: LoginRequest): Promise<AuthResponse> {

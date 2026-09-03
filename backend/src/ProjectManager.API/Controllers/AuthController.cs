@@ -32,7 +32,7 @@ namespace ProjectManager.API.Controllers
             {
                 var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
                 var response = await _authService.RegisterAsync(dto, ip);
-                SetRefreshTokenCookie(response.RefreshToken);
+                SetRefreshTokenCookie(response.RefreshToken!);
                 response.RefreshToken = null!;
                 return Created(string.Empty, response);
             }
@@ -59,7 +59,7 @@ namespace ProjectManager.API.Controllers
                 var response = await _authService.LoginAsync(dto);
                 if (!response.RequiresTotp)
                 {
-                    SetRefreshTokenCookie(response.RefreshToken);
+                    SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
                     response.RefreshToken = null!;
                 }
                 return Ok(response);
@@ -88,7 +88,7 @@ namespace ProjectManager.API.Controllers
                     return BadRequest("Refresh token hiányzik!");
 
                 var response = await _authService.RefreshTokenAsync(refreshToken);
-                SetRefreshTokenCookie(response.RefreshToken);
+                SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
                 response.RefreshToken = null!;
                 return Ok(response);
             }
@@ -249,7 +249,7 @@ namespace ProjectManager.API.Controllers
             try
             {
                 var result = await _authService.LoginWithTotpAsync(dto);
-                SetRefreshTokenCookie(result.RefreshToken);
+                SetRefreshTokenCookie(result.RefreshToken!, result.RememberMe);
                 result.RefreshToken = null!;
                 return Ok(result);
             }
@@ -339,7 +339,7 @@ namespace ProjectManager.API.Controllers
             }
         }
 
-        private void SetRefreshTokenCookie(string refreshToken)
+        private void SetRefreshTokenCookie(string refreshToken, bool rememberMe = false)
         {
             var isProd = HttpContext.RequestServices
                 .GetRequiredService<IWebHostEnvironment>()
@@ -352,7 +352,7 @@ namespace ProjectManager.API.Controllers
                 SameSite = isProd ? SameSiteMode.Strict : SameSiteMode.Lax,
                 Domain = isProd ? ".trunkpeter.com" : null,
                 Path = "/api/auth",
-                Expires = DateTime.UtcNow.AddDays(30)
+                Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : null
             });
         }
     }

@@ -124,14 +124,12 @@ public class AppDbContext : DbContext
                   .HasForeignKey(rt => rt.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(rt => rt.RememberMe)
+                  .HasDefaultValue(false); //Remember Me
+
             //Indexes
             entity.HasIndex(rt => rt.Token)
                   .IsUnique();
-
-            //Foreign keys
-            entity.HasOne(rt => rt.User)
-                  .WithMany(u => u.RefreshTokens)
-                  .HasForeignKey(rt => rt.UserId);
         });
         
         modelBuilder.Entity<Role>(entity =>

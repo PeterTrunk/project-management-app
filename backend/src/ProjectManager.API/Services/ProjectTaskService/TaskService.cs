@@ -240,7 +240,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 // Optimálisabb: Valószinüleg nem kell alapvetően a Completed Sprintekhez tartozó taskok, ha mégis kell akkor külön le lehet kérni.
                 query = query.Where(t =>
                     t.SprintId == null ||
-                    t.Sprint.State == "Active" ||
+                    t.Sprint!.State == "Active" ||
                     t.Sprint.State == "Planning");
             }
             else if (sprintId.HasValue)

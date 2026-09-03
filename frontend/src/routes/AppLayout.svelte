@@ -72,11 +72,6 @@
         }
     }
 
-    onMount(() => {
-        syncSidebarWithWidth();
-        window.addEventListener('resize', syncSidebarWithWidth);
-    });
-
     const navItems = [
         { view: 'overview', label: 'Overview', icon: LayoutDashboard },
         { view: 'board', label: 'Board', icon: Kanban },
@@ -231,8 +226,13 @@
         }
     }
 
-    loadCurrentUser();
-    loadProjects();
+    onMount(async () => {
+        syncSidebarWithWidth();
+        window.addEventListener('resize', syncSidebarWithWidth);
+
+        await loadCurrentUser();
+        loadProjects();
+    });
 
     let activeView = 'overview';
 </script>
