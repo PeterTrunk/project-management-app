@@ -58,7 +58,7 @@
     let editDueDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '';
 
     let attachments: AttachmentResponse[] = [];
-    $: attachments = (task.attachments ?? []) as AttachmentResponse[];
+    $: attachments = (currentTask.attachments ?? []) as AttachmentResponse[];
     let isUploading = false;
     let uploadProgress = 0;
     let uploadError = '';
@@ -250,7 +250,11 @@
 
                 // 3. Confirm
                 const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
-                task = { ...task, attachments: [...task.attachments, uploaded] };
+                
+                //const updatedTask = { ...currentTask, attachments: [...(currentTask.attachments ?? []), uploaded] };
+                //setActiveTask(updatedTask);
+                //task = updatedTask;
+
                 notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
@@ -412,18 +416,20 @@
 
                     {#if activeDetailTab === 'attachments'}
                         <div class="section">
-                            {#if task.attachments && task.attachments.length > 0}
+                            {#if attachments && attachments.length > 0}
                                 <div class="attachments-list">
-                                    {#each task.attachments as attachment (attachment.id)}
+                                    {#each attachments as attachment (attachment.id)}
                                         <AttachmentCard
                                             {attachment}
                                             {projectId}
                                             taskId={task.id}
                                             onDelete={(id) => {
-                                                task = {
-                                                    ...task,
-                                                    attachments: task.attachments.filter(a => a.id !== id)
+                                                const updatedTask = {
+                                                    ...currentTask,
+                                                    attachments: currentTask.attachments.filter(a => a.id !== id)
                                                 };
+                                                setActiveTask(updatedTask);
+                                                task = updatedTask;
                                             }}
                                         />
                                     {/each}

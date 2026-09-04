@@ -349,7 +349,12 @@ namespace ProjectManager.API.Services.AttachmentService
                         projectId = attachment.ProjectId,
                         taskId = attachment.TaskId,
                         fileName = attachment.FileName,
+                        contentType = attachment.ContentType,
+                        sizeBytes = attachment.SizeBytes,
+                        attachmentType = attachment.AttachmentType,
+                        uploadedByName = attachment.UploadedBy?.DisplayName ?? "",
                         version = attachment.Version,
+                        createdAt = attachment.CreatedAt
                     });
             }
             catch (Exception ex)

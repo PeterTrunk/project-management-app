@@ -1,9 +1,10 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToMinIOAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
     import { getTasksAsync, type TaskResponse } from '../api/taskApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
+    import { signalRService } from '../services/signalRService';
 
     import { notify } from '../stores/notificationStore';
 
@@ -18,6 +19,14 @@
     
     onMount(async () => {
         await loadAttachments();
+
+        signalRService.on('AttachmentUploaded', (data) => {
+            if (data.projectId === projectId) loadAttachments();
+        });
+        
+        signalRService.on('AttachmentDeleted', (data) => {
+            if (data.projectId === projectId) loadAttachments();
+        });
     });
 
     let searchQuery = '';
@@ -90,6 +99,11 @@
         uploadProgress = 0;
         input.value = '';
     }
+
+    onDestroy(() => {
+        signalRService.off('AttachmentUploaded');
+        signalRService.off('AttachmentDeleted');
+    });
 </script>
 
 <div class="team-resources-container">

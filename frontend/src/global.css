@@ -221,6 +221,12 @@ a:hover {
     background: var(--text-muted);
 }
 
+.scroll-x {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-hover) var(--bg-primary);
+}
+
 @media (max-width: 1366px) {
     :root {
         --sidebar-width: 180px;

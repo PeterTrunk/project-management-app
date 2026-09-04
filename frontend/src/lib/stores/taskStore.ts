@@ -215,32 +215,55 @@ export function handleAttachmentUploaded(payload: {
     projectId: string;
     taskId: string | null;
     fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    attachmentType: string;
+    uploadedByName: string;
     version: number;
+    createdAt: string;
 }) {
     if (!payload.taskId) return;
     
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(task =>
+    taskStore.update(state => {
+        const newAttachment = {
+            id: payload.attachmentId,
+            projectId: payload.projectId,
+            taskId: payload.taskId,
+            fileName: payload.fileName,
+            contentType: payload.contentType,
+            sizeBytes: payload.sizeBytes,
+            attachmentType: payload.attachmentType,
+            uploadedByName: payload.uploadedByName,
+            version: payload.version,
+            createdAt: payload.createdAt
+        };
+        
+        const updatedTasks = state.tasks.map(task =>
             task.id === payload.taskId
                 ? {
                     ...task,
-                    attachments: [...(task.attachments ?? []), {
-                        id: payload.attachmentId,
-                        projectId: payload.projectId,
-                        taskId: payload.taskId,
-                        fileName: payload.fileName,
-                        contentType: '',
-                        sizeBytes: 0,
-                        attachmentType: '',
-                        uploadedByName: '',
-                        version: payload.version,
-                        createdAt: new Date().toISOString()
-                    }]
+                    attachments: task.attachments.some(a => a.id === payload.attachmentId)
+                        ? task.attachments  // már megvan → skip
+                        : [...(task.attachments ?? []), newAttachment]
                 }
                 : task
-        )
-    }));
+        );
+
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? {
+                ...state.activeTask,
+                attachments: state.activeTask.attachments.some(a => a.id === payload.attachmentId)
+                    ? state.activeTask.attachments  // már megvan → skip
+                    : [...(state.activeTask.attachments ?? []), newAttachment]
+            }
+            : state.activeTask;
+
+        return {
+            ...state,
+            tasks: updatedTasks,
+            activeTask: updatedActiveTask
+        };
+    });
 }
 
 export function handleAttachmentDeleted(payload: {
@@ -250,15 +273,25 @@ export function handleAttachmentDeleted(payload: {
 }) {
     if (!payload.taskId) return;
     
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(task =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(task =>
             task.id === payload.taskId
                 ? {
                     ...task,
                     attachments: task.attachments.filter(a => a.id !== payload.attachmentId)
                 }
                 : task
-        )
-    }));
+        );
+
+        //Active Taskot külön.
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        
+        return {
+            ...state,
+            tasks: updatedTasks,
+            activeTask: updatedActiveTask
+        };
+    });
 }
