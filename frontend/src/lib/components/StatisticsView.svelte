@@ -288,6 +288,12 @@
         overflow: hidden;
     }
 
+    .scroll-x {
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-hover) var(--bg-primary);
+    }
+
     .statistics-toolbar {
         display: flex;
         align-items: center;
