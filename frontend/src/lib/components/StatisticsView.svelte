@@ -130,11 +130,9 @@
     async function loadCumulativeFlow() {
         loadingCFD = true;
         try {
-            console.log('CFD params:', { projectId, dateFrom, dateTo, boardId: selectedBoardId });
             cumulativeFlowData = await getCumulativeFlowAsync(
                 projectId, dateFrom, dateTo, selectedBoardId
             );
-            console.log('CFD data:', cumulativeFlowData);
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a CFD lekérésekor!');
         } finally {

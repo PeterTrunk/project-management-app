@@ -28,12 +28,10 @@ apiClient.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
-                console.log('Refresh hívva!');
                 const newToken = await refreshTokenOnce();
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return apiClient(originalRequest);
             } catch (refreshError) {
-                console.log('Refresh sikertelen, kijelentkeztetés');
                 tokenStore.clear();
                 window.location.href = '/#/';
                 return Promise.reject(refreshError);
