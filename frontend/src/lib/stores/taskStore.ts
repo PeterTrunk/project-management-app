@@ -134,47 +134,63 @@ export function handleTasksRebalanced(payload: {
 }
 
 export function handleTaskAssigneeAdded(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
-                ? { ...t, assigneeIds: [...t.assigneeIds, payload.userId] }
+                ? { ...t, assigneeIds: t.assigneeIds.includes(payload.userId) 
+                    ? t.assigneeIds 
+                    : [...t.assigneeIds, payload.userId] }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskAssigneeRemoved(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t, assigneeIds: t.assigneeIds.filter(id => id !== payload.userId) }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskLabelAdded(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
-                ? { ...t, labelIds: [...t.labelIds, payload.labelId] }
+                ? { ...t, labelIds: t.labelIds.includes(payload.labelId)
+                    ? t.labelIds
+                    : [...t.labelIds, payload.labelId] }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskLabelRemoved(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t, labelIds: t.labelIds.filter(id => id !== payload.labelId) }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleCommitLinked(payload: {
