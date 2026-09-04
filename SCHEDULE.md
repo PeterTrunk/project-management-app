@@ -3031,7 +3031,72 @@ mert csak onMount-ban volt az adatlekérés.
 - onMount eltávolítva
 - Reaktív $: if (projectId) blokk hozzáadva
 - Projekt váltáskor automatikusan újratölti az aktivitásokat
-- Első renderkor is lefut → onMount felesleges lett
+- Első renderkor is lefut -> onMount felesleges lett
+
+### Login rate limiting javítás
+
+**Probléma:**
+Email alapú rate limiting lehetővé tette hogy egy támadó
+szándékosan kizárjon más felhasználókat (DOS támadás).
+
+**Megoldás:**
+- Rate limit kulcs: login:{email} -> login:{ip}:{email}
+- Csak az adott IP-ről blokkolódik a felhasználó
+- IHttpContextAccessor injektálva AuthService-be
+- LoginWithTotp esetén is javítva
+
+### Fájl verziókezelés duplikált fájlneveknél
+
+**Probléma:**
+Azonos nevű fájlok feltöltésekor ütközés keletkezett, nem volt kezelve a duplikáció.
+
+**Megoldás:**
+- Version mező hozzáadva az Attachment modellhez (int, default 0, not nullable)
+- Unique constraint: ProjectId + FileName + Version együtt egyedi
+- Version 1, 2, 3... = további feltöltések azonos névvel
+- Race condition védelem: retry logika DbUpdateException esetén
+
+### SignalR attachment reaktivitás javítás
+
+**Probléma:**
+Task feltöltés/törlés nem frissült valós időben a TaskDetailModal-ban,
+duplikált attachment elemek jelentek meg feltöltés után.
+
+**Megoldás:**
+- handleAttachmentUploaded és handleAttachmentDeleted: activeTask frissítése tasks[] mellett
+- Deduplikáció: attachmentId alapú ellenőrzés mindkét helyen
+- SignalR broadcast kiegészítve teljes attachment adatokkal
+- TeamResources: SignalR figyelése külön
+
+### TaskStore reaktivitás javítás - Label és Assignee
+
+**Probléma:**
+Label és assignee hozzáadás/eltávolítás csak a tasks[] tömböt frissítette,
+az activeTask nem frissült -> TaskDetailModal nem mutatott helyes állapotot.
+
+**Megoldás:**
+- handleTaskAssigneeAdded/Removed: activeTask frissítése tasks[] mellett
+- handleTaskLabelAdded/Removed: activeTask frissítése tasks[] mellett
+- Deduplikáció hozzáadva *Added függvényeknél (label / member stb...)
+
+### Fájl keresés TeamResources-ben
+
+**Probléma:**
+Sok fájl esetén nehéz volt megtalálni a keresett dokumentumot.
+
+**Megoldás:**
+- Fájlnév alapú kereső hozzáadva
+- Szűrés projekt és task szintű fájlokra egyaránt
+
+### Member és Label kereső TaskDetailModal-ban
+
+**Probléma:**
+Sok member/label esetén nehéz lehet megtalálni a keresett elemet.
+
+**Megoldás:**
+- Kereső mező hozzáadva (member: név + email, label: név)
+- Alapból max X elem látható...
+- "Mutass többet" gomb ha több van
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
