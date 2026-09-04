@@ -60,7 +60,14 @@
     <div class="attachment-info">
         <span class="attachment-name">{attachment.fileName}</span>
         <span class="attachment-meta">
-            {formatFileSize(attachment.sizeBytes)} · {attachment.uploadedByName}
+            {formatFileSize(attachment.sizeBytes)} · {attachment.uploadedByName} · 
+            {new Date(attachment.createdAt).toLocaleString('hu-HU', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            })}
         </span>
     </div>
     <div class="attachment-actions">

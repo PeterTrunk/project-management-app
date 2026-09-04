@@ -335,6 +335,11 @@
         font-size: 0.85rem;
     }
 
+    .mode-toggle button:hover {
+        background: var(--border-hover);
+        color: var(--text-primary);
+    }
+
     select:focus, input[type="date"]:focus {
         outline: none;
         border-color: var(--accent-blue);

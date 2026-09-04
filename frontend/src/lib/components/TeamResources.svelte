@@ -20,6 +20,19 @@
         await loadAttachments();
     });
 
+    let searchQuery = '';
+
+    $: filteredAttachments = attachments.filter(a =>
+        a.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    $: filteredTaskAttachments = taskAttachments.map(ta => ({
+        ...ta,
+        attachments: ta.attachments.filter(a =>
+            a.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+    })).filter(ta => ta.attachments.length > 0);
+
     async function loadAttachments() {
         loading = true;
         try {
@@ -83,16 +96,24 @@
     <div class="resources-toolbar">
         <div class="toolbar-row wrap-480">
             <h2>Projekt dokumentumok ({attachments.length})</h2>
-            <label class="upload-btn btn-icon-text" class:loading={isUploading}>
-                {#if isUploading}
-                    Feltöltés... {uploadProgress > 0 ? uploadProgress + '%' : ''}
-                {:else}
-                    +<span class="btn-text"> Feltöltés</span>
-                {/if}
-                <input type="file" style="display: none" multiple on:change={handleFileUpload} disabled={isUploading} />
-            </label>
+            <div class="toolbar-actions">
+                <label class="upload-btn btn-icon-text" class:loading={isUploading}>
+                    {#if isUploading}
+                        Feltöltés... {uploadProgress > 0 ? uploadProgress + '%' : ''}
+                    {:else}
+                        +<span class="btn-text"> Feltöltés</span>
+                    {/if}
+                    <input type="file" style="display: none" multiple on:change={handleFileUpload} disabled={isUploading} />
+                </label>
+
+                <input 
+                    class="search-input-sm" 
+                    placeholder="Keresés..." 
+                    bind:value={searchQuery} 
+                />
+            </div>
         </div>
-        
+
         {#if isUploading && uploadProgress > 0}
             <div class="progress-bar">
                 <div class="progress-fill" style="width: {uploadProgress}%"></div>
@@ -105,9 +126,11 @@
             <h3>Projekt dokumentumok</h3>
             {#if attachments.length === 0}
                 <p class="empty">Nincsenek projekt szintű dokumentumok</p>
+            {:else if filteredAttachments.length === 0}
+                <p class="empty">Nincs találat a keresési feltételekre</p>
             {:else}
                 <div class="attachments-list">
-                    {#each attachments as attachment (attachment.id)}
+                    {#each filteredAttachments as attachment (attachment.id)}
                         <AttachmentCard
                             {attachment}
                             {projectId}
@@ -123,26 +146,30 @@
         {#if taskAttachments.length > 0}
             <div class="section">
                 <h3>Task csatolmányok</h3>
-                {#each taskAttachments as { task, attachments: taskFiles }}
-                    <div class="task-group">
-                        <h4 class="task-key">{task.taskKey} {task.title}</h4>
-                        <div class="attachments-list">
-                            {#each taskFiles as attachment (attachment.id)}
-                                <AttachmentCard
-                                    {attachment}
-                                    {projectId}
-                                    taskId={task.id}
-                                    onDelete={(id) => {
-                                        taskAttachments = taskAttachments.map(ta => ({
-                                            ...ta,
-                                            attachments: ta.attachments.filter(a => a.id !== id)
-                                        })).filter(ta => ta.attachments.length > 0);
-                                    }}
-                                />
-                            {/each}
+                {#if filteredTaskAttachments.length === 0}
+                    <p class="empty">Nincs találat a keresési feltételekre</p>
+                {:else}
+                    {#each filteredTaskAttachments as { task, attachments: taskFiles }}
+                        <div class="task-group">
+                            <h4 class="task-key">{task.taskKey} {task.title}</h4>
+                            <div class="attachments-list">
+                                {#each taskFiles as attachment (attachment.id)}
+                                    <AttachmentCard
+                                        {attachment}
+                                        {projectId}
+                                        taskId={task.id}
+                                        onDelete={(id) => {
+                                            taskAttachments = taskAttachments.map(ta => ({
+                                                ...ta,
+                                                attachments: ta.attachments.filter(a => a.id !== id)
+                                            })).filter(ta => ta.attachments.length > 0);
+                                        }}
+                                    />
+                                {/each}
+                            </div>
                         </div>
-                    </div>
-                {/each}
+                    {/each}
+                {/if}
             </div>
         {/if}
     </div>
@@ -171,6 +198,12 @@
         align-items: center;
         justify-content: space-between;
         gap: 0.75rem;
+    }
+
+    .toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
     .progress-bar {
@@ -233,6 +266,21 @@
     .upload-btn:hover { background: var(--accent-green); color: #fff; }
     .upload-btn.loading { opacity: 0.5; cursor: not-allowed; }
 
+    .search-input-sm {
+        font-size: 0.9rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        color: var(--text-primary);
+        width: 200px;
+    }
+
+    .search-input-sm:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
     .task-group {
         margin-bottom: 1rem;
     }
@@ -247,5 +295,12 @@
         text-align: center;
         padding: 1rem;
         color: var(--text-muted);
+    }
+
+    .empty {
+        color: var(--text-muted);
+        font-size: var(--font-size-sm);
+        padding: 1rem 0;
+        text-align: center;
     }
 </style>
