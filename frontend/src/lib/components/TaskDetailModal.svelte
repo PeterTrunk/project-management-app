@@ -63,6 +63,32 @@
     let uploadProgress = 0;
     let uploadError = '';
 
+    let memberSearch = '';
+    let labelSearch = '';
+    let showAllMembers = false;
+    let showAllLabels = false;
+
+    $: filteredMembers = members.filter(m =>
+        m.displayName.toLowerCase().includes(memberSearch.toLowerCase()) ||
+        m.email.toLowerCase().includes(memberSearch.toLowerCase())
+    );
+
+    $: visibleMembers = memberSearch
+        ? filteredMembers
+        : showAllMembers
+            ? filteredMembers
+            : filteredMembers.slice(0, 3);
+
+    $: filteredLabels = allLabels.filter(l =>
+        l.name.toLowerCase().includes(labelSearch.toLowerCase())
+    );
+
+    $: visibleLabels = labelSearch
+        ? filteredLabels
+        : showAllLabels
+            ? filteredLabels
+            : filteredLabels.slice(0, 3);
+
     let modalRef: HTMLElement;
 
     authStore.subscribe(state => {
@@ -150,11 +176,8 @@
         }
     }
 
-    let isUpdatingLabels = false;
-
     async function handleAddLabel(labelId: string) {
         try {
-            isUpdatingLabels = true;
             await addLabelToTaskAsync(projectId, task.id, labelId);
             const updated = { ...task, labelIds: [...task.labelIds, labelId] };
             setActiveTask(updated);
@@ -162,14 +185,11 @@
             notify.success('Label hozzáadva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag hozzáadásakor!');
-        } finally {
-            isUpdatingLabels = false;
         }
     }
 
     async function handleRemoveLabel(labelId: string) {
         try {
-            isUpdatingLabels = true;
             await removeLabelFromTaskAsync(projectId, task.id, labelId);
             const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
             setActiveTask(updated);
@@ -177,8 +197,6 @@
             notify.success('Label eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag eltávolításakor!');
-        } finally {
-            isUpdatingLabels = false;
         }
     }
 
@@ -478,10 +496,14 @@
                 <div class="edit-scroll">
                     <h2 class="edit-title">Szerkesztés</h2>
 
+                    <!-- Members -->
                     <div class="section">
-                        <h3>Hozzárendelt személyek</h3>
+                        <div class="section-header">
+                            <h3>Hozzárendelt személyek</h3>
+                            <input class="search-input-sm" placeholder="Keresés..." bind:value={memberSearch} />
+                        </div>
                         <div class="member-list">
-                            {#each members as member}
+                            {#each visibleMembers as member}
                                 <div class="member-row">
                                     <span class="assignee-name truncate">{member.displayName}</span>
                                     {#if task.assigneeIds.includes(member.userId)}
@@ -498,12 +520,26 @@
                                 </div>
                             {/each}
                         </div>
+                        {#if !memberSearch && filteredMembers.length > 3}
+                            <button class="show-more-btn" on:click={() => showAllMembers = !showAllMembers}>
+                                {showAllMembers ? 'Kevesebb' : `+${filteredMembers.length - 3} további`}
+                            </button>
+                        {/if}
                     </div>
 
+                    <!-- Labels -->
                     <div class="section">
-                        <h3>Labelek</h3>
+                        <div class="section-header">
+                            <h3>Labelek</h3>
+                            <div class="section-header-actions">
+                                <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
+                                    <Plus size={14} /> Új label
+                                </button>
+                                <input class="search-input-sm" placeholder="Keresés..." bind:value={labelSearch} />
+                            </div>
+                        </div>
                         <div class="label-edit-list">
-                            {#each allLabels as label}
+                            {#each visibleLabels as label}
                                 <div class="label-edit-row">
                                     <LabelCard {label} showDelete={false} />
                                     {#if currentTask.labelIds.includes(label.id)}
@@ -520,9 +556,11 @@
                                 </div>
                             {/each}
                         </div>
-                        <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
-                            <Plus size={14} /> Új label
-                        </button>
+                        {#if !labelSearch && filteredLabels.length > 3}
+                            <button class="show-more-btn" on:click={() => showAllLabels = !showAllLabels}>
+                                {showAllLabels ? 'Kevesebb' : `+${filteredLabels.length - 3} további`}
+                            </button>
+                        {/if}
                     </div>
 
                     <form id="edit-form">
@@ -809,6 +847,43 @@
         gap: 0.5rem;
     }
 
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .section-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .search-input-sm {
+        font-size: var(--font-size-xs);
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        color: var(--text-primary);
+        width: 140px;
+    }
+
+    .show-more-btn {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem 0;
+        text-decoration: underline;
+    }
+
+    .show-more-btn:hover {
+        color: var(--text-secondary);
+    }
+
     h3 {
         font-size: 0.78rem;
         text-transform: uppercase;
@@ -899,11 +974,9 @@
         color: var(--text-secondary);
         padding: 0.35rem 0.75rem;
         border-radius: 6px;
-        font-size: 0.82rem;
+        font-size: var(--font-size-xs);
         cursor: pointer;
         width: fit-content;
-        align-self: flex-start;
-        margin-top: 0.25rem;
     }
 
     .btn-add:hover { color: var(--text-primary); background: var(--border-hover); }
