@@ -25,6 +25,7 @@ namespace ProjectManager.API.Services.Auth
         private readonly IRateLimitService _rateLimitService;
         private readonly ILogger<AuthService> _logger;
         private readonly JwtOptions _jwtOptions;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public AuthService(
             AppDbContext context, 
@@ -32,7 +33,8 @@ namespace ProjectManager.API.Services.Auth
             IEmailService emailService,
             IRateLimitService rateLimitService,
             ILogger<AuthService> logger,
-            IOptions<JwtOptions> jwtOptions)
+            IOptions<JwtOptions> jwtOptions,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _currentUserService = currentUserService;
@@ -40,20 +42,21 @@ namespace ProjectManager.API.Services.Auth
             _rateLimitService = rateLimitService;
             _logger = logger;
             _jwtOptions = jwtOptions.Value;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {
             //Rate limiting
+            var ipAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var (isLimited, retryAfter) = await _rateLimitService
-                .IsRateLimitedAsync($"login:{dto.Email}", 5, TimeSpan.FromMinutes(15));
+                .IsRateLimitedAsync($"login:{ipAddress}:{dto.Email}", 5, TimeSpan.FromMinutes(15));
             if (isLimited)
             {
                 _logger.LogWarning("Rate limit elérve bejelentkezésnél | Email: {Email}", dto.Email);
                 throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
             }
                 
-
             //Db ellenörzése
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Email == dto.Email);
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
@@ -386,8 +389,9 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
         {
+            var ipAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var (isLimited, retryAfter) = await _rateLimitService
-                .IsRateLimitedAsync($"login:{dto.Email}", 5, TimeSpan.FromMinutes(15));
+                .IsRateLimitedAsync($"login:{ipAddress}:{dto.Email}", 5, TimeSpan.FromMinutes(15));
             if (isLimited)
             {
                 _logger.LogWarning("Rate limit elérve TOTP bejelentkezésnél | Email: {Email}", dto.Email);
