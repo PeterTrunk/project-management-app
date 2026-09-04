@@ -10,6 +10,7 @@
         public long SizeBytes { get; set; }
         public string AttachmentType { get; set; } = string.Empty;
         public string UploadedByName { get; set; } = string.Empty;
+        public int Version { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

@@ -11,6 +11,7 @@ export interface AttachmentResponse {
     sizeBytes: number;
     attachmentType: string;
     uploadedByName: string;
+    version: number;
     createdAt: string;
 }
 

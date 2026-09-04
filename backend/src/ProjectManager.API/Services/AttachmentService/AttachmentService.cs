@@ -289,33 +289,55 @@ namespace ProjectManager.API.Services.AttachmentService
             if (objectInfo.Size > log.SizeBytes * 1.1) // 10% tolerancia
                 throw new Exception("A fájl mérete nem egyezik!");
 
-            //Attachment létrehozása
-            var attachment = new Attachment
-            {
-                Id = Guid.NewGuid(),
-                ProjectId = projectId,
-                TaskId = taskId ?? log.TaskId,
-                UploadedById = _currentUserService.UserId,
-                FileName = log.FileName,
-                ContentType = log.ContentType,
-                SizeBytes = objectInfo.Size,
-                StorageKey = log.StorageKey,
-                AttachmentType = GetAttachmentType(log.ContentType),
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _context.Attachments.AddAsync(attachment);
+            //Attachment betöltése UploadedBy-jal
+            var uploadedBy = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == _currentUserService.UserId);
 
             //Log megjelölése confirmált-ként
             log.Confirmed = true;
 
-            //Attachment betöltése UploadedBy-jal
-            attachment.UploadedBy = (await _context.Users
-                .FirstOrDefaultAsync(u => u.Id == attachment.UploadedById))!;
+            //Verzió meghatározás + mentés retry logikával
+            var maxRetries = 3;
+            Attachment? attachment = null;
 
-            await _context.SaveChangesAsync();
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    var existingCount = await _context.Attachments
+                        .Where(a => a.ProjectId == projectId && a.FileName == log.FileName)
+                        .CountAsync();
 
-            _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
+                    attachment = new Attachment
+                    {
+                        Id = Guid.NewGuid(),
+                        ProjectId = projectId,
+                        TaskId = taskId ?? log.TaskId,
+                        UploadedById = _currentUserService.UserId,
+                        UploadedBy = uploadedBy!,
+                        FileName = log.FileName,
+                        ContentType = log.ContentType,
+                        SizeBytes = objectInfo.Size,
+                        StorageKey = log.StorageKey,
+                        AttachmentType = GetAttachmentType(log.ContentType),
+                        Version = existingCount,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _context.Attachments.AddAsync(attachment);
+                    await _context.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("unique") == true)
+                {
+                    _context.ChangeTracker.Clear();
+                    log.Confirmed = true; //reset after clear
+                    if (attempt == maxRetries - 1)
+                        throw new Exception("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
+                }
+            }
+
+            _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment!.StorageKey, attachment.FileName);
 
             try
             {
@@ -326,7 +348,8 @@ namespace ProjectManager.API.Services.AttachmentService
                         attachmentId = attachment.Id,
                         projectId = attachment.ProjectId,
                         taskId = attachment.TaskId,
-                        fileName = attachment.FileName
+                        fileName = attachment.FileName,
+                        version = attachment.Version,
                     });
             }
             catch (Exception ex)
@@ -385,6 +408,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 SizeBytes = attachment.SizeBytes,
                 AttachmentType = attachment.AttachmentType,
                 UploadedByName = attachment.UploadedBy?.DisplayName ?? "Ismeretlen",
+                Version = attachment.Version,
                 CreatedAt = attachment.CreatedAt
             };
         }

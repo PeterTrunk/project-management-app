@@ -58,7 +58,9 @@
         <svelte:component this={getAttachmentIcon(attachment.attachmentType)} size={18} />
     </span>
     <div class="attachment-info">
-        <span class="attachment-name">{attachment.fileName}</span>
+        <span class="attachment-name">
+            {attachment.fileName}{attachment.version > 0 ? ` (v${attachment.version})` : ''}
+        </span>
         <span class="attachment-meta">
             {formatFileSize(attachment.sizeBytes)} · {attachment.uploadedByName} · 
             {new Date(attachment.createdAt).toLocaleString('hu-HU', {

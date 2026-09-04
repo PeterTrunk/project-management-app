@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ProjectManager.API.Data;
@@ -11,9 +12,11 @@ using ProjectManager.API.Data;
 namespace ProjectManager.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904211919_AddVersionToAttachment")]
+    partial class AddVersionToAttachment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -110,12 +113,12 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("UploadedById")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Version")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
+                    b.Property<int?>("Version")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("StorageKey")
                         .IsUnique();
@@ -125,9 +128,6 @@ namespace ProjectManager.API.Migrations
                     b.HasIndex("UploadedById");
 
                     b.HasIndex("TaskId", "AttachmentType");
-
-                    b.HasIndex("ProjectId", "FileName", "Version")
-                        .IsUnique();
 
                     b.ToTable("Attachments");
                 });

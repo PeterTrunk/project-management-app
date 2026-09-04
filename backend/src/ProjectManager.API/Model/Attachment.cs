@@ -11,6 +11,7 @@
         public long SizeBytes { get; set; }
         public string StorageKey { get; set; } = string.Empty;
         public string AttachmentType {  get; set; } = string.Empty;
+        public int Version { get; set; } = 0;
         public DateTime CreatedAt { get; set; }
 
         public Project Project { get; set; } = null!;

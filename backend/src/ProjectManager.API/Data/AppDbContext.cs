@@ -536,12 +536,20 @@ public class AppDbContext : DbContext
             entity.Property(a => a.CreatedAt)
                   .IsRequired();
 
+            entity.Property(a => a.Version)
+                  .IsRequired()
+                  .HasDefaultValue(0);
+
+
             //Indexes
             entity.HasIndex(a => a.TaskId);
             entity.HasIndex(a => a.UploadedById);
             entity.HasIndex(a => new { a.TaskId, a.AttachmentType });
 
             entity.HasIndex(a => a.StorageKey)
+                  .IsUnique();
+
+            entity.HasIndex(a => new { a.ProjectId, a.FileName, a.Version })
                   .IsUnique();
 
             //Foreign keys

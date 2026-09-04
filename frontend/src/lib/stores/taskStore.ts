@@ -215,6 +215,7 @@ export function handleAttachmentUploaded(payload: {
     projectId: string;
     taskId: string | null;
     fileName: string;
+    version: number;
 }) {
     if (!payload.taskId) return;
     
@@ -233,6 +234,7 @@ export function handleAttachmentUploaded(payload: {
                         sizeBytes: 0,
                         attachmentType: '',
                         uploadedByName: '',
+                        version: payload.version,
                         createdAt: new Date().toISOString()
                     }]
                 }
