@@ -56,6 +56,10 @@
     let confirmTitle = '';
     let confirmMessage = '';
     let confirmAction: () => Promise<void> = async () => {};
+
+    let isDeleteConfirmOpen = false;
+    let deleteConfirmName = '';
+    $: canDelete = deleteConfirmName === project.name;
     
     function openConfirm(title: string, message: string, action: () => Promise<void>) {
         confirmTitle = title;
@@ -102,10 +106,15 @@
     }
 
     async function handleDelete() {
+        if (!canDelete) return;
         try {
             await deleteProject(project.id);
+            notify.success('Projekt törölve!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a törlés során!');
+        } finally {
+            isDeleteConfirmOpen = false;
+            deleteConfirmName = '';
         }
     }
 </script>
@@ -198,12 +207,40 @@
                             <p class="danger-title">Projekt törlése</p>
                             <p class="danger-desc">Végleges törlés, visszavonhatatlan művelet.</p>
                         </div>
-                        <button class="btn-danger" on:click={() => openConfirm(
-                            'Projekt Törlése',
-                            'Biztosan törlöd véglegesen a projektet?',
-                            handleDelete
-                        )}>Törlés</button>
+                        {#if isDeleteConfirmOpen}
+                            <button on:click={() => { isDeleteConfirmOpen = false; deleteConfirmName = ''; }}>
+                                Mégsem
+                            </button>
+                        {:else}
+                            <button class="btn-danger" on:click={() => isDeleteConfirmOpen = true}>
+                                Törlés
+                            </button>
+                        {/if}
                     </div>
+                    
+                    {#if isDeleteConfirmOpen}
+                        <div class="delete-confirm">
+                            <p>A törlés megerősítéséhez írd be a projekt nevét:</p>
+                            <p class="project-name-hint"><strong>{project.name}</strong></p>
+                            <input
+                                type="text"
+                                bind:value={deleteConfirmName}
+                                placeholder="Projekt neve..."
+                            />
+                            <div class="delete-confirm-actions">
+                                <button
+                                    class="btn-danger"
+                                    disabled={!canDelete}
+                                    on:click={() => openConfirm(
+                                        'Projekt Törlése',
+                                        'Biztosan törlöd véglegesen a projektet?',
+                                        handleDelete
+                                    )}>
+                                    Végleges törlés
+                                </button>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             </div>
         {/if}
@@ -549,5 +586,26 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .delete-confirm {
+        background: var(--accent-red-bg);
+        border: 1px solid var(--accent-red);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .project-name-hint {
+        color: var(--accent-red);
+        font-size: var(--font-size-sm);
+    }
+
+    .delete-confirm-actions {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
     }
 </style>
