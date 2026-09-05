@@ -3082,11 +3082,11 @@ az activeTask nem frissült -> TaskDetailModal nem mutatott helyes állapotot.
 ### Fájl keresés TeamResources-ben
 
 **Probléma:**
-Sok fájl esetén nehéz volt megtalálni a keresett dokumentumot.
+Sok fájl esetén nehéz lehet megtalálni a keresett dokumentumot.
 
 **Megoldás:**
 - Fájlnév alapú kereső hozzáadva
-- Szűrés projekt és task szintű fájlokra egyaránt
+- Szűrés projekt és task szintű fájlokra egyaránt érvényes
 
 ### Member és Label kereső TaskDetailModal-ban
 
@@ -3097,6 +3097,55 @@ Sok member/label esetén nehéz lehet megtalálni a keresett elemet.
 - Kereső mező hozzáadva (member: név + email, label: név)
 - Alapból max X elem látható...
 - "Mutass többet" gomb ha több van
+
+### Projekt törlés megerősítés erősítése
+
+**Probléma:**
+A projekt törléshez csak egy egyszerű ConfirmModal volt,
+ami könnyen véletlenül megnyomható.
+
+**Megoldás:**
+- Törlés gomb -> névbegépelős mező jelenik meg
+- User begépeli a projekt nevét -> csak akkor aktív a törlés gomb
+- Törlés gomb -> ConfirmModal megerősítés
+- Kétszeres megerősítés: névbegépelés + ConfirmModal
+- Törlés gomb Mégsem-re vált amíg a névbegépelő nyitva van
+- Egy fokkal erősebb, de talán még egy Login-os megerősítés is kéne hogy ellenőrizve legyen hogy tényleg a jogosult személy ül a gépnél.
+
+### Column reorder completedAt frissítés
+
+**Probléma:**
+Oszlopok átrendezésekor a taskok CompletedAt mezője nem frissült,
+így az új utolsó oszlopban lévő taskok nem lettek befejezettnek jelölve.
+
+**Megoldás:**
+- Új utolsó oszlop taskjain: completedAt beállítás
+- Többi oszlop taskjain: completedAt törlése
+- TaskMoved SignalR broadcast csak az érintett taskokra
+- Activity log nem szükséges (rendszer művelet)
+
+### WIP limit frissítés javítás
+
+**Probléma:**
+WIP limit törlése (null-ra állítása) nem működött,
+mert a service csak nem-null értéket frissített.
+
+**Megoldás:**
+- WipLimit mindig frissítve függetlenül a null értéktől
+- null = nincs WIP limit (szándékos törlés)
+
+### Commit/PR task hozzárendelés UI javítás
+
+**Probléma:**
+Commit és PR hozzárendelésnél nem volt keresési lehetőség,
+csak görgetéssel lehetett taskot találni a select-tag-ben ami nagy projektnél nagyon macerás lenne.
+
+**Megoldás:**
+- TaskPickerModal komponens létrehozva
+- Taskok és sprintek lazy load (modal megnyitásakor töltjük be a taskokat)
+- Keresés: task cím és task key alapján
+- Szűrés: sprint alapján (completed sprintek is elérhetőek)
+- A kiválasztottat fogjuk hozzárendelni
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
