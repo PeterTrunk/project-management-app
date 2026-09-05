@@ -10,10 +10,14 @@ namespace ProjectManager.API.Controllers
     public class ProjectJoinController : ControllerBase
     {   
         private readonly ITeamService _teamService;
+        private readonly ILogger<ProjectJoinController> _logger;
 
-        public ProjectJoinController(ITeamService teamService)
+        public ProjectJoinController(
+            ITeamService teamService,
+            ILogger<ProjectJoinController> logger)
         {
             _teamService = teamService;
+            _logger = logger;
         }
         
         [HttpPost("join/{token}")]
@@ -29,6 +33,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

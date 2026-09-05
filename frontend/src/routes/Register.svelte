@@ -1,9 +1,6 @@
 <script lang="ts">
-    import { registerAsync } from '../lib/api/authApi';
+    import { registerAsync, setupTotpAsync, verifyTotpAsync } from '../lib/api/authApi';
     import { push } from 'svelte-spa-router';
-    import { validateDisplayName, validatePassword, validateEmail } from '../lib/validators'
-
-    import { setupTotpAsync, verifyTotpAsync } from '../lib/api/authApi';
     import { Copy, Check, ShieldCheck, Mail } from 'lucide-svelte';
     import { login } from '../lib/stores/authStore';
     import QRCode from 'qrcode';
@@ -16,7 +13,6 @@
     let totpError = '';
     let copied = false;
 
-
     let email = '';
     let password = '';
     let passwordconfirm = '';
@@ -24,34 +20,17 @@
     
     let success = '';
     let error = '';
-    let emailError = '';
-    let displayNameError = '';
-    let passwordError = '';
     let passwordConfirmError = '';
 
     
     async function handleRegister() {
         error = '';
-        emailError = '';
-        displayNameError = '';
-        passwordError = '';
         passwordConfirmError = '';
-        
-        let errorOccured = false;
 
-        const emailErr = validateEmail(email);
-        const displayNameErr = validateDisplayName(displayName);
-        const passwordErr = validatePassword(password);
-
-        if (emailErr) { emailError = emailErr; errorOccured = true; }
-        if (displayNameErr) { displayNameError = displayNameErr; errorOccured = true; }
-        if (passwordErr) { passwordError = passwordErr; errorOccured = true; }
         if (password !== passwordconfirm) { 
             passwordConfirmError = 'A két jelszó nem egyezik!'; 
-            errorOccured = true; 
+            return;
         }
-        
-        if (errorOccured) return;
 
         try {
             const response = await registerAsync({ email, displayName, password });
@@ -67,7 +46,7 @@
             // TOTP prompt megjelenítése
             showTotpPrompt = true;
         } catch (e: any) {
-            error = 'Hiba történt a regisztráció során!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt a regisztráció során!';
         }
     }
 
@@ -77,8 +56,8 @@
             totpSetupUri = response.otpAuthUri;
             totpQrCode = await QRCode.toDataURL(response.otpAuthUri, { width: 200, margin: 1 });
             totpStep = 'setup';
-        } catch (e) {
-            totpError = 'Hiba történt a 2FA beállításakor!';
+        } catch (e: any) {
+            totpError = e.response?.data ?? e.message ?? 'Hiba történt a 2FA beállításakor!';
         }
     }
 
@@ -86,8 +65,8 @@
         try {
             await verifyTotpAsync(totpToken);
             totpStep = 'success';
-        } catch (e) {
-            totpError = 'Érvénytelen TOTP token!';
+        } catch (e: any) {
+            totpError = e.response?.data ?? e.message ?? 'Érvénytelen TOTP token!';
         }
     }
 
@@ -103,21 +82,12 @@
             <form on:submit|preventDefault={handleRegister}>
                 <div class="input-group">
                     <input type="email" placeholder="Email" bind:value={email}/>
-                    {#if emailError}
-                        <p class="field-error">{emailError}</p>
-                    {/if}
                 </div>
                 <div class="input-group">
                     <input type="text" placeholder="Felhasználónév" bind:value={displayName}/>
-                    {#if displayNameError}
-                        <p class="field-error">{displayNameError}</p>
-                    {/if}
                 </div>
                 <div class="input-group">
                     <input type="password" placeholder="Jelszó" bind:value={password}/>
-                    {#if passwordError}
-                        <p class="field-error">{passwordError}</p>
-                    {/if}
                 </div>
                 <div class="input-group">
                     <input type="password" placeholder="Jelszó megerősítése" bind:value={passwordconfirm}/>

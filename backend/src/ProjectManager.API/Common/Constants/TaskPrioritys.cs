@@ -2,12 +2,13 @@
 {
     public class TaskPrioritys
     {
+        public const string None = "none";
         public const string Low = "low";
         public const string Medium = "medium";
         public const string High = "high";
         public const string Critical = "critical";
 
         //Listát itt deklaráljuk, ezzel esetleges új prió bevezetésekor kevéské kell a validátorokhoz nyulni.
-        public static readonly string[] ValidPriorities = { Low, Medium, High, Critical };
+        public static readonly string[] ValidPriorities = { None, Low, Medium, High, Critical };
     }
 }

@@ -1,9 +1,10 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { updateColumnAsync, deleteColumnAsync } from '../api/columnApi';
-    import { validateColumnName, validateColumnStatus } from '../validators';
     import type { ColumnResponse } from '../api/columnApi';
     import ConfirmModal from './ConfirmModal.svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     import { X, Pencil, Trash2 } from 'lucide-svelte';
 
@@ -27,11 +28,7 @@
     let isEditing = false;
     let editName = column.name;
     let editMapsToStatus = column.mapsToStatus;
-    let editWipLimit = column.wipLimit;
-    let hasWip = column.wipLimit !== null;
-
-    let error = '';
-    let success = '';
+    let editWipLimit: number | null = column.wipLimit;
 
     // ConfirmModal
     let isConfirmOpen = false;
@@ -47,35 +44,30 @@
     }
 
     async function handleUpdate() {
-        error = '';
-        success = '';
-        let errorOccured = false;
-        const nameError = validateColumnName(editName);
-        const statusError = validateColumnStatus(editMapsToStatus);
-        if (nameError) { error += nameError; errorOccured = true; }
-        if (statusError) { error += statusError; errorOccured = true; }
-        if (errorOccured) return;
-
         try {
-            await updateColumnAsync(projectId, boardId, column.id, {
+            const updated = await updateColumnAsync(projectId, boardId, column.id, {
                 name: editName,
                 mapsToStatus: editMapsToStatus,
-                wipLimit: hasWip ? editWipLimit : null,
+                wipLimit: !editWipLimit || editWipLimit <= 0 ? null : Number(editWipLimit),
                 rowVersion: column.rowVersion ?? ''
             });
-            success = 'Oszlop módosítva!';
+            column = updated;
+            notify.success('Oszlop módosítva!');
             isEditing = false;
-        } catch (e) {
-            error = 'Hiba történt a módosítás során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
+            notify.error(message);
         }
     }
 
     async function handleDelete() {
         try {
             await deleteColumnAsync(projectId, boardId, column.id);
+            notify.success('Oszlop törölve!');
             closeModal();
-        } catch (e) {
-            error = 'Hiba történt a törlés során! (Lehet hogy taskok vannak az oszlopban)';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a törlés során! (Lehet hogy taskok vannak az oszlopban)';
+            notify.error(message);
         }
     }
 </script>
@@ -120,21 +112,10 @@
                 <input type="text" bind:value={editName} placeholder="Oszlop neve">
                 Státusz:
                 <input type="text" bind:value={editMapsToStatus} placeholder="Státusz">
-                Legyen WIP limit?
-                <input type="checkbox" bind:checked={hasWip}>
-                {#if hasWip}
-                    WIP limit:
-                    <input type="number" bind:value={editWipLimit}>
-                {/if}
+                WIP limit (üresen hagyva = nincs limit):
+                <input type="number" min="1" bind:value={editWipLimit} placeholder="Nincs limit">
                 <button type="submit">Mentés</button>
             </form>
-        {/if}
-
-        {#if error}
-            <p id="failed">{error}</p>
-        {/if}
-        {#if success}
-            <p id="success">{success}</p>
         {/if}
     </div>
 </div>
@@ -277,6 +258,4 @@
         color: var(--text-primary);
         word-break: break-word;
     }
-    #success { color: var(--accent-green); }
-    #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 </style>

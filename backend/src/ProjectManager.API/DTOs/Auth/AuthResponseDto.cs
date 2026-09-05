@@ -9,5 +9,6 @@
         public string DisplayName {  get; set; } = string.Empty;
         public bool RequiresTotp { get; set; } = false;
         public bool IsTotpEnabled { get; set; } = false;
+        public bool RememberMe { get; set; } = false;
     }
 }

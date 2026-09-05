@@ -24,9 +24,9 @@ namespace ProjectManager.API.Model
         public uint xmin { get; set; }
 
         public Project Project { get; set; } = null!;
-        public Board Board { get; set; } = null!;
-        public ColumnDefinition ColumnDefinition { get; set; } = null!;
-        public Sprint Sprint { get; set; } = null!;
+        public Board? Board { get; set; }
+        public ColumnDefinition? ColumnDefinition { get; set; }
+        public Sprint? Sprint { get; set; }
         public User CreatedByUser { get; set; } = null!;
         public ICollection<TaskAssignment> TaskAssignments { get; set; } = new List<TaskAssignment>();
         public ICollection<LabelTask> AssignedLabels { get; set; } = new List<LabelTask>();

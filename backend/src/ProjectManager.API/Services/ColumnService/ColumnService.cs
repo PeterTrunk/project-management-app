@@ -189,7 +189,9 @@ namespace ProjectManager.API.Services.ColumnService
 
             var backlogColumn = await _context.ColumnDefinitions
                 .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == boardId);
+
             var columnIds = order.Select(o => o.Id).ToList();
+
             var columns = await _context.ColumnDefinitions
                 .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
                 .ToListAsync();
@@ -222,12 +224,41 @@ namespace ProjectManager.API.Services.ColumnService
                 }
 
                 await _context.SaveChangesAsync();
+
+                // Új utolsó oszlop meghatározása (legnagyobb position, kivéve 0)
+                var newLastColumnId = order
+                    .Where(o => o.Position > 0)
+                    .OrderByDescending(o => o.Position)
+                    .First().Id;
+
+                // Többi oszlop ID-jai
+                var nonLastColumnIds = order
+                    .Where(o => o.Id != newLastColumnId && o.Position > 0)
+                    .Select(o => o.Id)
+                    .ToList();
+
+                // Új utolsó oszlop taskjain completedAt beállítása
+                var tasksInNewLastColumn = await _context.ProjectTasks
+                    .Where(t => t.ColumnId == newLastColumnId && t.CompletedAt == null)
+                    .ToListAsync();
+                foreach (var task in tasksInNewLastColumn)
+                    task.CompletedAt = DateTime.UtcNow;
+
+                // Többi oszlop taskjain completedAt törlése
+                var tasksInOtherColumns = await _context.ProjectTasks
+                    .Where(t => nonLastColumnIds.Contains((Guid)t.ColumnId!) && t.CompletedAt != null)
+                    .ToListAsync();
+                foreach (var task in tasksInOtherColumns)
+                    task.CompletedAt = null;
+
+                await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 var updatedColumns = await _context.ColumnDefinitions
                     .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
                     .ToListAsync();
 
+                // ColumnsReordered broadcast
                 try
                 {
                     await _hubContext.Clients
@@ -246,6 +277,32 @@ namespace ProjectManager.API.Services.ColumnService
                 {
                     _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
                         "ColumnsReordered", projectId);
+                }
+
+                // TaskMoved broadcast az érintett taskokra
+                var allAffectedTasks = tasksInNewLastColumn.Concat(tasksInOtherColumns).ToList();
+                foreach (var task in allAffectedTasks)
+                {
+                    try
+                    {
+                        await _hubContext.Clients
+                            .Group($"project-{projectId}")
+                            .SendAsync("TaskMoved", new
+                            {
+                                taskId = task.Id,
+                                boardId = task.BoardId,
+                                columnId = task.ColumnId,
+                                sprintId = task.SprintId,
+                                position = task.Position,
+                                completedAt = task.CompletedAt,
+                                rowVersion = task.xmin
+                            });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                            "TaskMoved", projectId);
+                    }
                 }
 
                 return updatedColumns.Select(MapToDto).ToList();
@@ -275,7 +332,7 @@ namespace ProjectManager.API.Services.ColumnService
 
             if (dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;
-            if(dto.WipLimit != null) column.WipLimit = dto.WipLimit;
+            column.WipLimit = dto.WipLimit; //mindig frissítjük, az != null szabály ez esetben nem tartható mert NULL egy valid érték lehet.
 
             try
             {

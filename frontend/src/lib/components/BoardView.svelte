@@ -17,6 +17,8 @@
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
 
+    import { notify } from '../stores/notificationStore';
+
     import ColumnCard from './ColumnCard.svelte';
 
     import CreateColumnModal from './CreateColumnModal.svelte';
@@ -26,7 +28,7 @@
     import UpdateBoardModal from './UpdateBoardModal.svelte';
     import ColumnDetailModal from './ColumnDetailModal.svelte';
 
-    import { ChevronDown, Plus, Pencil, ArrowLeftRight, X, Search } from 'lucide-svelte';
+    import { ChevronDown, Plus, Pencil, ArrowLeftRight, X, Search, Funnel } from 'lucide-svelte';
 
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
@@ -34,6 +36,8 @@
     let isBoardCreationOpen = false;
     let isUpdateBoardOpen = false;
     let isColumnDetailOpen = false;
+
+    let isFilterToolbarOpen = false;
 
     let selectedColumn: ColumnResponse | null = null;
 
@@ -202,7 +206,12 @@
             //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
             //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
-        await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
+        try {
+            await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
+            notify.success('Oszlopok sorrendje módosítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba az oszlopok átrendezésekor!');
+        }
     }
 
     function handleTaskConsider(e: CustomEvent, columnId: string) {
@@ -250,7 +259,7 @@
             distributeTasks(updatedTasks);
 
         } catch (err: any) {
-            console.error('Backend hiba:', err.response?.data);
+            notify.error(err.response?.data ?? err.message ?? 'Hiba a task mozgatásakor!');
             isDragging = false;
             // Nem kell API újrahívás, a store már naprakész.
             distributeTasks(tasks);
@@ -305,53 +314,58 @@
         on:click={() => isReordering = !isReordering}>
         <ArrowLeftRight size={14} /> {isReordering ? 'Átrendezés aktív' : 'Átrendezés'}
     </button>
+    <button class="toolbar-btn" on:click={() => isFilterToolbarOpen = !isFilterToolbarOpen}>
+        <Funnel size={14} /> {isFilterToolbarOpen ? 'Szűrők elrejtése' : 'Szűrők'}
+    </button>
 </div>
 
-<div class="filter-toolbar">
-    <div class="search-wrapper">
-        <Search size={14} class="search-icon" />
-        <input
-            type="text"
-            class="search-input"
-            placeholder="Keresés..."
-            bind:value={searchQuery}
-        />
+{#if isFilterToolbarOpen}
+    <div class="filter-toolbar" class:hidden-mobile={!isFilterToolbarOpen}>
+        <div class="search-wrapper">
+            <Search size={14} class="search-icon" />
+            <input
+                type="text"
+                class="search-input"
+                placeholder="Keresés..."
+                bind:value={searchQuery}
+            />
+        </div>
+
+        <select class="filter-select" bind:value={filterAssigneeId}>
+            <option value="">Összes assignee</option>
+            {#each $teamStore.members as member}
+                <option value={member.userId}>{member.displayName}</option>
+            {/each}
+        </select>
+
+        <select class="filter-select" bind:value={filterPriority}>
+            <option value="">Összes prioritás</option>
+            <option value="low">Alacsony</option>
+            <option value="medium">Közepes</option>
+            <option value="high">Magas</option>
+            <option value="critical">Kritikus</option>
+        </select>
+
+        <select class="filter-select" bind:value={filterLabelId}>
+            <option value="">Összes label</option>
+            {#each allLabels as label}
+                <option value={label.id}>{label.name}</option>
+            {/each}
+        </select>
+
+        <select class="filter-select" bind:value={filterDue}>
+            <option value="">Minden határidő</option>
+            <option value="overdue">Lejárt</option>
+            <option value="due-soon">Hamarosan lejár</option>
+        </select>
+
+        {#if hasActiveFilter}
+            <button class="clear-btn" on:click={clearFilters}>
+                <X size={13} /> Törlés
+            </button>
+        {/if}
     </div>
-
-    <select class="filter-select" bind:value={filterAssigneeId}>
-        <option value="">Összes assignee</option>
-        {#each $teamStore.members as member}
-            <option value={member.userId}>{member.displayName}</option>
-        {/each}
-    </select>
-
-    <select class="filter-select" bind:value={filterPriority}>
-        <option value="">Összes prioritás</option>
-        <option value="low">Alacsony</option>
-        <option value="medium">Közepes</option>
-        <option value="high">Magas</option>
-        <option value="critical">Kritikus</option>
-    </select>
-
-    <select class="filter-select" bind:value={filterLabelId}>
-        <option value="">Összes label</option>
-        {#each allLabels as label}
-            <option value={label.id}>{label.name}</option>
-        {/each}
-    </select>
-
-    <select class="filter-select" bind:value={filterDue}>
-        <option value="">Minden határidő</option>
-        <option value="overdue">Lejárt</option>
-        <option value="due-soon">Hamarosan lejár</option>
-    </select>
-
-    {#if hasActiveFilter}
-        <button class="clear-btn" on:click={clearFilters}>
-            <X size={13} /> Törlés
-        </button>
-    {/if}
-</div>
+{/if}
 
 <div class="board-container" class:no-vertical-scroll={isReordering}>
     <h1>{activeBoard?.name}</h1>

@@ -1,9 +1,9 @@
 <script lang="ts">
     import { createProjectAsync } from '../../lib/api/projectApi';
-    
-    import { validateDescription, validateProjName } from '../validators';
 
     import { X } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let isProjectCreationOpen = false;  // AppLayout-ból vezéreljük
 
@@ -13,44 +13,20 @@
 
     let success = '';
     let error = '';
-
-    function validateProjKey(key: string): string | null{
-        let aggregateError = '';
-        if(!/^[A-Z0-9]+$/.test(key)) aggregateError += 'Hibás Projekt Kulcsa szignatúra! (Csak számok és nagybetűk, szóköz nélkül.)\n';
-        if(key.length > 255) aggregateError += 'Projekt Kulcsa nem lehet hosszabb mint 10 karakter!\n';
-        if(key.length < 2) aggregateError += 'Projekt Kulcsa nem lehett rövidebb 2 karakternél!\n';
-        return aggregateError === '' ? null : aggregateError;
-    }
-
+    
     async function handleCreateProject() {
         error = '';
-        let errorOccured: boolean = false;
-        const projNameError = validateProjName(name);
-        const projKeyError = validateProjKey(projKey);
-        const descriptionError = validateDescription(description);
-        if(projNameError!=null){
-            error = error + projNameError;
-            errorOccured = true;
-        }
-        if(projKeyError!=null){
-            error = error + projKeyError;
-            errorOccured = true;
-        }
-        if (descriptionError!=null) {
-            error = error + descriptionError;
-            errorOccured = true;
-        }
-        if(errorOccured) {
-            return;
-        }
         try {
             const response = await createProjectAsync({ name, projKey, description });
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             success = 'Sikeres Projekt létrehozás! Bezárhatja az ablakot';
+            notify.success('Projekt létrehozva!');
             
-        } catch (e) {
-            error = 'Hiba történt a létrehozás során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a létrehozás során!';
+            error = message;
+            notify.error(message);
         }
     }
 

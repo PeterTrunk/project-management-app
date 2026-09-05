@@ -3,7 +3,6 @@
     import { boardStore } from '../stores/boardStore';
     import { createTaskAsync } from '../api/taskApi';
     import type { ColumnResponse } from '../api/columnApi';
-    import { validateTaskTitle, validateTaskDescription, validateTaskDueDate } from '../validators';
     import LabelCard from './LabelCard.svelte';
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
@@ -11,6 +10,8 @@
     import { sprintStore } from '../stores/sprintStore';
 
     import { X, Plus } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let isTaskCreationOpen = false;
     export let isBacklogMode: boolean = false;
@@ -60,25 +61,6 @@
     async function handleCreateTask() {
         error = '';
         success = '';
-        let errorOccured = false;
-        const titleError = validateTaskTitle(title);
-        const descError = validateTaskDescription(description);
-        const dueDateError = validateTaskDueDate(new Date(dueDate));
-        if(titleError){
-            error = error + titleError;
-            errorOccured = true;
-        }
-        if(descError){
-            error = error + descError;
-            errorOccured = true;
-        }
-        if(dueDateError){
-            error = error + dueDateError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             const response = await createTaskAsync(projectId, {
                 columnId: isBacklogMode ? null : columnId,
@@ -91,15 +73,17 @@
                 dueDate: dueDate ? new Date(dueDate) : null
             });
             success = 'Task létrehozva!';
+            notify.success('Task létrehozva!');
             for (const labelId of selectedLabelIds) {
                 await addLabelToTaskAsync(projectId, response.id, labelId);
             }
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
-            
+                    
         } catch (e: any) {
-            console.error('Backend hiba:', e.response?.data);
-            error = 'Hiba történt az task létrehozásakor!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a task létrehozásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -159,7 +143,7 @@
                 <textarea placeholder="Leírás" bind:value={description}></textarea>
                 Válasszon prioritást 
                 <select bind:value={priority}>
-                    <option value="">Nincs prioritás</option>
+                    <option value="none">Nincs prioritás</option>
                     <option value="low">Alacsony</option>
                     <option value="medium">Közepes</option>
                     <option value="high">Magas</option>

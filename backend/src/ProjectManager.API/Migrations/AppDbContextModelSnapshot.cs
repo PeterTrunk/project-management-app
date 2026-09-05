@@ -110,9 +110,12 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("UploadedById")
                         .HasColumnType("uuid");
 
-                    b.HasKey("Id");
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
-                    b.HasIndex("ProjectId");
+                    b.HasKey("Id");
 
                     b.HasIndex("StorageKey")
                         .IsUnique();
@@ -122,6 +125,9 @@ namespace ProjectManager.API.Migrations
                     b.HasIndex("UploadedById");
 
                     b.HasIndex("TaskId", "AttachmentType");
+
+                    b.HasIndex("ProjectId", "FileName", "Version")
+                        .IsUnique();
 
                     b.ToTable("Attachments");
                 });
@@ -694,21 +700,17 @@ namespace ProjectManager.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("EstimateInMinutes")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
+                        .HasColumnType("integer");
 
                     b.Property<string>("Position")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("0");
+                        .HasColumnType("text");
 
                     b.Property<string>("Priority")
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
-                        .HasDefaultValue("normal");
+                        .HasDefaultValue("none");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
@@ -768,6 +770,11 @@ namespace ProjectManager.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsRevoked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("RememberMe")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);

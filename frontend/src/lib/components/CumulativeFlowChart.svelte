@@ -3,7 +3,7 @@
     import * as echarts from 'echarts';
     import type { CumulativeFlowDataPoint } from '../api/statisticsApi';
 
-    import { getChartColors } from '../cssVars';
+    import { getChartColors } from '../utils/cssVars';
     import { themeStore } from '../stores/themeStore';
 
     $: if (chart && data && $themeStore) {
@@ -14,14 +14,6 @@
 
     let chartContainer: HTMLDivElement;
     let chart: echarts.ECharts | null = null;
-
-    const statusColors: Record<string, string> = {
-        'Backlog': '#555555',
-        'ToDo': '#4a9eff',
-        'InProgress': '#f0a500',
-        'Done': '#4caf50',
-        'default': '#b39ddb'
-    };
 
     onMount(() => {
         chart = echarts.init(chartContainer, 'dark');

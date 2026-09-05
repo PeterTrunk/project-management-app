@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateCreateIntegration, validateWebhookSecret } from "../utils/validators";
 
 export interface IntegrationResponse {
     id: string;
@@ -26,6 +27,9 @@ export async function getIntegrationsAsync(projectId: string): Promise<Integrati
 }
 
 export async function createIntegrationAsync(projectId: string, data: CreateIntegrationRequest): Promise<IntegrationResponse> {
+    const error = validateCreateIntegration(data.provider, data.repoFullName, data.webhookSecret);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post(`/projects/${projectId}/integrations`, data);
     return response.data;
 }
@@ -44,5 +48,8 @@ export async function toggleIntegrationAsync(projectId: string, integrationId: s
 }
 
 export async function resetWebhookSecretAsync(projectId: string, integrationId: string, newSecret: string): Promise<void> {
+    const error = validateWebhookSecret(newSecret);
+    if (error) throw new Error(error);
+    
     await apiClient.post(`/projects/${projectId}/integrations/${integrationId}/reset-secret`, { newSecret });
 }

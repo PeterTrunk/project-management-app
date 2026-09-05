@@ -9,6 +9,8 @@
         BookOpen, ToggleLeft, ToggleRight, CircleCheck, Clock 
     } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let integration: IntegrationResponse;
     export let projectId: string;
 
@@ -41,8 +43,11 @@
                 try {
                     await deleteIntegrationAsync(projectId, integration.id);
                     removeIntegration(integration.id);
+                    notify.success('Integráció törölve!');
                 } catch (e: any) {
-                    error = e.response?.data ?? 'Hiba történt a törléskor!';
+                    const message = e.response?.data ?? e.message ?? 'Hiba történt a törléskor!';
+                    error = message;
+                    notify.error(message);
                 }
             },
             'Törlés'
@@ -57,8 +62,11 @@
                 try {
                     const updated = await regenerateWebhookTokenAsync(projectId, integration.id);
                     updateIntegration(updated);
+                    notify.success('Webhook token regenerálva!');
                 } catch (e: any) {
-                    error = e.response?.data ?? 'Hiba történt a regeneráláskor!';
+                    const message = e.response?.data ?? e.message ?? 'Hiba történt a regeneráláskor!';
+                    error = message;
+                    notify.error(message);
                 }
             },
             'Regenerálás'
@@ -70,7 +78,7 @@
             await toggleIntegrationAsync(projectId, integration.id, !integration.isEnabled);
             updateIntegration({ ...integration, isEnabled: !integration.isEnabled });
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt!');
         }
     }
 
@@ -84,10 +92,13 @@
         try {
             await resetWebhookSecretAsync(projectId, integration.id, newSecret);
             updateIntegration({ ...integration, isVerified: false });
+            notify.success('Webhook secret módosítva!');
             isResetSecretOpen = false;
             newSecret = '';
         } catch (e: any) {
-            resetError = e.response?.data ?? 'Hiba történt a secret reseteléskor!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a secret reseteléskor!';
+            resetError = message;
+            notify.error(message);
         } finally {
             resetLoading = false;
         }

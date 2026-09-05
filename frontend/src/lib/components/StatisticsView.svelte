@@ -14,6 +14,7 @@
         type VelocityDataPoint,
         type CumulativeFlowDataPoint
     } from '../api/statisticsApi';
+    import { getSprintsAsync } from '../api/sprintApi';
 
     import TaskStatusPieChart from './TaskStatusPieChart.svelte';
     import SprintBurndownChart from './SprintBurndownChart.svelte';
@@ -22,6 +23,8 @@
     import CumulativeFlowChart from './CumulativeFlowChart.svelte';
     import type { BoardResponse } from '../api/boardApi';
     import { boardStore } from '../stores/boardStore';
+
+    import { notify } from '../stores/notificationStore';
 
     export let projectId: string;
 
@@ -47,10 +50,7 @@
     let loadingCFD = false;
     let selectedBoardId: string ='';
 
-    let sprints: SprintResponse[] = [];
-    sprintStore.subscribe(state => {
-        sprints = state.sprints;
-    });
+    let allSprints: SprintResponse[] = [];
 
     let boards: BoardResponse[] = [];
     boardStore.subscribe(state => {
@@ -58,6 +58,12 @@
     });
 
     onMount(async () => {
+        //Completed sprintek is kellenek a szűrőhöz, (scope = null-ként kérjük)
+        try {
+            allSprints = await getSprintsAsync(projectId);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a sprintek lekérésekor!');
+        }
         await loadAll();
     });
 
@@ -77,8 +83,8 @@
                 projectId,
                 selectedSprintId || undefined
             );
-        } catch (e) {
-            console.error('Hiba a task státusz lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a task státusz adatok lekérésekor!');
         } finally {
             loadingStatus = false;
         }
@@ -89,8 +95,8 @@
         loadingBurndown = true;
         try {
             burndownData = await getBurndownAsync(projectId, selectedSprintId);
-        } catch (e) {
-            console.error('Hiba a burndown lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a burndown lekérésekor!');
         } finally {
             loadingBurndown = false;
         }
@@ -103,8 +109,8 @@
                 projectId,
                 selectedSprintId || undefined
             );
-        } catch (e) {
-            console.error('Hiba a workload lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a workload lekérésekor!');
         } finally {
             loadingWorkload = false;
         }
@@ -114,8 +120,8 @@
         loadingVelocity = true;
         try {
             velocityData = await getVelocityAsync(projectId);
-        } catch (e) {
-            console.error('Hiba a velocity lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a velocity lekérésekor!');
         } finally {
             loadingVelocity = false;
         }
@@ -124,13 +130,11 @@
     async function loadCumulativeFlow() {
         loadingCFD = true;
         try {
-            console.log('CFD params:', { projectId, dateFrom, dateTo, boardId: selectedBoardId });
             cumulativeFlowData = await getCumulativeFlowAsync(
                 projectId, dateFrom, dateTo, selectedBoardId
             );
-            console.log('CFD data:', cumulativeFlowData);
-        } catch (e) {
-            console.error('Hiba a CFD lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a CFD lekérésekor!');
         } finally {
             loadingCFD = false;
         }
@@ -161,7 +165,7 @@
                     bind:value={selectedSprintId}
                     on:change={handleSprintChange}>
                     <option value="">Összes sprint</option>
-                    {#each sprints as sprint}
+                    {#each allSprints as sprint}
                         <option value={sprint.id}>{sprint.name}</option>
                     {/each}
                 </select>
@@ -185,6 +189,8 @@
             <div class="chart-card scroll-x">
                 {#if loadingWorkload}
                     <div class="loading">Betöltés...</div>
+                {:else if selectedSprintId && allSprints.find(s => s.id === selectedSprintId)?.state === 'Completed'}
+                    <div class="empty">A Sprint befejezett, így nincs megjeleníthető adat.</div>
                 {:else if workloadData.length === 0}
                     <div class="empty">Nincs hozzárendelt task</div>
                 {:else}
@@ -282,6 +288,12 @@
         overflow: hidden;
     }
 
+    .scroll-x {
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-hover) var(--bg-primary);
+    }
+
     .statistics-toolbar {
         display: flex;
         align-items: center;
@@ -325,6 +337,11 @@
         color: var(--text-primary);
         padding: 0.3rem 0.5rem;
         font-size: 0.85rem;
+    }
+
+    .mode-toggle button:hover {
+        background: var(--border-hover);
+        color: var(--text-primary);
     }
 
     select:focus, input[type="date"]:focus {

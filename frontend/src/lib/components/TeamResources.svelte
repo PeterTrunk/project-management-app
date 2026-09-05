@@ -1,9 +1,12 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToMinIOAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
     import { getTasksAsync, type TaskResponse } from '../api/taskApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
+    import { signalRService } from '../services/signalRService';
+
+    import { notify } from '../stores/notificationStore';
 
     export let projectId: string;
 
@@ -12,17 +15,35 @@
     let attachments: AttachmentResponse[] = [];
     let loading = true;
     let isUploading = false;
-    let uploadError = '';
-    let error = '';
     let uploadProgress = 0;
-
+    
     onMount(async () => {
         await loadAttachments();
+
+        signalRService.on('AttachmentUploaded', (data) => {
+            if (data.projectId === projectId) loadAttachments();
+        });
+        
+        signalRService.on('AttachmentDeleted', (data) => {
+            if (data.projectId === projectId) loadAttachments();
+        });
     });
+
+    let searchQuery = '';
+
+    $: filteredAttachments = attachments.filter(a =>
+        a.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    $: filteredTaskAttachments = taskAttachments.map(ta => ({
+        ...ta,
+        attachments: ta.attachments.filter(a =>
+            a.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+    })).filter(ta => ta.attachments.length > 0);
 
     async function loadAttachments() {
         loading = true;
-        error = '';
         try {
             // Projekt szintű attachmentek
             attachments = await getProjectAttachmentsAsync(projectId);
@@ -35,7 +56,7 @@
                 attachments: t.attachments
             }));
         } catch (e: any) {
-            error = 'Hiba történt a fájlok lekérésekor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a fájlok lekérésekor!');
         } finally {
             loading = false;
         }
@@ -47,7 +68,6 @@
 
         const files = Array.from(input.files);
         isUploading = true;
-        uploadError = '';
 
         for (const file of files) {
             try {
@@ -68,9 +88,10 @@
                 // 3. Confirm
                 const uploaded = await confirmProjectUploadAsync(projectId, { storageKey });
                 attachments = [uploaded, ...attachments];
+                notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
-                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+                notify.error(e.response?.data ?? e.message ?? 'Hiba történt a feltöltéskor!');
             }
         }
 
@@ -78,30 +99,39 @@
         uploadProgress = 0;
         input.value = '';
     }
+
+    onDestroy(() => {
+        signalRService.off('AttachmentUploaded');
+        signalRService.off('AttachmentDeleted');
+    });
 </script>
 
 <div class="team-resources-container">
     <div class="resources-toolbar">
         <div class="toolbar-row wrap-480">
             <h2>Projekt dokumentumok ({attachments.length})</h2>
-            <label class="upload-btn btn-icon-text" class:loading={isUploading}>
-                {#if isUploading}
-                    Feltöltés... {uploadProgress > 0 ? uploadProgress + '%' : ''}
-                {:else}
-                    +<span class="btn-text"> Feltöltés</span>
-                {/if}
-                <input type="file" style="display: none" multiple on:change={handleFileUpload} disabled={isUploading} />
-            </label>
+            <div class="toolbar-actions">
+                <label class="upload-btn btn-icon-text" class:loading={isUploading}>
+                    {#if isUploading}
+                        Feltöltés... {uploadProgress > 0 ? uploadProgress + '%' : ''}
+                    {:else}
+                        +<span class="btn-text"> Feltöltés</span>
+                    {/if}
+                    <input type="file" style="display: none" multiple on:change={handleFileUpload} disabled={isUploading} />
+                </label>
+
+                <input 
+                    class="search-input-sm" 
+                    placeholder="Keresés..." 
+                    bind:value={searchQuery} 
+                />
+            </div>
         </div>
-        
+
         {#if isUploading && uploadProgress > 0}
             <div class="progress-bar">
                 <div class="progress-fill" style="width: {uploadProgress}%"></div>
             </div>
-        {/if}
-        
-        {#if uploadError}
-            <p class="msg error">{uploadError}</p>
         {/if}
     </div>
     <div class="resources-content">
@@ -110,9 +140,11 @@
             <h3>Projekt dokumentumok</h3>
             {#if attachments.length === 0}
                 <p class="empty">Nincsenek projekt szintű dokumentumok</p>
+            {:else if filteredAttachments.length === 0}
+                <p class="empty">Nincs találat a keresési feltételekre</p>
             {:else}
                 <div class="attachments-list">
-                    {#each attachments as attachment (attachment.id)}
+                    {#each filteredAttachments as attachment (attachment.id)}
                         <AttachmentCard
                             {attachment}
                             {projectId}
@@ -128,21 +160,30 @@
         {#if taskAttachments.length > 0}
             <div class="section">
                 <h3>Task csatolmányok</h3>
-                {#each taskAttachments as { task, attachments: taskFiles }}
-                    <div class="task-group">
-                        <h4 class="task-key">{task.taskKey} {task.title}</h4>
-                        <div class="attachments-list">
-                            {#each taskFiles as attachment (attachment.id)}
-                                <AttachmentCard
-                                    {attachment}
-                                    {projectId}
-                                    taskId={task.id}
-                                    onDelete={() => {}}
-                                />
-                            {/each}
+                {#if filteredTaskAttachments.length === 0}
+                    <p class="empty">Nincs találat a keresési feltételekre</p>
+                {:else}
+                    {#each filteredTaskAttachments as { task, attachments: taskFiles }}
+                        <div class="task-group">
+                            <h4 class="task-key">{task.taskKey} {task.title}</h4>
+                            <div class="attachments-list">
+                                {#each taskFiles as attachment (attachment.id)}
+                                    <AttachmentCard
+                                        {attachment}
+                                        {projectId}
+                                        taskId={task.id}
+                                        onDelete={(id) => {
+                                            taskAttachments = taskAttachments.map(ta => ({
+                                                ...ta,
+                                                attachments: ta.attachments.filter(a => a.id !== id)
+                                            })).filter(ta => ta.attachments.length > 0);
+                                        }}
+                                    />
+                                {/each}
+                            </div>
                         </div>
-                    </div>
-                {/each}
+                    {/each}
+                {/if}
             </div>
         {/if}
     </div>
@@ -173,15 +214,10 @@
         gap: 0.75rem;
     }
 
-    .msg {
-        font-size: 0.9rem;
-        padding: 0.5rem 0;
-    }
-
-    .msg.error {
-        color: var(--accent-red);
-        white-space: pre-line;
-        width: 100%;
+    .toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
     .progress-bar {
@@ -244,6 +280,21 @@
     .upload-btn:hover { background: var(--accent-green); color: #fff; }
     .upload-btn.loading { opacity: 0.5; cursor: not-allowed; }
 
+    .search-input-sm {
+        font-size: 0.9rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        color: var(--text-primary);
+        width: 200px;
+    }
+
+    .search-input-sm:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
     .task-group {
         margin-bottom: 1rem;
     }
@@ -258,5 +309,12 @@
         text-align: center;
         padding: 1rem;
         color: var(--text-muted);
+    }
+
+    .empty {
+        color: var(--text-muted);
+        font-size: var(--font-size-sm);
+        padding: 1rem 0;
+        text-align: center;
     }
 </style>

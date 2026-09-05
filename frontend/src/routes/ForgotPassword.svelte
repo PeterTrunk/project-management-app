@@ -13,7 +13,7 @@
             await forgotPasswordAsync(email);
             sent = true;
         } catch (e: any) {
-            error = 'Hiba történt!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt!';
         }
     }
 </script>

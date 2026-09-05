@@ -9,8 +9,11 @@
     import type { TaskResponse } from '../api/taskApi';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
+    import TaskPickerModal from '../components/TaskPickerModal.svelte';
 
     import { GitBranch, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let projectId: string;
 
@@ -20,6 +23,10 @@
     let tasks: TaskResponse[] = [];
     let loading = true;
     let error = '';
+
+    let isTaskPickerOpen = false;
+    let pendingCommitId = '';
+    let pendingPrId = '';
 
     // Task selector state
     let selectedCommitId: string | null = null;
@@ -50,12 +57,11 @@
 
     async function loadAll() {
         loading = true;
-        error = '';
         try {
             unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
             unmatchedPrs = await getUnmatchedPrsAsync(projectId);
         } catch (e: any) {
-            error = 'Hiba történt a git adatok lekérésekor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
         } finally {
             loading = false;
         }
@@ -68,8 +74,9 @@
             unmatchedCommits = unmatchedCommits.filter(c => c.id !== commitId);
             selectedCommitId = null;
             selectedTaskId = '';
+            notify.success('Commit hozzárendelve!');
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a hozzárendeléskor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
         }
     }
 
@@ -80,8 +87,41 @@
             unmatchedPrs = unmatchedPrs.filter(p => p.id !== prId);
             selectedPrId = null;
             selectedTaskId = '';
+            notify.success('PR hozzárendelve!');
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a hozzárendeléskor!';
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
+        }
+    }
+
+    function openTaskPickerForCommit(commitId: string) {
+        pendingCommitId = commitId;
+        pendingPrId = '';
+        isTaskPickerOpen = true;
+    }
+
+    function openTaskPickerForPr(prId: string) {
+        pendingPrId = prId;
+        pendingCommitId = '';
+        isTaskPickerOpen = true;
+    }
+
+    async function handleTaskSelected(taskId: string) {
+        try {
+            if (pendingCommitId) {
+                await assignCommitToTaskAsync(projectId, pendingCommitId, taskId);
+                notify.success('Commit hozzárendelve!');
+                unmatchedCommits = unmatchedCommits.filter(c => c.id !== pendingCommitId);
+            } else if (pendingPrId) {
+                await assignPrToTaskAsync(projectId, pendingPrId, taskId);
+                notify.success('PR hozzárendelve!');
+                unmatchedPrs = unmatchedPrs.filter(p => p.id !== pendingPrId);
+            }
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a hozzárendeléskor!');
+        } finally {
+            isTaskPickerOpen = false;
+            pendingCommitId = '';
+            pendingPrId = '';
         }
     }
     
@@ -143,33 +183,9 @@
                             <div class="unmatched-item">
                                 <CommitCard {commit} />
                                 <div class="assign-row">
-                                    {#if selectedCommitId === commit.id}
-                                        <select bind:value={selectedTaskId}>
-                                            <option value="">Válassz taskot...</option>
-                                            {#each tasks as task}
-                                                <option value={task.id}>
-                                                    {task.taskKey} — {task.title}
-                                                </option>
-                                            {/each}
-                                        </select>
-                                        <button 
-                                            class="assign-btn" 
-                                            disabled={!selectedTaskId}
-                                            on:click={() => handleAssignCommit(commit.id)}>
-                                            <CircleCheck size={14} /> Hozzárendelés
-                                        </button>
-                                        <button 
-                                            class="cancel-btn"
-                                            on:click={() => { selectedCommitId = null; selectedTaskId = ''; }}>
-                                            <X size={14} /> Mégse
-                                        </button>
-                                    {:else}
-                                        <button 
-                                            class="select-btn"
-                                            on:click={() => { selectedCommitId = commit.id; selectedTaskId = ''; }}>
-                                            <Plus size={14} /> Task hozzárendelése
-                                        </button>
-                                    {/if}
+                                    <button class="assign-btn" on:click={() => openTaskPickerForCommit(commit.id)}>
+                                        Hozzárendelés
+                                    </button>
                                 </div>
                             </div>
                         {/each}
@@ -188,33 +204,9 @@
                             <div class="unmatched-item">
                                 <PrCard {pr} />
                                 <div class="assign-row">
-                                    {#if selectedPrId === pr.id}
-                                        <select bind:value={selectedTaskId}>
-                                            <option value="">Válassz taskot...</option>
-                                            {#each tasks as task}
-                                                <option value={task.id}>
-                                                    {task.taskKey} — {task.title}
-                                                </option>
-                                            {/each}
-                                        </select>
-                                        <button 
-                                            class="assign-btn"
-                                            disabled={!selectedTaskId}
-                                            on:click={() => handleAssignPr(pr.id)}>
-                                            <CircleCheck size={14} /> Hozzárendelés
-                                        </button>
-                                        <button 
-                                            class="cancel-btn"
-                                            on:click={() => { selectedPrId = null; selectedTaskId = ''; }}>
-                                            <X size={14} /> Mégse
-                                        </button>
-                                    {:else}
-                                        <button 
-                                            class="select-btn"
-                                            on:click={() => { selectedPrId = pr.id; selectedTaskId = ''; }}>
-                                            <Plus size={14} /> Task hozzárendelése
-                                        </button>
-                                    {/if}
+                                    <button class="assign-btn" on:click={() => openTaskPickerForPr(pr.id)}>
+                                        Hozzárendelés
+                                    </button>
                                 </div>
                             </div>
                         {/each}
@@ -224,6 +216,13 @@
         {/if}
     </div>
 </div>
+
+<TaskPickerModal
+    isOpen={isTaskPickerOpen}
+    {projectId}
+    onSelect={handleTaskSelected}
+    onClose={() => { isTaskPickerOpen = false; pendingCommitId = ''; pendingPrId = ''; }}
+/>
 
 <style>
     .git-container {
@@ -339,22 +338,6 @@
         border-top: 1px solid var(--border-subtle);
     }
 
-    select {
-        flex: 1;
-        background: var(--bg-input);
-        border: 1px solid var(--border-hover);
-        border-radius: 6px;
-        color: var(--text-primary);
-        padding: 0.4rem 0.5rem;
-        font-size: 0.85rem;
-        min-width: 0;
-    }
-
-    select:focus {
-        outline: none;
-        border-color: var(--accent-blue);
-    }
-
     button {
         display: flex;
         align-items: center;
@@ -370,15 +353,9 @@
         transition: background 0.15s, color 0.15s;
     }
 
-    .select-btn { color: var(--accent-blue);  border-color: var(--accent-blue); }
-    .select-btn:hover { background: var(--accent-blue-bg); }
-
     .assign-btn { color: var(--accent-green); border-color: var(--accent-green); }
     .assign-btn:hover { background: var(--accent-green-bg); }
     .assign-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .cancel-btn { color: var(--accent-red); border-color: var(--accent-red); }
-    .cancel-btn:hover { background: var(--accent-red-bg); }
 
     .loading, .empty {
         text-align: center;

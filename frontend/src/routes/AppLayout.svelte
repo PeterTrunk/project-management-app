@@ -22,6 +22,9 @@
     import { getSprintsAsync } from '../lib/api/sprintApi';
     import { setSprints } from '../lib/stores/sprintStore';
 
+    import NotificationContainer from '../lib/components/NotificationContainer.svelte';
+    import { notify } from '../lib/stores/notificationStore';
+
     import { tokenStore } from '../lib/stores/tokenStore';
     import { scheduleTokenRefresh, cancelTokenRefresh } from '../lib/services/tokenRefreshService';
 
@@ -68,11 +71,6 @@
             sidebarCollapsed = window.innerWidth <= SIDEBAR_COLLAPSE_BREAKPOINT;
         }
     }
-
-    onMount(() => {
-        syncSidebarWithWidth();
-        window.addEventListener('resize', syncSidebarWithWidth);
-    });
 
     const navItems = [
         { view: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -131,11 +129,11 @@
         try {
             await resendVerificationAsync($authStore.user?.email ?? '');
             resendSent = true;
-        } catch (e) {
-            console.error('Hiba az email újraküldésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba az email újraküldésekor!');
         }
     }
-
+    
     onDestroy(async () => {
         unregisterSignalREvents();
         await signalRService.disconnect();
@@ -191,7 +189,8 @@
             currentProjectId = state.activeProject.id;
             activeView = 'overview';
             
-            signalRService.joinProject(state.activeProject.id).catch(console.error);
+            signalRService.joinProject(state.activeProject.id)
+                .catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekthez csatlakozáskor!'));
 
             // Párhuzamos initial load
             Promise.all([
@@ -213,7 +212,7 @@
                     .then(members => setMembers(members)),
                 getIntegrationsAsync(state.activeProject.id)
                     .then(integrations => setIntegrations(integrations))
-            ]).catch(console.error);
+            ]).catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!'));
         }
     });
 
@@ -222,13 +221,18 @@
         try {
             const data = await getProjectsAsync();
             setProjects(data);
-        } catch (e) {
-            console.error('Hiba a projektek lekérésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a projektek lekérésekor!');
         }
     }
 
-    loadCurrentUser();
-    loadProjects();
+    onMount(async () => {
+        syncSidebarWithWidth();
+        window.addEventListener('resize', syncSidebarWithWidth);
+
+        await loadCurrentUser();
+        loadProjects();
+    });
 
     let activeView = 'overview';
 </script>
@@ -282,6 +286,14 @@
                     <span>Új projekt</span>
                 {/if}
             </button>
+            <!-- Notif teszt gombok
+            <div style="display:flex; flex-direction:column; gap:0.25rem; margin-bottom:0.5rem;">
+                <button on:click={() => notify.success('Siker!')}>Success</button>
+                <button on:click={() => notify.error('Hiba!')}>Error</button>
+                <button on:click={() => notify.warning('Figyelem!')}>Warning</button>
+                <button on:click={() => notify.info('Info!')}>Info</button>
+            </div>
+            -->
         </div>
 
         <!-- User info -->
@@ -424,6 +436,9 @@
         </div>
     </div>
 </div>
+
+<NotificationContainer />
+
 <!--Modals-->
 {#if isProjectCreationOpen}
 <CreateProjectModal 

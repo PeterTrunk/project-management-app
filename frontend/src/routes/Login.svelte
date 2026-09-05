@@ -8,10 +8,11 @@
     let totpToken = '';
     let error = '';
     let requiresTotp = false;
+    let rememberMe = false;
 
     async function handleLogin() {
         try {
-            const response = await loginAsync({ email, password });
+            const response = await loginAsync({ email, password, rememberMe });
             
             if (response.requiresTotp) {
                 requiresTotp = true;
@@ -20,16 +21,16 @@
 
             finishLogin(response);
         } catch (e: any) {
-            error = e.response?.data ?? "Hibás email vagy jelszó!";
+            error = e.response?.data ?? e.message ?? "Hibás email vagy jelszó!";
         }
     }
 
     async function handleTotpLogin() {
         try {
-            const response = await loginWithTotpAsync({ email, password, totpToken });
+            const response = await loginWithTotpAsync({ email, password, totpToken, rememberMe });
             finishLogin(response);
         } catch (e: any) {
-            error = e.response?.data ?? "Érvénytelen TOTP token!";
+            error = e.response?.data ?? e.message ?? "Érvénytelen TOTP token!";
         }
     }
 
@@ -59,7 +60,11 @@
             <form on:submit|preventDefault={handleLogin}>
                 <input type="email" placeholder="Email" bind:value={email}/>
                 <input type="password" placeholder="Jelszó" bind:value={password}/>
-                <div class="forgot-password">
+                <div class="remember-forgot">
+                    <label class="remember-me">
+                        Bejelentkezve maradok
+                        <input type="checkbox" bind:checked={rememberMe} />
+                    </label>
                     <button type="button" class="link-btn" on:click={() => push('/forgot-password')}>
                         Elfelejtett jelszó?
                     </button>
@@ -201,9 +206,27 @@
         color: var(--text-primary);
     }
 
-    .forgot-password {
+    .remember-forgot {
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .remember-me {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+
+    .remember-me input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: var(--accent-blue);
+        margin: 0;
+        width: 14px;
+        height: 14px;
     }
 
     .link-btn {

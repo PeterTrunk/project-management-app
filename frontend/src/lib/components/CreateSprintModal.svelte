@@ -3,9 +3,10 @@
     import type { ProjectResponse } from '../api/projectApi';
     import { createSprintAsync } from '../api/sprintApi';
     import { projectStore } from '../stores/projectStore';
-    import { validateSprintDates, validateSprintGoal, validateSprintName } from '../validators';
 
     import { X } from 'lucide-svelte';
+
+    import { notify } from '../stores/notificationStore';
 
     export let isSprintCreationOpen = false;
     export let projectId: string;
@@ -31,26 +32,6 @@
     async function handleSprintCreation() {
         error = '';
         success = '';
-        let errorOccured = false;
-        let nameError = validateSprintName(name);
-        let goalError = validateSprintGoal(goal);
-        let dateError = validateSprintDates(startDate, endDate);
-        
-        if(nameError){
-            error = error + nameError;
-            errorOccured = true;
-        }
-        if(goalError){
-            error = error + goalError;
-            errorOccured = true;
-        }
-        if(dateError){
-            error = error + dateError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             await createSprintAsync(projectId, {
                 projectId: projectId,
@@ -63,8 +44,11 @@
             const button = document.getElementById('create') as HTMLButtonElement;
             button.disabled = true;
             success = 'Sprint létrehozva!';
-        } catch (e) {
-             error = 'Hiba történt a sprint létrehozásakor!';
+            notify.success('Sprint létrehozva!');
+        } catch (e: any) {
+             const message = e.response?.data ?? e.message ?? 'Hiba történt a sprint létrehozásakor!';
+             error = message;
+             notify.error(message);
         }
     }
 

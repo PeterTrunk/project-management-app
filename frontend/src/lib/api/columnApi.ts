@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import { validateCreateColumn, validateUpdateColumn, validateColumnOrder } from "../utils/validators";
 
 interface CreateColumnRequest {
     boardId: string;
@@ -37,11 +38,17 @@ export async function getColumnsAsync(projectId: string, boardId: string): Promi
 }
 
 export async function createColumnAsync(projectId: string, boardId: string, data: CreateColumnRequest): Promise<ColumnResponse> {
+    const error = validateCreateColumn(data.name, data.mapsToStatus, data.position);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post('/projects/'+projectId+'/boards/'+boardId+'/columns', data);
     return response.data;
 }
 
 export async function updateColumnAsync(projectId: string, boardId: string, columnId: string, data: UpdateColumnRequest): Promise<ColumnResponse> {
+    const error = validateUpdateColumn(data.name, data.mapsToStatus);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.patch('/projects/'+projectId+'/boards/'+boardId+'/columns/'+columnId, data);
     return response.data;
 }
@@ -51,6 +58,11 @@ export async function deleteColumnAsync(projectId: string, boardId: string, colu
 }
 
 export async function reorderColumnsAsync(projectId: string, boardId: string, order: ColumnOrderRequest[]): Promise<ColumnResponse[]> {
+    for (const col of order) {
+        const error = validateColumnOrder(col.position);
+        if (error) throw new Error(error);
+    }
+    
     const response = await apiClient.post('/projects/'+projectId+'/boards/'+boardId+'/columns/reorder', order);
     return response.data;
 }

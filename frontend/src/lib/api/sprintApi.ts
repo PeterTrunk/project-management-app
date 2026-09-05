@@ -1,5 +1,6 @@
 import apiClient from './client';
 import type { TaskResponse } from './taskApi';
+import { validateCreateSprint, validateUpdateSprint } from "../utils/validators";
 
 export interface SprintResponse {
     id: string;
@@ -39,11 +40,17 @@ export async function getSprintsAsync(projectId: string, scope?: string): Promis
 }
 
 export async function createSprintAsync(projectId: string, data: CreateSprintRequest): Promise<SprintResponse> {
+    const error = validateCreateSprint(data.name, data.goal, data.startDate, data.endDate);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post("/projects/"+ projectId +"/sprints", data);
     return response.data;
 }
 
 export async function updateSprintAsync(projectId: string, sprintId: string, data: UpdateSprintRequest): Promise<SprintResponse> {
+    const error = validateUpdateSprint(data.name, data.goal, data.startDate, data.endDate);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.put("/projects/"+ projectId +"/sprints/" + sprintId, data);
     return response.data
 }

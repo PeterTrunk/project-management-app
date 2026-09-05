@@ -2894,6 +2894,259 @@ Az ActivityCreated broadcast-oknál üres catch blokk volt -> hibák elnyelve, n
 - ActivityCreated broadcast-oknál üres catch -> LogError-re cserélve
 - AttachmentService ConfirmUploadAsync: UploadedBy betöltése SaveChangesAsync elé helyezve
 
+### Frontend validáció egységesítése
+
+**Probléma:**
+Hiányzó és inkonzisztens frontend validáció, API hívások előtt nem volt ellenőrzés vagy csak részbeli ellenőrzés történt,
+hibakezelés nem volt egységes.
+
+**Megoldás:**
+
+Validációs réteg átszervezése:
+- validationHelpers.ts létrehozva általános helper function-ökkel (required, maxLength, minLength, emailFormat, passwordStrength, dateNotPast, dateOrder)
+- validators.ts áthelyezve utils/ mappába, átírva helper function-ökkel
+- Minden (Ahova kellett, Get-ek esetében nem kell stb) API fájlba validáció bekötve hívás előtt
+- Aggregált hibák (minden mező egyszerre validálva)
+- Meglévő validációk egységesítése, nem meglévők pótlása
+
+### Egységes error handling és toast notification rendszer
+
+**Probléma:**
+Nem egységes hibakezelés, sikeres műveleteknél nincs visszajelzés,
+console.error() hívások production kódban.
+
+**Megoldás:**
+
+Toast notification rendszer:
+- notificationStore.ts létrehozva (success/error/warning/info típusok)
+- Auto-dismiss: success (5mp), info (8mp), error/warning manuális bezárás
+- NotificationContainer.svelte komponens (slide-in animáció)
+- Desktop: jobb alsó sarok, mobil: felső közép
+- Max 2 toast mobilon, 4 desktopon
+
+Egységes error handling pattern:
+- Minden catch blokkban: e.response?.data ?? e.message ?? fallback
+- Sikeres műveleteknél notify.success()
+- Form validációs hibák maradnak inline
+- console.error() -> notify.error() mindenhol
+
+### Backend és frontend validációs konzisztencia javítása
+
+**Probléma:**
+Inkonzisztenciák a frontend validáció, backend FluentValidation validátorok,
+AppDbContext konfiguráció és modell osztályok között.
+
+**Megoldás:**
+
+DB/modell javítások (migration):
+- Task Priority default: "normal" -> "none" (TaskPriority.None konstans hozzáadva)
+- Task Position default: 0.0 eltávolítva (LexoRank kezeli)
+- EstimateInMinutes default: 0 eltávolítva (null szemantikailag helyes)
+- Nullable navigation property-k: Actor?, Board?, ColumnDefinition?, Sprint?
+
+Backend validátor javítások:
+- CreateIntegrationDtoValidator: RepoFullName maxLength(200) hozzáadva
+
+Szándékos döntések dokumentálva:
+- WipLimit: csak megjelenítési adat, kikényszerítés tervezett fejlesztés
+- Sprint.Goal minLength(3): szándékos UX döntés (backend nem követeli)
+- MoveTaskAsync ColumnId.HasValue: nem okoz hibát, kihagyva
+- Board.Description: string.Empty megközelítés helyes
+
+### SignalR konzisztencia javítások
+
+**Probléma:**
+Attachment feltöltés/törlés, komment duplikáció és assignee hozzárendelés
+UI szinkronizációs problémák.
+
+**Megoldás:**
+
+Backend:
+- AttachmentUploaded SignalR broadcast hozzáadva ConfirmUploadAsync-ban
+- AttachmentDeleted SignalR broadcast hozzáadva DeleteAttachmentAsync-ban
+
+Frontend:
+- handleAttachmentUploaded és handleAttachmentDeleted hozzáadva taskStore-ba
+- AttachmentUploaded/Deleted események regisztrálva signalRClientService-ben
+- ProjectResources: task attachment törlés UI frissítés javítva
+- CommentSection: dupla komment megjelenés javítva (commentId alapú deduplikáció)
+- TaskDetailModal: assignee hozzáadás/eltávolítás setActiveTask mintára javítva
+
+### Bejelentkezve maradok funkció
+
+**Probléma:**
+Nem volt lehetőség bejelentkezve maradni böngésző újraindítás után,
+minden session cookie volt ami bezáráskor törlődött.
+
+**Megoldás:**
+
+Backend:
+- RefreshToken modell: RememberMe mező hozzáadva (bool, default false)
+- Migration: AddRememberMeToRefreshToken
+- LoginDto és LoginWithTotpDto: RememberMe mező hozzáadva
+- AuthResponseDto: RememberMe mező hozzáadva
+- SetRefreshTokenCookie: RememberMe alapján persistent (30 nap) vagy session cookie
+- RefreshTokenAsync: új token örökli az előző RememberMe értékét
+- LoginWithTotpAsync: ExpiresAt hardcoded 30 nap -> jwtOptions használata
+
+Frontend:
+- Login oldal: "Bejelentkezve maradok" checkbox hozzáadva
+- authApi.ts: LoginRequest és LoginWithTotpRequest RememberMe mezővel bővítve
+- apiClient: withCredentials: true bekapcsolva (ki volt kommentelve!)
+- AppLayout: loadCurrentUser await-elve loadProjects előtt (felesleges 401 errorok csökkentése)
+
+**Biztonsági megfontolások:**
+- RememberMe értéke szerver oldalon tárolódik (DB) nem kliens oldalon
+- Kliens nem befolyásolhatja a cookie élettartamát
+- Token rotation során az új token örökli a RememberMe értéket
+- Meglévő tokenek migration után default false értéket kapnak
+
+### Különböző UI és UX javítások
+
+**Priority megjelenítés egységesítése:**
+- TaskPriority.None konstans hozzáadva ("none" érték)
+- TaskCard: csak high/critical prioritás jelenik meg board nézetben
+- BacklogTaskCard: none/normal prioritás elrejtve
+- TaskDetailModal: none/normal esetén "Nincs" szöveg stílus nélkül
+- BoardView prioritás szűrő: marad ahogy van (összes lefedi a none-t)
+
+**Statistics view javítások:**
+- Completed sprintek betöltése az oldal megnyitásakor
+- Completed sprint kiválasztásakor helyes üzenet megjelenítése
+- sprintStore subscription eltávolítva (lokális lekérés helyette)
+
+**SignalR kapcsolat visszajelzések:**
+- onreconnecting -> notify.warning()
+- onreconnected -> notify.success()
+- onclose -> notify.error()
+- Kapcsolódási hiba -> notify.error()
+
+### ActivityFeed projekt váltás javítás
+
+**Probléma:**
+Overview nézetben projekt váltáskor az ActivityFeed nem töltötte újra az aktivitásokat,
+mert csak onMount-ban volt az adatlekérés.
+
+**Megoldás:**
+- onMount eltávolítva
+- Reaktív $: if (projectId) blokk hozzáadva
+- Projekt váltáskor automatikusan újratölti az aktivitásokat
+- Első renderkor is lefut -> onMount felesleges lett
+
+### Login rate limiting javítás
+
+**Probléma:**
+Email alapú rate limiting lehetővé tette hogy egy támadó
+szándékosan kizárjon más felhasználókat (DOS támadás).
+
+**Megoldás:**
+- Rate limit kulcs: login:{email} -> login:{ip}:{email}
+- Csak az adott IP-ről blokkolódik a felhasználó
+- IHttpContextAccessor injektálva AuthService-be
+- LoginWithTotp esetén is javítva
+
+### Fájl verziókezelés duplikált fájlneveknél
+
+**Probléma:**
+Azonos nevű fájlok feltöltésekor ütközés keletkezett, nem volt kezelve a duplikáció.
+
+**Megoldás:**
+- Version mező hozzáadva az Attachment modellhez (int, default 0, not nullable)
+- Unique constraint: ProjectId + FileName + Version együtt egyedi
+- Version 1, 2, 3... = további feltöltések azonos névvel
+- Race condition védelem: retry logika DbUpdateException esetén
+
+### SignalR attachment reaktivitás javítás
+
+**Probléma:**
+Task feltöltés/törlés nem frissült valós időben a TaskDetailModal-ban,
+duplikált attachment elemek jelentek meg feltöltés után.
+
+**Megoldás:**
+- handleAttachmentUploaded és handleAttachmentDeleted: activeTask frissítése tasks[] mellett
+- Deduplikáció: attachmentId alapú ellenőrzés mindkét helyen
+- SignalR broadcast kiegészítve teljes attachment adatokkal
+- TeamResources: SignalR figyelése külön
+
+### TaskStore reaktivitás javítás - Label és Assignee
+
+**Probléma:**
+Label és assignee hozzáadás/eltávolítás csak a tasks[] tömböt frissítette,
+az activeTask nem frissült -> TaskDetailModal nem mutatott helyes állapotot.
+
+**Megoldás:**
+- handleTaskAssigneeAdded/Removed: activeTask frissítése tasks[] mellett
+- handleTaskLabelAdded/Removed: activeTask frissítése tasks[] mellett
+- Deduplikáció hozzáadva *Added függvényeknél (label / member stb...)
+
+### Fájl keresés TeamResources-ben
+
+**Probléma:**
+Sok fájl esetén nehéz lehet megtalálni a keresett dokumentumot.
+
+**Megoldás:**
+- Fájlnév alapú kereső hozzáadva
+- Szűrés projekt és task szintű fájlokra egyaránt érvényes
+
+### Member és Label kereső TaskDetailModal-ban
+
+**Probléma:**
+Sok member/label esetén nehéz lehet megtalálni a keresett elemet.
+
+**Megoldás:**
+- Kereső mező hozzáadva (member: név + email, label: név)
+- Alapból max X elem látható...
+- "Mutass többet" gomb ha több van
+
+### Projekt törlés megerősítés erősítése
+
+**Probléma:**
+A projekt törléshez csak egy egyszerű ConfirmModal volt,
+ami könnyen véletlenül megnyomható.
+
+**Megoldás:**
+- Törlés gomb -> névbegépelős mező jelenik meg
+- User begépeli a projekt nevét -> csak akkor aktív a törlés gomb
+- Törlés gomb -> ConfirmModal megerősítés
+- Kétszeres megerősítés: névbegépelés + ConfirmModal
+- Törlés gomb Mégsem-re vált amíg a névbegépelő nyitva van
+- Egy fokkal erősebb, de talán még egy Login-os megerősítés is kéne hogy ellenőrizve legyen hogy tényleg a jogosult személy ül a gépnél.
+
+### Column reorder completedAt frissítés
+
+**Probléma:**
+Oszlopok átrendezésekor a taskok CompletedAt mezője nem frissült,
+így az új utolsó oszlopban lévő taskok nem lettek befejezettnek jelölve.
+
+**Megoldás:**
+- Új utolsó oszlop taskjain: completedAt beállítás
+- Többi oszlop taskjain: completedAt törlése
+- TaskMoved SignalR broadcast csak az érintett taskokra
+- Activity log nem szükséges (rendszer művelet)
+
+### WIP limit frissítés javítás
+
+**Probléma:**
+WIP limit törlése (null-ra állítása) nem működött,
+mert a service csak nem-null értéket frissített.
+
+**Megoldás:**
+- WipLimit mindig frissítve függetlenül a null értéktől
+- null = nincs WIP limit (szándékos törlés)
+
+### Commit/PR task hozzárendelés UI javítás
+
+**Probléma:**
+Commit és PR hozzárendelésnél nem volt keresési lehetőség,
+csak görgetéssel lehetett taskot találni a select-tag-ben ami nagy projektnél nagyon macerás lenne.
+
+**Megoldás:**
+- TaskPickerModal komponens létrehozva
+- Taskok és sprintek lazy load (modal megnyitásakor töltjük be a taskokat)
+- Keresés: task cím és task key alapján
+- Szűrés: sprint alapján (completed sprintek is elérhetőek)
+- A kiválasztottat fogjuk hozzárendelni
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

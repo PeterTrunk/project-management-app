@@ -13,10 +13,14 @@ namespace ProjectManager.API.Controllers
     public class BoardController : ControllerBase
     {
         private readonly IBoardService _boardService;
+        private readonly ILogger<BoardController> _logger;
 
-        public BoardController(IBoardService boardService)
+        public BoardController(
+            IBoardService boardService,
+            ILogger<BoardController> logger)
         {
             _boardService = boardService;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -32,6 +36,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -49,6 +54,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -68,6 +74,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -85,6 +92,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

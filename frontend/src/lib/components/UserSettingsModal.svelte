@@ -1,7 +1,6 @@
 <script lang="ts">
     import { authStore, login } from '../stores/authStore';
     import { changePasswordAsync, updateProfileAsync, resendVerificationAsync, meAsync } from '../api/authApi';
-    import { validateDisplayName, validatePassword } from '../validators';
     import { setupTotpAsync, verifyTotpAsync, disableTotpAsync } from '../api/authApi';
     import ConfirmModal from './ConfirmModal.svelte';
     import { tokenStore } from '../stores/tokenStore';
@@ -9,6 +8,8 @@
     import { themeStore, toggleTheme } from '../stores/themeStore';
     import { X, User, KeyRound, Pencil, Sun, Moon, ShieldCheck, Copy, Check, ShieldAlert } from 'lucide-svelte';
     import QRCode from 'qrcode';
+
+    import { notify } from '../stores/notificationStore';
 
     let currentTheme = 'dark';
     themeStore.subscribe(t => currentTheme = t);
@@ -64,27 +65,20 @@
             error = 'Új jelszó megerősítés sikertelen, jelszavak nem egyeznek!'
             return;
         }
-        const newPasswordError = validatePassword(newPassword);
-        if(newPasswordError!=null){
-            error = newPasswordError;
-            return;            
-        }
         try {
             var response = await changePasswordAsync({ currentPassword, newPassword });
             success = 'Sikeres változtatás!';
-        } catch (e) {
-            error = 'Hiba történt a jelszóváltoztatás közben!';
+            notify.success('Sikeres változtatás!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a jelszóváltoztatás közben!';
+            error = message;
+            notify.error(message);
         }
     }
 
     async function handleProfileChange() {
         error = '';
         success = '';
-        const displayNameError = validateDisplayName(newDisplayName);
-        if (displayNameError != null) {
-            error = displayNameError;
-            return;
-        }
         try {
             var response = await updateProfileAsync({ displayName: newDisplayName });
             login(tokenStore.get() ?? '', {
@@ -95,7 +89,12 @@
                 isEmailVerified: $authStore.user?.isEmailVerified ?? false
             });
             success = 'Profil frissítve!';
-        } catch (e) { }
+            notify.success('Profil módosítva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a profil módosítása során!';
+            error = message;
+            notify.error(message);
+        }
     }
 
     async function handleSetupTotp() {
@@ -105,8 +104,10 @@
             totpSetupUri = response.otpAuthUri;
             totpQrCode = await QRCode.toDataURL(response.otpAuthUri);
             totpStep = 'setup';
-        } catch (e) {
-            error = 'Hiba történt a 2FA beállításakor!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a 2FA beállításakor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -125,8 +126,11 @@
             totpStep = 'idle';
             totpToken = '';
             success = '2FA sikeresen aktiválva!';
-        } catch (e) {
-            error = 'Érvénytelen TOTP token!';
+            notify.success('2FA sikeresen aktiválva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Érvénytelen TOTP token!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -143,8 +147,11 @@
                 isEmailVerified: $authStore.user?.isEmailVerified ?? false
             });
             success = '2FA kikapcsolva!';
-        } catch (e) {
-            error = 'Hiba történt a 2FA kikapcsolásakor!';
+            notify.success('2FA kikapcsolva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a 2FA kikapcsolásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -152,8 +159,10 @@
         try {
             await resendVerificationAsync(email);
             resendSent = true;
-        } catch (e) {
-            error = 'Hiba az email újraküldésekor!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba az email újraküldésekor!';
+            error = message;
+            notify.error(message);
         }
     }
 
@@ -168,8 +177,8 @@
                 isTotpEnabled: user.isTotpEnabled ?? false,
                 isEmailVerified: user.isEmailVerified ?? false
             });
-        } catch (e) {
-            console.error('Hiba a profil frissítésekor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a profil frissítésekor!');
         }
     }
 

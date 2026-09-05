@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateDateRange } from "../utils/validators";
 
 export interface TaskStatusDistribution {
     status: string;
@@ -65,6 +66,9 @@ export async function getVelocityAsync(projectId: string): Promise<VelocityDataP
 }
 
 export async function getCumulativeFlowAsync(projectId: string, dateFrom: string, dateTo: string, boardId?: string): Promise<CumulativeFlowDataPoint[]> {
+    const error = validateDateRange(dateFrom, dateTo);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.get(
         `/projects/${projectId}/statistics/cumulative-flow`,
         { params: { dateFrom, dateTo, boardId } }

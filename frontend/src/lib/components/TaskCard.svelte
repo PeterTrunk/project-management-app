@@ -50,11 +50,9 @@
     >
     <div class="task-header">
         <p class="task-key">{task.taskKey}</p>
-        <!--
-        {#if task.priority}
+        {#if task.priority === 'high' || task.priority === 'critical'}
             <span class="priority priority-{task.priority}">{task.priority}</span>
         {/if} 
-        -->
     </div>
     <p class="task-title">{task.title}</p>
     {#if task.labelIds.length > 0}
@@ -162,6 +160,17 @@
     .task-card.overdue   { border-left: 3px solid var(--accent-red); }
     .task-card.due-soon  { border-left: 3px solid var(--accent-yellow); }
     .task-card.completed { border-left: 3px solid var(--accent-green); }
+
+    .priority {
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+
+    .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }
+    .priority-critical { background: var(--accent-red-bg);    color: var(--accent-red); }
 
     .completed-badge {
         display: flex;

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Model;
 
 namespace ProjectManager.API.Data;
@@ -123,14 +124,12 @@ public class AppDbContext : DbContext
                   .HasForeignKey(rt => rt.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(rt => rt.RememberMe)
+                  .HasDefaultValue(false); //Remember Me
+
             //Indexes
             entity.HasIndex(rt => rt.Token)
                   .IsUnique();
-
-            //Foreign keys
-            entity.HasOne(rt => rt.User)
-                  .WithMany(u => u.RefreshTokens)
-                  .HasForeignKey(rt => rt.UserId);
         });
         
         modelBuilder.Entity<Role>(entity =>
@@ -369,14 +368,12 @@ public class AppDbContext : DbContext
 
             entity.Property(t => t.Priority)
                   .HasMaxLength(16)
-                  .HasDefaultValue("normal");
+                  .HasDefaultValue(TaskPrioritys.None);
 
             entity.Property(t => t.Position)
-                  .IsRequired()
-                  .HasDefaultValue(0.0);
+                  .IsRequired();
 
-            entity.Property(t => t.EstimateInMinutes)
-                  .HasDefaultValue(0);
+            entity.Property(t => t.EstimateInMinutes);
 
             entity.Property(t => t.CreatedAt)
                   .IsRequired();
@@ -539,12 +536,20 @@ public class AppDbContext : DbContext
             entity.Property(a => a.CreatedAt)
                   .IsRequired();
 
+            entity.Property(a => a.Version)
+                  .IsRequired()
+                  .HasDefaultValue(0);
+
+
             //Indexes
             entity.HasIndex(a => a.TaskId);
             entity.HasIndex(a => a.UploadedById);
             entity.HasIndex(a => new { a.TaskId, a.AttachmentType });
 
             entity.HasIndex(a => a.StorageKey)
+                  .IsUnique();
+
+            entity.HasIndex(a => new { a.ProjectId, a.FileName, a.Version })
                   .IsUnique();
 
             //Foreign keys

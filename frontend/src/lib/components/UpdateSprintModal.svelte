@@ -1,7 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { updateSprintAsync, type SprintResponse } from '../api/sprintApi';
-    import { validateSprintName, validateSprintGoal, validateSprintDates } from '../validators';
+    
+    import { notify } from '../stores/notificationStore';
 
     export let isUpdateSprintOpen = false;
     export let projectId: string;
@@ -32,17 +33,6 @@
     async function handleUpdateSprint() {
         error = '';
         success = '';
-        let errorOccured = false;
-
-        const nameError = validateSprintName(name);
-        const goalError = validateSprintGoal(goal);
-        const dateError = validateSprintDates(startDate, endDate);
-
-        if (nameError) { error += nameError; errorOccured = true; }
-        if (goalError) { error += goalError; errorOccured = true; }
-        if (dateError) { error += dateError; errorOccured = true; }
-        if (errorOccured) return;
-
         try {
             await updateSprintAsync(projectId, sprint.id, {
                 name,
@@ -52,8 +42,11 @@
                 rowVersion: sprint.rowVersion ?? ''
             });
             success = 'Sprint módosítva!';
-        } catch (e) {
-            error = 'Hiba történt a sprint módosítása során!';
+            notify.success('Sprint módosítva!');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a sprint módosítása során!';
+            error = message;
+            notify.error(message);
         }
     }
 </script>

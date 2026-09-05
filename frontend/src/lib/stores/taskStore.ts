@@ -134,47 +134,63 @@ export function handleTasksRebalanced(payload: {
 }
 
 export function handleTaskAssigneeAdded(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
-                ? { ...t, assigneeIds: [...t.assigneeIds, payload.userId] }
+                ? { ...t, assigneeIds: t.assigneeIds.includes(payload.userId) 
+                    ? t.assigneeIds 
+                    : [...t.assigneeIds, payload.userId] }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskAssigneeRemoved(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t, assigneeIds: t.assigneeIds.filter(id => id !== payload.userId) }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskLabelAdded(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
-                ? { ...t, labelIds: [...t.labelIds, payload.labelId] }
+                ? { ...t, labelIds: t.labelIds.includes(payload.labelId)
+                    ? t.labelIds
+                    : [...t.labelIds, payload.labelId] }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleTaskLabelRemoved(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t, labelIds: t.labelIds.filter(id => id !== payload.labelId) }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleCommitLinked(payload: {
@@ -208,4 +224,90 @@ export function handlePrLinked(payload: {
                 : t
         )
     }));
+}
+
+export function handleAttachmentUploaded(payload: {
+    attachmentId: string;
+    projectId: string;
+    taskId: string | null;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    attachmentType: string;
+    uploadedByName: string;
+    version: number;
+    createdAt: string;
+}) {
+    if (!payload.taskId) return;
+    
+    taskStore.update(state => {
+        const newAttachment = {
+            id: payload.attachmentId,
+            projectId: payload.projectId,
+            taskId: payload.taskId,
+            fileName: payload.fileName,
+            contentType: payload.contentType,
+            sizeBytes: payload.sizeBytes,
+            attachmentType: payload.attachmentType,
+            uploadedByName: payload.uploadedByName,
+            version: payload.version,
+            createdAt: payload.createdAt
+        };
+        
+        const updatedTasks = state.tasks.map(task =>
+            task.id === payload.taskId
+                ? {
+                    ...task,
+                    attachments: task.attachments.some(a => a.id === payload.attachmentId)
+                        ? task.attachments  // már megvan → skip
+                        : [...(task.attachments ?? []), newAttachment]
+                }
+                : task
+        );
+
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? {
+                ...state.activeTask,
+                attachments: state.activeTask.attachments.some(a => a.id === payload.attachmentId)
+                    ? state.activeTask.attachments  // már megvan → skip
+                    : [...(state.activeTask.attachments ?? []), newAttachment]
+            }
+            : state.activeTask;
+
+        return {
+            ...state,
+            tasks: updatedTasks,
+            activeTask: updatedActiveTask
+        };
+    });
+}
+
+export function handleAttachmentDeleted(payload: {
+    attachmentId: string;
+    projectId: string;
+    taskId: string | null;
+}) {
+    if (!payload.taskId) return;
+    
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(task =>
+            task.id === payload.taskId
+                ? {
+                    ...task,
+                    attachments: task.attachments.filter(a => a.id !== payload.attachmentId)
+                }
+                : task
+        );
+
+        //Active Taskot külön.
+        const updatedActiveTask = state.activeTask?.id === payload.taskId
+            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
+            : state.activeTask;
+        
+        return {
+            ...state,
+            tasks: updatedTasks,
+            activeTask: updatedActiveTask
+        };
+    });
 }

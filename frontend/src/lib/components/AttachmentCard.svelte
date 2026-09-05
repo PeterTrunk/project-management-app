@@ -4,6 +4,8 @@
 
     import { Image, FileText, Sheet, FilePen, Paperclip, Download, Trash2, Check, X } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let attachment: AttachmentResponse;
     export let projectId: string;
     export let taskId: string | null = null;
@@ -31,8 +33,8 @@
     async function handleDownload() {
         try {
             await downloadAttachmentAsync(projectId, attachment.id, attachment.fileName);
-        } catch (e) {
-            console.error('Hiba a letöltéskor!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a letöltéskor!');
         }
     }
 
@@ -41,8 +43,9 @@
         try {
             await deleteAttachmentAsync(projectId, attachment.id);
             onDelete(attachment.id);
-        } catch (e) {
-            console.error('Hiba a törléskor!');
+            notify.success('File törlése sikeres!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a törléskor!');
         } finally {
             deleting = false;
             showConfirm = false;
@@ -55,9 +58,18 @@
         <svelte:component this={getAttachmentIcon(attachment.attachmentType)} size={18} />
     </span>
     <div class="attachment-info">
-        <span class="attachment-name">{attachment.fileName}</span>
+        <span class="attachment-name">
+            {attachment.fileName}{attachment.version > 0 ? ` (v${attachment.version})` : ''}
+        </span>
         <span class="attachment-meta">
-            {formatFileSize(attachment.sizeBytes)} · {attachment.uploadedByName}
+            {formatFileSize(attachment.sizeBytes)} · {attachment.uploadedByName} · 
+            {new Date(attachment.createdAt).toLocaleString('hu-HU', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            })}
         </span>
     </div>
     <div class="attachment-actions">

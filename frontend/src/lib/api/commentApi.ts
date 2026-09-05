@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { validateComment } from "../utils/validators";
 
 export interface CommentResponse {
     id: string;
@@ -20,6 +21,9 @@ export async function getCommentsAsync(projectId: string, taskId: string): Promi
 }
 
 export async function createCommentAsync(projectId: string, taskId: string, data: CreateCommentRequest): Promise<CommentResponse> {
+    const error = validateComment(data.body);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post('/projects/' + projectId + '/tasks/' + taskId + '/comments', data);
     return response.data;
 }

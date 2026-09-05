@@ -11,6 +11,10 @@
 
     export let projectId: string;
 
+    $: if (projectId) {
+        loadActivities();
+    }
+
     let activities: ActivityResponse[] = [];
     let loading = true;
     let loadingMore = false;
@@ -40,10 +44,6 @@
         : [...liveActivities, ...activities]
             .filter((a, i, arr) => arr.findIndex(b => b.id === a.id) === i);
 
-    onMount(async () => {
-        await loadActivities();
-    });
-
     async function loadActivities() {
         loading = true;
         activities = [];
@@ -62,7 +62,7 @@
             hasMore = data.length === PAGE_SIZE;
             page = 1;
         } catch (e: any) {
-            error = 'Hiba történt az aktivitások lekérésekor!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt az aktivitások lekérésekor!';
         } finally {
             loading = false;
         }
@@ -85,7 +85,7 @@
             hasMore = data.length === PAGE_SIZE;
             page = nextPage;
         } catch (e: any) {
-            error = 'Hiba történt a betöltéskor!';
+            error = e.response?.data ?? e.message ?? 'Hiba történt a betöltéskor!';
         } finally {
             loadingMore = false;
         }

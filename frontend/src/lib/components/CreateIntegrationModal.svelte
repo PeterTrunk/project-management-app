@@ -4,6 +4,8 @@
 
     import { GitBranch, Plus, TriangleAlert } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+
     export let isOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
@@ -43,9 +45,12 @@
                 webhookSecret,
                 accessToken: accessToken || null
             });
+            notify.success('Integráció létrehozva!');
             closeModal();
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt az integráció létrehozásakor!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt az integráció létrehozásakor!';
+            error = message;
+            notify.error(message);
         } finally {
             loading = false;
         }

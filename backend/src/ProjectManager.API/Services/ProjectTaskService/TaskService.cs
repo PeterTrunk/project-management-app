@@ -240,7 +240,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 // Optimálisabb: Valószinüleg nem kell alapvetően a Completed Sprintekhez tartozó taskok, ha mégis kell akkor külön le lehet kérni.
                 query = query.Where(t =>
                     t.SprintId == null ||
-                    t.Sprint.State == "Active" ||
+                    t.Sprint!.State == "Active" ||
                     t.Sprint.State == "Planning");
             }
             else if (sprintId.HasValue)
@@ -351,6 +351,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
                 if (column == null)
                     throw new Exception("Oszlop nem található");
+
+                if (column.WipLimit.HasValue)
+                {
+                    var currentTaskCount = await _context.ProjectTasks
+                        .CountAsync(t => t.ColumnId == dto.ColumnId && t.Id != taskId);
+
+                    if (currentTaskCount >= column.WipLimit.Value)
+                        throw new Exception($"Az oszlop WIP limitje ({column.WipLimit.Value}) elérte a maximumot!");
+                }
             }
 
             ProjectTask? prevTask = null;

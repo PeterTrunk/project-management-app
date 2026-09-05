@@ -18,11 +18,14 @@ namespace ProjectManager.API.Controllers
     public class GitController : ControllerBase
     {
         private readonly IGitService _gitService;
-        
+        private readonly ILogger<GitController> _logger;
 
-        public GitController(IGitService gitService)
+        public GitController(
+            IGitService gitService,
+            ILogger<GitController> logger)
         {
             _gitService = gitService;
+            _logger = logger;
         }
         
         [HttpGet("unmatched-commits")]
@@ -37,6 +40,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -53,6 +57,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -69,6 +74,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }
@@ -85,6 +91,7 @@ namespace ProjectManager.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
         }

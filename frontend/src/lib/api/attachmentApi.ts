@@ -1,5 +1,6 @@
 import apiClient from './client';
 import axios from 'axios';
+import { validateFileUpload } from '../utils/validators.ts';
 
 export interface AttachmentResponse {
     id: string;
@@ -10,6 +11,7 @@ export interface AttachmentResponse {
     sizeBytes: number;
     attachmentType: string;
     uploadedByName: string;
+    version: number;
     createdAt: string;
 }
 
@@ -42,11 +44,17 @@ export async function getProjectAttachmentsAsync(projectId: string): Promise<Att
 
 // PRESIGNED URL generálás
 export async function getTaskPresignedUrlAsync(projectId: string, taskId: string, data: PresignedUrlRequest): Promise<PresignedUrlResponse> {
+    const error = validateFileUpload(data.fileName, data.sizeBytes, data.contentType);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/attachments/presigned`, data);
     return response.data;
 }
 
 export async function getProjectPresignedUrlAsync(projectId: string, data: PresignedUrlRequest): Promise<PresignedUrlResponse> {
+    const error = validateFileUpload(data.fileName, data.sizeBytes, data.contentType);
+    if (error) throw new Error(error);
+    
     const response = await apiClient.post(`/projects/${projectId}/attachments/presigned`, data);
     return response.data;
 }

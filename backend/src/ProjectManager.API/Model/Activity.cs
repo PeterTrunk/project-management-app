@@ -13,6 +13,6 @@
         public DateTime CreatedAt { get; set; }
 
         public Project Project { get; set; } = null!;
-        public User Actor { get; set; } = null!;
+        public User? Actor { get; set; }
     }
 }

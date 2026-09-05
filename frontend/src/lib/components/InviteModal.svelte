@@ -4,6 +4,8 @@
 
     import { Copy, Check, RefreshCw } from 'lucide-svelte';
 
+    import { notify } from '../stores/notificationStore';
+    
     export let isInviteModalOpen = false;
     export let projectId: string;
     export let onClose: () => void = () => {};
@@ -31,8 +33,11 @@
                 maxUses,
                 expiresInDays
             });
+            notify.success('Meghívó link létrehozva!');
         } catch (e: any) {
-            error = e.response?.data ?? 'Hiba történt a meghívó generálásakor!';
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a meghívó generálásakor!';
+            error = message;
+            notify.error(message);
         }
     }
 

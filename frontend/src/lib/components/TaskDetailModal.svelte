@@ -4,7 +4,6 @@
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
-    import { validateTaskTitle, validateTaskDescription } from '../validators';
     import CommentSection from './CommentSection.svelte';
     import { getLabelsAsync, addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
     import { projectStore, setLabels } from '../stores/projectStore';
@@ -23,6 +22,8 @@
 
     import { X, Pencil, Trash2, Info, Paperclip, GitBranch, Plus, MessageSquare } from 'lucide-svelte';
     
+    import { notify } from '../stores/notificationStore';
+
     let activeDetailTab: 'details' | 'attachments' | 'git' | 'comments' = 'details';
 
     export let task: TaskResponse;
@@ -37,7 +38,7 @@
     $: sprintName = task.sprintId
         ? (sprints.find(s => s.id === task.sprintId)?.name ?? 'Ismeretlen sprint')
         : null;
-
+    
     $: currentTask = $taskStore.activeTask ?? task;
 
     export let projectId: string;
@@ -57,10 +58,36 @@
     let editDueDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '';
 
     let attachments: AttachmentResponse[] = [];
-    $: attachments = (task.attachments ?? []) as AttachmentResponse[];
+    $: attachments = (currentTask.attachments ?? []) as AttachmentResponse[];
     let isUploading = false;
     let uploadProgress = 0;
     let uploadError = '';
+
+    let memberSearch = '';
+    let labelSearch = '';
+    let showAllMembers = false;
+    let showAllLabels = false;
+
+    $: filteredMembers = members.filter(m =>
+        m.displayName.toLowerCase().includes(memberSearch.toLowerCase()) ||
+        m.email.toLowerCase().includes(memberSearch.toLowerCase())
+    );
+
+    $: visibleMembers = memberSearch
+        ? filteredMembers
+        : showAllMembers
+            ? filteredMembers
+            : filteredMembers.slice(0, 3);
+
+    $: filteredLabels = allLabels.filter(l =>
+        l.name.toLowerCase().includes(labelSearch.toLowerCase())
+    );
+
+    $: visibleLabels = labelSearch
+        ? filteredLabels
+        : showAllLabels
+            ? filteredLabels
+            : filteredLabels.slice(0, 3);
 
     let modalRef: HTMLElement;
 
@@ -88,8 +115,12 @@
     onMount(async () => {
         modalRef?.focus();
         
-        const data = await getLabelsAsync(projectId);
-        setLabels(data);
+        try {
+            const data = await getLabelsAsync(projectId);
+            setLabels(data);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a labelek lekérésekor!');
+        }
     });
     
     let isConfirmOpen = false;
@@ -110,20 +141,6 @@
     async function handleEdit() {
         error = '';
         success = '';
-        let errorOccured: boolean = false;
-        const titleError = validateTaskTitle(editTitle)
-        const descError = validateTaskDescription(editDescription);
-        if(titleError){
-            error = error + titleError;
-            errorOccured = true;
-        }
-        if(descError){
-            error = error + descError;
-            errorOccured = true;
-        }
-        if(errorOccured){
-            return;
-        }
         try {
             const response = await updateTaskAsync(
                 projectId, 
@@ -137,67 +154,73 @@
                     rowVersion: task.rowVersion ?? 0
                 });
             success = "Módosítva";
+            notify.success('Task módosítva!');
             setActiveTask(response);
             isEditing = false;
-        } catch (e) {
-            error = 'Hiba történt a módosítás során!'
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
+            error = message;
+            notify.error(message);
         }
     }
     
     async function handleDelete() {
         try {
             await deleteTaskAsync(projectId, task.id);
+            notify.success('Task törölve!');
             closeModal();
-        } catch (e) {
-            error = 'Hiba történt a törlés során!';
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a törlés során!';
+            error = message;
+            notify.error(message);
         }
     }
 
-    let isUpdatingLabels = false;
-
     async function handleAddLabel(labelId: string) {
         try {
-            isUpdatingLabels = true;
             await addLabelToTaskAsync(projectId, task.id, labelId);
             const updated = { ...task, labelIds: [...task.labelIds, labelId] };
             setActiveTask(updated);
             task = updated;
-        } catch (e) {
-            console.error('Hiba:', e);
-        } finally {
-            isUpdatingLabels = false;
+            notify.success('Label hozzáadva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag hozzáadásakor!');
         }
     }
 
     async function handleRemoveLabel(labelId: string) {
         try {
-            isUpdatingLabels = true;
             await removeLabelFromTaskAsync(projectId, task.id, labelId);
             const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
             setActiveTask(updated);
             task = updated;
-        } catch (e) {
-            console.error('Hiba:', e);
-        } finally {
-            isUpdatingLabels = false;
+            notify.success('Label eltávolítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag eltávolításakor!');
         }
     }
 
     async function handleAddAssignee(userId: string) {
         try {
             await addAssigneeAsync(projectId, task.id, userId);
-            task = { ...task, assigneeIds: [...task.assigneeIds, userId] };
-        } catch (e) {
-            console.error('Hiba az assignee hozzáadásakor!');
+            const updated = { ...task, assigneeIds: [...task.assigneeIds, userId] };
+            setActiveTask(updated);
+            task = updated;
+            notify.success('Tag hozzárendelve!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee hozzáadásakor!');
         }
     }
 
     async function handleRemoveAssignee(userId: string) {
         try {
             await removeAssigneeAsync(projectId, task.id, userId);
-            task = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
-        } catch (e) {
-            console.error('Hiba az assignee eltávolításakor!');
+            const updated = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
+            setActiveTask(updated);
+            task = updated;
+            notify.success('Tag hozzárendelés eltávolítva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee eltávolításakor!');
         }
     }
 
@@ -227,13 +250,20 @@
 
                 // 3. Confirm
                 const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
-                task = { ...task, attachments: [...task.attachments, uploaded] };
+                
+                //const updatedTask = { ...currentTask, attachments: [...(currentTask.attachments ?? []), uploaded] };
+                //setActiveTask(updatedTask);
+                //task = updatedTask;
+
+                notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
-                uploadError = e.response?.data ?? 'Hiba történt a feltöltéskor!';
+                const message = e.response?.data ?? e.message ?? 'Hiba történt a feltöltéskor!';
+                uploadError = message;
+                notify.error(message);
             }
         }
-
+        
         isUploading = false;
         uploadProgress = 0;
         input.value = '';
@@ -372,7 +402,11 @@
                                 <span class="meta-value">{task.description ?? 'Nincs leírás'}</span>
                                 <span class="meta-label">Prioritás</span>
                                 <span class="meta-value">
-                                    <span class="priority priority-{task.priority}">{task.priority ?? 'Nincs'}</span>
+                                    {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
+                                        <span class="priority priority-{task.priority}">{task.priority}</span>
+                                    {:else}
+                                        <span>Nincs</span>
+                                    {/if}
                                 </span>
                                 <span class="meta-label">Becsült idő</span>
                                 <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
@@ -382,18 +416,20 @@
 
                     {#if activeDetailTab === 'attachments'}
                         <div class="section">
-                            {#if task.attachments && task.attachments.length > 0}
+                            {#if attachments && attachments.length > 0}
                                 <div class="attachments-list">
-                                    {#each task.attachments as attachment (attachment.id)}
+                                    {#each attachments as attachment (attachment.id)}
                                         <AttachmentCard
                                             {attachment}
                                             {projectId}
                                             taskId={task.id}
                                             onDelete={(id) => {
-                                                task = {
-                                                    ...task,
-                                                    attachments: task.attachments.filter(a => a.id !== id)
+                                                const updatedTask = {
+                                                    ...currentTask,
+                                                    attachments: currentTask.attachments.filter(a => a.id !== id)
                                                 };
+                                                setActiveTask(updatedTask);
+                                                task = updatedTask;
                                             }}
                                         />
                                     {/each}
@@ -466,10 +502,14 @@
                 <div class="edit-scroll">
                     <h2 class="edit-title">Szerkesztés</h2>
 
+                    <!-- Members -->
                     <div class="section">
-                        <h3>Hozzárendelt személyek</h3>
+                        <div class="section-header">
+                            <h3>Hozzárendelt személyek</h3>
+                            <input class="search-input-sm" placeholder="Keresés..." bind:value={memberSearch} />
+                        </div>
                         <div class="member-list">
-                            {#each members as member}
+                            {#each visibleMembers as member}
                                 <div class="member-row">
                                     <span class="assignee-name truncate">{member.displayName}</span>
                                     {#if task.assigneeIds.includes(member.userId)}
@@ -486,12 +526,26 @@
                                 </div>
                             {/each}
                         </div>
+                        {#if !memberSearch && filteredMembers.length > 3}
+                            <button class="show-more-btn" on:click={() => showAllMembers = !showAllMembers}>
+                                {showAllMembers ? 'Kevesebb' : `+${filteredMembers.length - 3} további`}
+                            </button>
+                        {/if}
                     </div>
 
+                    <!-- Labels -->
                     <div class="section">
-                        <h3>Labelek</h3>
+                        <div class="section-header">
+                            <h3>Labelek</h3>
+                            <div class="section-header-actions">
+                                <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
+                                    <Plus size={14} /> Új label
+                                </button>
+                                <input class="search-input-sm" placeholder="Keresés..." bind:value={labelSearch} />
+                            </div>
+                        </div>
                         <div class="label-edit-list">
-                            {#each allLabels as label}
+                            {#each visibleLabels as label}
                                 <div class="label-edit-row">
                                     <LabelCard {label} showDelete={false} />
                                     {#if currentTask.labelIds.includes(label.id)}
@@ -508,9 +562,11 @@
                                 </div>
                             {/each}
                         </div>
-                        <button class="btn-add" on:click={() => isCreateLabelOpen = true}>
-                            <Plus size={14} /> Új label
-                        </button>
+                        {#if !labelSearch && filteredLabels.length > 3}
+                            <button class="show-more-btn" on:click={() => showAllLabels = !showAllLabels}>
+                                {showAllLabels ? 'Kevesebb' : `+${filteredLabels.length - 3} további`}
+                            </button>
+                        {/if}
                     </div>
 
                     <form id="edit-form">
@@ -527,7 +583,7 @@
                         <div class="field">
                             <label>Prioritás 
                                 <select bind:value={editPriority}>
-                                    <option value="">Nincs prioritás</option>
+                                    <option value="none">Nincs prioritás</option>
                                     <option value="low">Alacsony</option>
                                     <option value="medium">Közepes</option>
                                     <option value="high">Magas</option>
@@ -772,7 +828,7 @@
     .edit-title {
         font-size: 1.1rem;
         color: var(--text-primary);
-        padding: 1.5rem 2rem 0;
+        margin: 0;
     }
 
     /* ── Meta grid ── */
@@ -795,6 +851,43 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .section-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .search-input-sm {
+        font-size: var(--font-size-xs);
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        color: var(--text-primary);
+        width: 140px;
+    }
+
+    .show-more-btn {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem 0;
+        text-decoration: underline;
+    }
+
+    .show-more-btn:hover {
+        color: var(--text-secondary);
     }
 
     h3 {
@@ -887,11 +980,9 @@
         color: var(--text-secondary);
         padding: 0.35rem 0.75rem;
         border-radius: 6px;
-        font-size: 0.82rem;
+        font-size: var(--font-size-xs);
         cursor: pointer;
         width: fit-content;
-        align-self: flex-start;
-        margin-top: 0.25rem;
     }
 
     .btn-add:hover { color: var(--text-primary); background: var(--border-hover); }
@@ -1023,6 +1114,7 @@
         text-transform: uppercase;
     }
 
+    
     .priority-low      { background: var(--accent-green-bg);  color: var(--accent-green); }
     .priority-medium   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
     .priority-high     { background: var(--accent-red-bg);    color: var(--accent-yellow); }

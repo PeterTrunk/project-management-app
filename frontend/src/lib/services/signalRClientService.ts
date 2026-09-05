@@ -2,7 +2,8 @@ import { signalRService } from './signalRService';
 import { handleTaskCreated, handleTaskUpdated, handleTaskMoved, 
          handleTaskDeleted, handleTasksRebalanced, handleTaskAssigneeAdded,
          handleTaskAssigneeRemoved, handleTaskLabelAdded, handleTaskLabelRemoved,
-         handleCommitLinked, handlePrLinked } from '../stores/taskStore';
+         handleCommitLinked, handlePrLinked, handleAttachmentUploaded, 
+         handleAttachmentDeleted } from '../stores/taskStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
 import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
          handleColumnCreated, handleColumnUpdated, handleColumnDeleted,
@@ -81,6 +82,10 @@ export function registerSignalREvents() {
 
     // Activity events
     signalRService.on('ActivityCreated', handleActivityCreated);
+
+    // Attachment
+    signalRService.on('AttachmentUploaded', handleAttachmentUploaded);
+    signalRService.on('AttachmentDeleted', handleAttachmentDeleted);
 }
 
 export function unregisterSignalREvents() {
@@ -119,4 +124,6 @@ export function unregisterSignalREvents() {
     signalRService.off('LabelCreated');
     signalRService.off('LabelDeleted');
     signalRService.off('ActivityCreated');
+    signalRService.off('AttachmentUploaded');
+    signalRService.off('AttachmentDeleted');
 }
