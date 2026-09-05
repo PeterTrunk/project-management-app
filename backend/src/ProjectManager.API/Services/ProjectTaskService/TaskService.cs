@@ -351,6 +351,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
                 if (column == null)
                     throw new Exception("Oszlop nem található");
+
+                if (column.WipLimit.HasValue)
+                {
+                    var currentTaskCount = await _context.ProjectTasks
+                        .CountAsync(t => t.ColumnId == dto.ColumnId && t.Id != taskId);
+
+                    if (currentTaskCount >= column.WipLimit.Value)
+                        throw new Exception($"Az oszlop WIP limitje ({column.WipLimit.Value}) elérte a maximumot!");
+                }
             }
 
             ProjectTask? prevTask = null;
