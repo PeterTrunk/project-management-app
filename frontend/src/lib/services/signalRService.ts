@@ -7,7 +7,27 @@ const HUB_URL = import.meta.env.VITE_API_URL
     : 'http://localhost:5178/hubs/project';
 
 const KEEPALIVE_ENABLED = import.meta.env.VITE_SIGNALR_KEEPALIVE_ENABLED === 'true';
-const KEEPALIVE_MS = parseInt(import.meta.env.VITE_SIGNALR_KEEPALIVE_SECONDS ?? '15') * 1000;
+
+// A szerver ClientTimeoutInterval-ja 60 másodperc: ha a kliens ennél ritkábban
+// pingel, a szerver bontja a kapcsolatot. Ezért a beállított értéket 5 és 30 mp
+// közé szorítjuk - így egy elgépelt környezeti változó nem tud folyamatos
+// újracsatlakozási hurkot okozni.
+const MIN_KEEPALIVE_SECONDS = 5;
+const MAX_KEEPALIVE_SECONDS = 30;
+
+const configuredKeepalive = parseInt(import.meta.env.VITE_SIGNALR_KEEPALIVE_SECONDS ?? '15');
+const keepaliveSeconds = Number.isFinite(configuredKeepalive)
+    ? Math.min(Math.max(configuredKeepalive, MIN_KEEPALIVE_SECONDS), MAX_KEEPALIVE_SECONDS)
+    : 15;
+
+if (KEEPALIVE_ENABLED && configuredKeepalive !== keepaliveSeconds) {
+    console.warn(
+        `SignalR keepalive ${configuredKeepalive}s helyett ${keepaliveSeconds}s ` +
+        `(a szerver 60 másodperc után bontja a néma kapcsolatot).`
+    );
+}
+
+const KEEPALIVE_MS = keepaliveSeconds * 1000;
 
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
