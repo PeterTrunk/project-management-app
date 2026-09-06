@@ -49,7 +49,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                await _taskService.DeleteTaskAsync(taskId);
+                await _taskService.DeleteTaskAsync(projectId, taskId);
                 return NoContent();
             }
             catch (Exception ex)
@@ -125,7 +125,7 @@ namespace ProjectManager.API.Controllers
         {
             try
             {
-                var response = await _taskService.UpdateTaskAsync(taskId, dto);
+                var response = await _taskService.UpdateTaskAsync(projectId, taskId, dto);
                 return Ok(response);
             }
             catch (Exception ex)
