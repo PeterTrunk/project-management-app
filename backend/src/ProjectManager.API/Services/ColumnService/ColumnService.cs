@@ -38,7 +38,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
@@ -101,12 +102,13 @@ namespace ProjectManager.API.Services.ColumnService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
             var column = await _context.ColumnDefinitions
-                .FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
+                .FirstOrDefaultAsync(c => c.Id == columnId && c.BoardId == boardId && !c.IsDeleted);
             if (column == null)
                 throw new Exception("Oszlop nem található");
             if (column.Position == 0)
@@ -166,7 +168,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
@@ -183,7 +186,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
@@ -193,7 +197,7 @@ namespace ProjectManager.API.Services.ColumnService
             var columnIds = order.Select(o => o.Id).ToList();
 
             var columns = await _context.ColumnDefinitions
-                .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
+                .Where(c => columnIds.Contains(c.Id) && c.BoardId == boardId && !c.IsDeleted)
                 .ToListAsync();
 
             if (columns.Count != order.Count)
@@ -255,7 +259,7 @@ namespace ProjectManager.API.Services.ColumnService
                 await transaction.CommitAsync();
 
                 var updatedColumns = await _context.ColumnDefinitions
-                    .Where(c => columnIds.Contains(c.Id) && !c.IsDeleted)
+                    .Where(c => columnIds.Contains(c.Id) && c.BoardId == boardId && !c.IsDeleted)
                     .ToListAsync();
 
                 // ColumnsReordered broadcast
@@ -320,11 +324,13 @@ namespace ProjectManager.API.Services.ColumnService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
-            var column = await _context.ColumnDefinitions.FirstOrDefaultAsync(c => c.Id == columnId && !c.IsDeleted);
+            var column = await _context.ColumnDefinitions
+                .FirstOrDefaultAsync(c => c.Id == columnId && c.BoardId == boardId && !c.IsDeleted);
             if (column == null)
                 throw new Exception("Oszlop nem található");
 

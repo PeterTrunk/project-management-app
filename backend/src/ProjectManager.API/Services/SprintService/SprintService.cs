@@ -46,7 +46,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -175,7 +176,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -442,7 +444,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -525,7 +528,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -570,7 +574,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -694,7 +699,8 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -762,13 +768,15 @@ namespace ProjectManager.API.Services.SprintService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
                 throw new Exception("Task nem található");
 
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new Exception("Sprint nem található");
 
@@ -874,7 +882,8 @@ namespace ProjectManager.API.Services.SprintService
 
         public async Task RemoveTaskFromSprintAsync(Guid projectId, Guid taskId, AssignTaskToSprintDto dto)
         {
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
                 throw new Exception("Task nem található");
 
