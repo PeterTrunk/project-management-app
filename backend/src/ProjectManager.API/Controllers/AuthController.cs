@@ -28,25 +28,11 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<AuthResponseDto>> RegisterAsync([FromBody]  RegisterDto dto)
         {
-            try
-            {
-                var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                var response = await _authService.RegisterAsync(dto, ip);
-                SetRefreshTokenCookie(response.RefreshToken!);
-                response.RefreshToken = null!;
-                return Created(string.Empty, response);
-            }
-            catch (RateLimitException ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return StatusCode(429, ex.Message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
-
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var response = await _authService.RegisterAsync(dto, ip);
+            SetRefreshTokenCookie(response.RefreshToken!);
+            response.RefreshToken = null!;
+            return Created(string.Empty, response);
         }
 
         [HttpPost("login")]
@@ -54,26 +40,13 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<AuthResponseDto>> LoginAsync([FromBody] LoginDto dto)
         {
-            try
+            var response = await _authService.LoginAsync(dto);
+            if (!response.RequiresTotp)
             {
-                var response = await _authService.LoginAsync(dto);
-                if (!response.RequiresTotp)
-                {
-                    SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
-                    response.RefreshToken = null!;
-                }
-                return Ok(response);
+                SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
+                response.RefreshToken = null!;
             }
-            catch (RateLimitException ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return StatusCode(429, ex.Message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            return Ok(response);
         }
 
         [HttpPost("refresh")]
@@ -81,22 +54,14 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<AuthResponseDto>> RefreshAsync()
         {
-            try
-            {
-                var refreshToken = Request.Cookies["refreshToken"];
-                if (string.IsNullOrEmpty(refreshToken))
-                    return BadRequest("Refresh token hiányzik!");
+            var refreshToken = Request.Cookies["refreshToken"];
+            if (string.IsNullOrEmpty(refreshToken))
+                return BadRequest("Refresh token hiányzik!");
 
-                var response = await _authService.RefreshTokenAsync(refreshToken);
-                SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
-                response.RefreshToken = null!;
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _authService.RefreshTokenAsync(refreshToken);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RememberMe);
+            response.RefreshToken = null!;
+            return Ok(response);
         }
 
         [HttpPost("logout")]
@@ -104,20 +69,12 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> LogoutAsync()
         {
-            try
-            {
-                var refreshToken = Request.Cookies["refreshToken"];
-                if (!string.IsNullOrEmpty(refreshToken))
-                    await _authService.LogoutAsync(refreshToken);
+            var refreshToken = Request.Cookies["refreshToken"];
+            if (!string.IsNullOrEmpty(refreshToken))
+                await _authService.LogoutAsync(refreshToken);
 
-                DeleteRefreshTokenCookie();
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            DeleteRefreshTokenCookie();
+            return Ok();
         }
 
         [HttpGet("me")]
@@ -126,17 +83,9 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<UserProfileDto>> MeAsync()
         {
-            try
-            {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _authService.MeAsync(userId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var response = await _authService.MeAsync(userId);
+            return Ok(response);
         }
 
         [HttpPost("changepassword")]
@@ -145,21 +94,13 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ChangePasswordAsync([FromBody] ChangePasswordDto dto)
         {
-            try
-            {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                await _authService.ChangePasswordAsync(userId, dto);
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            await _authService.ChangePasswordAsync(userId, dto);
 
-                //A szerver minden refresh tokent visszavont, így a böngészőben maradt
-                //süti már használhatatlan - takarítsuk el
-                DeleteRefreshTokenCookie();
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            //A szerver minden refresh tokent visszavont,
+            //így a böngészőben maradt süti már használhatatlan - takarítsuk el
+            DeleteRefreshTokenCookie();
+            return Ok();
         }
 
         [HttpPatch("profile")]
@@ -168,17 +109,9 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<UserProfileDto>> ChangeUserProfileAsync([FromBody] UpdateProfileDto dto)
         {
-            try
-            {
-                var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var response = await _authService.ChangeUserProfileAsync(userId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var response = await _authService.ChangeUserProfileAsync(userId, dto);
+            return Ok(response);
         }
 
         //TOTP setup - QR kód generálás
@@ -188,16 +121,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TotpSetupResponseDto>> SetupTotp()
         {
-            try
-            {
-                var result = await _authService.SetupTotpAsync();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var result = await _authService.SetupTotpAsync();
+            return Ok(result);
         }
 
         //TOTP verify és aktiválás
@@ -207,20 +132,12 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> VerifyAndEnableTotp([FromBody] VerifyTotpDto dto)
         {
-            try
-            {
-                var success = await _authService.VerifyAndEnableTotpAsync(dto.Token);
-                if (!success)
-                    return BadRequest("Érvénytelen TOTP token!");
+            var success = await _authService.VerifyAndEnableTotpAsync(dto.Token);
+            if (!success)
+                return BadRequest("Érvénytelen TOTP token!");
 
-                DeleteRefreshTokenCookie();
-                return Ok("2FA sikeresen aktiválva!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            DeleteRefreshTokenCookie();
+            return Ok("2FA sikeresen aktiválva!");
         }
 
         //TOTP kikapcsolás
@@ -230,22 +147,9 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DisableTotp([FromBody] DisableTotpDto dto)
         {
-            try
-            {
-                await _authService.DisableTotpAsync(dto);
-                DeleteRefreshTokenCookie();
-                return Ok("2FA kikapcsolva!");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning("Sikertelen 2FA kikapcsolás | {Message}", ex.Message);
-                return Unauthorized(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _authService.DisableTotpAsync(dto);
+            DeleteRefreshTokenCookie();
+            return Ok("2FA kikapcsolva!");
         }
 
         //TOTP login - második lépés
@@ -255,23 +159,10 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<AuthResponseDto>> LoginWithTotp([FromBody] LoginWithTotpDto dto)
         {
-            try
-            {
-                var result = await _authService.LoginWithTotpAsync(dto);
-                SetRefreshTokenCookie(result.RefreshToken!, result.RememberMe);
-                result.RefreshToken = null!;
-                return Ok(result);
-            }
-            catch (RateLimitException ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return StatusCode(429, ex.Message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var result = await _authService.LoginWithTotpAsync(dto);
+            SetRefreshTokenCookie(result.RefreshToken!, result.RememberMe);
+            result.RefreshToken = null!;
+            return Ok(result);
         }
 
         [HttpGet("verify-email")]
@@ -279,16 +170,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> VerifyEmail([FromQuery] string token)
         {
-            try
-            {
-                await _authService.VerifyEmailAsync(token);
-                return Ok("Email sikeresen megerősítve!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _authService.VerifyEmailAsync(token);
+            return Ok("Email sikeresen megerősítve!");
         }
 
         [HttpPost("resend-verification")]
@@ -296,21 +179,23 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ResendVerification([FromBody] ResendVerificationDto dto)
         {
+            //A válasz szándékosan egységes: a "Felhasználó nem található" és az "Az email
+            //cím már van megerősítve" különbsége eddig felhasználó-enumerációt engedett.
+            //Ugyanaz a minta, mint a forgot-password végponton.
             try
             {
                 await _authService.ResendVerificationEmailAsync(dto.Email);
-                return Ok("Megerősítő email elküldve!");
             }
-            catch (RateLimitException ex)
+            catch (NotFoundException)
             {
-                _logger.LogWarning("Rate limit | {Message}", ex.Message);
-                return StatusCode(429, ex.Message);
+                //Nincs ilyen felhasználó - kifelé ugyanaz a válasz megy
             }
-            catch (Exception ex)
+            catch (ValidationException)
             {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
+                //Már megerősített cím - kifelé ugyanaz a válasz megy
             }
+
+            return Ok("Ha az email cím megerősítésre vár, elküldtük a megerősítő levelet!");
         }
 
         [HttpPost("forgot-password")]
@@ -318,22 +203,9 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
-            try
-            {
-                await _authService.ForgotPasswordAsync(dto.Email);
-                // Mindig OK-t adunk vissza biztonsági okokból (ne derüljön ki hogy létezik-e az email)
-                return Ok("Ha az email cím regisztrált, küldtünk egy jelszó visszaállítási linket!");
-            }
-            catch (RateLimitException ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return StatusCode(429, ex.Message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _authService.ForgotPasswordAsync(dto.Email);
+            //Mindig OK-t adunk vissza biztonsági okokból (ne derüljön ki hogy létezik-e az email)
+            return Ok("Ha az email cím regisztrált, küldtünk egy jelszó visszaállítási linket!");
         }
 
         [HttpPost("reset-password")]
@@ -341,16 +213,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
-            try
-            {
-                await _authService.ResetPasswordAsync(dto.Token, dto.NewPassword);
-                return Ok("Jelszó sikeresen megváltoztatva!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _authService.ResetPasswordAsync(dto.Token, dto.NewPassword);
+            return Ok("Jelszó sikeresen megváltoztatva!");
         }
 
         private void SetRefreshTokenCookie(string refreshToken, bool rememberMe = false)
@@ -370,9 +234,8 @@ namespace ProjectManager.API.Controllers
             });
         }
 
-        //A törlő Set-Cookie fejlécnek pontosan ugyanazokat az attribútumokat kell
-        //hordoznia, mint a beállítónak - eltérő Domain vagy Path esetén a böngésző
-        //nem azonosítja a sütit, és az bent marad
+        //A törlő Set-Cookie fejlécnek pontosan ugyanazokat az attribútumokat kell hordoznia,
+        //mint a beállítónak - eltérő Domain vagy Path esetén a böngésző nem azonosítja a sütit, és az bent marad
         private void DeleteRefreshTokenCookie()
         {
             var isProd = HttpContext.RequestServices

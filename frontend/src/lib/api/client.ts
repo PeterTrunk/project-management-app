@@ -25,6 +25,13 @@ apiClient.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
         
+        //A backend hibaválasza {"error": "..."} alakú JSON. A hívók e.response.data-t olvasnak szövegként,
+        //ezért itt, egy helyen csomagoljuk ki.
+        const data = error.response?.data;
+        if (data && typeof data === 'object' && typeof data.error === 'string') {
+            error.response.data = data.error;
+        }
+        
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {

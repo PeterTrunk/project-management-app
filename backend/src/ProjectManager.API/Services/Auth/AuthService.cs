@@ -92,14 +92,14 @@ namespace ProjectManager.API.Services.Auth
             if (user == null || !isPasswordValid)
             {
                 _logger.LogWarning("Sikertelen bejelentkezés | EmailRef: {EmailRef}", EmailRef(dto.Email));
-                throw new Exception("Hibás email vagy jelszó!");
+                throw new ValidationException("Hibás email vagy jelszó!");
             }
 
             //Letiltott fiók nem léphet be - a hibaüzenet szándékosan általános
             if (!user.IsActive)
             {
                 _logger.LogWarning("Bejelentkezési kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
-                throw new Exception("Hibás email vagy jelszó!");
+                throw new ValidationException("Hibás email vagy jelszó!");
             }
 
             //Ha TOTP aktív akkor ne adjunk JWT-t, csak jelezzük hogy kell a TOTP token
@@ -183,7 +183,7 @@ namespace ProjectManager.API.Services.Auth
             if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
             {
                 _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | EmailRef: {EmailRef}", EmailRef(dto.Email));
-                throw new Exception("Ez az email már foglalt!");
+                throw new ValidationException("Ez az email már foglalt!");
             }
 
 
@@ -238,7 +238,7 @@ namespace ProjectManager.API.Services.Auth
             if (rowsAffected == 0)
             {
                 _logger.LogWarning("Visszavont vagy nem létező refresh token használata");
-                throw new Exception("Token nem található vagy már felhasználva!");
+                throw new ValidationException("Token nem található vagy már felhasználva!");
             }
 
             //Token adatainak lekérése
@@ -248,20 +248,20 @@ namespace ProjectManager.API.Services.Auth
             if (refreshTokenEntry!.ExpiresAt < DateTime.UtcNow)
             {
                 _logger.LogWarning("Lejárt refresh token használata | UserId: {UserId}", refreshTokenEntry.UserId);
-                throw new Exception("Token lejárt!");
+                throw new ValidationException("Token lejárt!");
             }
 
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Id == refreshTokenEntry.UserId);
 
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             //Letiltott fiók a meglévő refresh tokenjével sem újíthat meg munkamenetet
             if (!user.IsActive)
             {
                 _logger.LogWarning("Token megújítási kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
-                throw new Exception("Token nem található vagy már felhasználva!");
+                throw new ValidationException("Token nem található vagy már felhasználva!");
             }
 
             var accessToken = CreateToken(user);
@@ -298,7 +298,7 @@ namespace ProjectManager.API.Services.Auth
             if (refreshTokenEntry == null)
             {
                 _logger.LogWarning("Kijelentkezési kísérlet érvénytelen tokennel");
-                throw new Exception("Token nem található!");
+                throw new ValidationException("Token nem található!");
             }
 
             refreshTokenEntry.IsRevoked = true;
@@ -311,7 +311,7 @@ namespace ProjectManager.API.Services.Auth
         {
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található");
+                throw new NotFoundException("Felhasználó nem található");
 
             return new UserProfileDto
             {
@@ -328,12 +328,12 @@ namespace ProjectManager.API.Services.Auth
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
 
             if (user == null)
-                throw new Exception("Felhasználó nem található");
+                throw new NotFoundException("Felhasználó nem található");
             
             if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
             {
                 _logger.LogWarning("Sikertelen jelszóváltoztatás - hibás jelenlegi jelszó | UserId: {UserId}", userId);
-                throw new Exception("Hibás jelenlegi jelszó!");
+                throw new ValidationException("Hibás jelenlegi jelszó!");
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword, BcryptWorkFactor);
@@ -360,7 +360,7 @@ namespace ProjectManager.API.Services.Auth
         {
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található");
+                throw new NotFoundException("Felhasználó nem található");
 
             user.DisplayName = dto.DisplayName;
             await _context.SaveChangesAsync();
@@ -378,14 +378,14 @@ namespace ProjectManager.API.Services.Auth
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             //Aktív 2FA mellett a secret nem írható felül: különben egy eltulajdonított
             //munkamenettel kizárható a jogos tulajdonos a saját fiókjából új secret felülírással
             if (user.IsTotpEnabled)
             {
                 _logger.LogWarning("2FA újrabeállítási kísérlet aktív 2FA mellett | UserId: {UserId}", userId);
-                throw new InvalidOperationException(
+                throw new ValidationException(
                     "A kétfaktoros hitelesítés már aktív. Előbb kapcsold ki, majd állítsd be újra!");
             }
 
@@ -414,9 +414,9 @@ namespace ProjectManager.API.Services.Auth
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
             if (string.IsNullOrEmpty(user.TotpSecret))
-                throw new Exception("TOTP nincs beállítva!");
+                throw new ValidationException("TOTP nincs beállítva!");
 
             var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
             var totp = new Totp(secretKey);
@@ -452,14 +452,14 @@ namespace ProjectManager.API.Services.Auth
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             //Ismételt hitelesítés: egy ellopott access token önmagában ne tudja
             //leszedni a fiókról a második faktort
             if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
             {
                 _logger.LogWarning("Sikertelen 2FA kikapcsolás - hibás jelszó | UserId: {UserId}", userId);
-                throw new UnauthorizedAccessException("Hibás jelszó!");
+                throw new ForbiddenException("Hibás jelszó!");
             }
 
             user.TotpSecret = null;
@@ -493,17 +493,17 @@ namespace ProjectManager.API.Services.Auth
             if (user == null || !isPasswordValid)
             {
                 _logger.LogWarning("Sikertelen TOTP bejelentkezés - hibás jelszó | EmailRef: {EmailRef}", EmailRef(dto.Email));
-                throw new Exception("Hibás email vagy jelszó!");
+                throw new ValidationException("Hibás email vagy jelszó!");
             }
 
             if (!user.IsActive)
             {
                 _logger.LogWarning("TOTP bejelentkezési kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
-                throw new Exception("Hibás email vagy jelszó!");
+                throw new ValidationException("Hibás email vagy jelszó!");
             }
 
             if (!user.IsTotpEnabled || string.IsNullOrEmpty(user.TotpSecret))
-                throw new Exception("TOTP nincs bekapcsolva ennél a felhasználónál!");
+                throw new ValidationException("TOTP nincs bekapcsolva ennél a felhasználónál!");
 
             var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
             var totp = new Totp(secretKey);
@@ -517,7 +517,7 @@ namespace ProjectManager.API.Services.Auth
             if (!isValid)
             {
                 _logger.LogWarning("Sikertelen TOTP bejelentkezés - érvénytelen token | UserId: {UserId}", user.Id);
-                throw new Exception("Érvénytelen TOTP token!");
+                throw new ValidationException("Érvénytelen TOTP token!");
             } 
 
             var token = CreateToken(user);
@@ -558,7 +558,7 @@ namespace ProjectManager.API.Services.Auth
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
             if (user == null)
-                throw new Exception("Érvénytelen vagy lejárt token!");
+                throw new ValidationException("Érvénytelen vagy lejárt token!");
 
             user.IsEmailVerified = true;
             user.EmailVerificationToken = null;
@@ -580,9 +580,9 @@ namespace ProjectManager.API.Services.Auth
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
             if (user.IsEmailVerified)
-                throw new Exception("Az email cím már van megerősítve!");
+                throw new ValidationException("Az email cím már van megerősítve!");
 
             var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
@@ -653,7 +653,7 @@ namespace ProjectManager.API.Services.Auth
             if (resetToken == null)
             {
                 _logger.LogWarning("Érvénytelen jelszó visszaállítási token használata");
-                throw new Exception("Érvénytelen vagy lejárt token!");
+                throw new ValidationException("Érvénytelen vagy lejárt token!");
             }
                 
 
@@ -662,7 +662,7 @@ namespace ProjectManager.API.Services.Auth
                 _logger.LogWarning("Lejárt jelszó visszaállítási token használata | UserId: {UserId}", resetToken.UserId);
                 resetToken.IsUsed = true;
                 await _context.SaveChangesAsync();
-                throw new Exception("A token lejárt!");
+                throw new ValidationException("A token lejárt!");
             }
 
             resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, BcryptWorkFactor);

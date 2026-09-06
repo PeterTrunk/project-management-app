@@ -29,16 +29,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> CreateTaskAsync(Guid projectId, [FromBody] CreateTaskDto dto)
         {
-            try
-            {
-                var response = await _taskService.CreateTaskAsync(projectId, dto);
-                return Created(string.Empty, response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.CreateTaskAsync(projectId, dto);
+            return Created(string.Empty, response);
         }
 
         [HttpDelete("{taskId}")]
@@ -47,16 +39,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteTaskAsync(Guid projectId, Guid taskId)
         {
-            try
-            {
-                await _taskService.DeleteTaskAsync(projectId, taskId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _taskService.DeleteTaskAsync(projectId, taskId);
+            return NoContent();
         }
 
         [HttpGet("{taskId}")]
@@ -65,16 +49,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> GetTaskByIdAsync(Guid projectId, Guid taskId)
         {
-            try
-            {
-                var response = await _taskService.GetTaskByIdAsync(projectId, taskId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.GetTaskByIdAsync(projectId, taskId);
+            return Ok(response);
         }
 
         [HttpGet]
@@ -87,16 +63,8 @@ namespace ProjectManager.API.Controllers
             [FromQuery] Guid? sprintId,
             [FromQuery] string? scope = null)
         {
-            try
-            {
-                var response = await _taskService.GetTasksAsync(projectId, boardId, sprintId, scope);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.GetTasksAsync(projectId, boardId, sprintId, scope);
+            return Ok(response);
         }
 
         [HttpPatch("{taskId}/move")]
@@ -105,16 +73,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> MoveTaskAsync(Guid projectId, Guid taskId, [FromBody] MoveTaskDto dto)
         {
-            try
-            {
-                var response = await _taskService.MoveTaskAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.MoveTaskAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         [HttpPatch("{taskId}")]
@@ -123,16 +83,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> UpdateTaskAsync(Guid projectId, Guid taskId, [FromBody] UpdateTaskDto dto)
         {
-            try
-            {
-                var response = await _taskService.UpdateTaskAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.UpdateTaskAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         [HttpPost("{taskId}/board")]
@@ -141,16 +93,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<TaskResponseDto>> AssignTaskToBoardAsync(Guid projectId, Guid taskId, [FromBody] AssignTaskToBoardDto dto)
         {
-            try
-            {
-                var response = await _taskService.AssignTaskToBoardAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _taskService.AssignTaskToBoardAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         [HttpPost("{taskId}/assignees/{userId}")]
@@ -159,16 +103,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> AddAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
         {
-            try
-            {
-                await _taskService.AddAssigneeAsync(projectId, taskId, userId);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _taskService.AddAssigneeAsync(projectId, taskId, userId);
+            return Ok();
         }
 
         [HttpDelete("{taskId}/assignees/{userId}")]
@@ -177,16 +113,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
         {
-            try
-            {
-                await _taskService.RemoveAssigneeAsync(projectId, taskId, userId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _taskService.RemoveAssigneeAsync(projectId, taskId, userId);
+            return NoContent();
         }
     }
 }
