@@ -3169,6 +3169,521 @@ csak görgetéssel lehetett taskot találni a select-tag-ben ami nagy projektné
 - Cache-elhető adatok: Labels, Members, Boards, Project adatok
 - Nem cache-elhető: Tasks, Activities, Comments, Statistics
 
+### Teljes stack biztonsági audit
+
+**Miért készült:**
+A projekt addig több biztonsági kört is futott (AES-256 webhook secret titkosítás, TOTP 2FA,
+HttpOnly cookie refresh token, Redis rate limiting, CSP + security headerek, MDN Observatory A+),
+de ezek mind **feature-vezéreltek** voltak: egy-egy fejezet egy-egy konkrét fenyegetést célzott.
+Rendszerszintű, keresztmetsző átvizsgálás nem történt, és a rétegek **között** maradt hézagokat
+semmi nem fogta el (nincs CI, a tesztlefedettség 745 sor).
+
+**Módszer:**
+Statikus kódolvasás és adatfolyam-követés két irányból:
+- Támadási felület felől: 14 controller végpontjai, a publikus webhook endpoint,
+  a SignalR hub metódusai, a MinIO presigned URL felület
+- Adat felől: JWT, refresh token, TOTP secret, webhook secret, ENCRYPTION_KEY, feltöltött fájlok
+  életútja (hol keletkeznek, hol tárolódnak, hol logolódnak, hol kerülnek ki)
+
+Éles rendszer ellen nem futott támadás, minden állítás kódútvonalból levezetve.
+
+**Eredmény:** 30 találat `SECURITY-AUDIT.md`-ben (2 kritikus, 3 magas, 13 közepes, 12 alacsony),
+találatonként hely, támadási forgatókönyv, enyhítő tényezők és javaslat.
+A riport nincs verziókezelve (`.gitignore`), mert éles rendszer sebezhetőségeit írja le.
+
+**Kivitelezés 9 etapban:**
+A javítás nem egy PR-ben ment, hanem etaponként: minden etap önállóan lefordul, egy témát fed le,
+és külön commit. Indok: a 39 helyszínes IDOR javítás és a 92 blokkos hibakezelés-refactor
+egy diffben nézhetetlen lett volna, a lényeg elveszne a zajban.
+
+### Cross-project IDOR - a jogosultsági réteg vakfoltja
+
+**Probléma:**
+Ez volt a legsúlyosabb találat, és szerkezeti hiba, nem elgépelés.
+A `ProjectRoleHandler` azt igazolja, hogy a hívó tagja az **URL-ben szereplő** projektnek.
+A service-ek viszont a művelet célpontját **kizárólag a saját azonosítója alapján** töltötték be,
+projekt-szűrés nélkül. A két réteg között nem volt semmi, ami összekötötte volna őket.
+
+Következmény: bármely regisztrált felhasználó a rendszer **bármely** projektjének taskjait,
+sprintjeit, boardjait, oszlopait, kommentjeit és címkéit módosíthatta és törölhette.
+Kihasználásához nem kellett GUID-találgatás: a támadó saját projektet hoz létre (automatikusan
+Owner), és azon az útvonalon adja ki a hívást egy idegen entitás azonosítójával.
+A `DeleteTaskAsync` és az `UpdateTaskAsync` a `projectId`-t **paraméterként sem kapta meg**.
+
+**Megoldás:**
+- `ITaskService`: `DeleteTaskAsync` és `UpdateTaskAsync` szignatúrája kiegészítve `projectId`-vel
+- 5 service, 39+ lekérdezés kiegészítve `t.ProjectId == projectId` szűréssel:
+  TaskService (14), SprintService (9), ColumnService (9), CommentService (4), LabelService (4), BoardService (2)
+- `ColumnDefinition`-nek nincs `ProjectId` mezője, ott navigációs property-n keresztül: `cd.Board.ProjectId == projectId`
+- A komment a taskhoz kötve (`c.TaskId == taskId`), az oszlop a boardhoz (`c.BoardId == boardId`)
+
+**Menet közben talált, az auditban nem szereplő hibák:**
+- `AddLabelToTaskAsync` a `labelId`-t **egyáltalán nem ellenőrizte** - nem hiányos szűrés volt,
+  hanem teljesen hiányzó lekérdezés. Idegen projekt címkéje rákerülhetett a taskra, és mivel a
+  task-lekérdezés join-olja a `Labels` táblát, a neve és színe meg is jelent a felületen.
+- `AddAssigneeAsync` nem ellenőrizte a tagságot: bármely létező felhasználó azonosítója
+  beküldhető volt, és a válasz visszaadta a nevét (felhasználó-megerősítés idegen fiókokra).
+- LexoRank szomszéd-keresés: a `.Where(t => t.ColumnId == dto.ColumnId)` `null` ColumnId esetén
+  **minden projekt** oszlop nélküli taskjára illeszkedett, így idegen task pozíciója
+  folyhatott be a számításba. Mind a hat helyre bekerült a projekt-szűrés.
+
+**Záró ellenőrzés:**
+A teljes `Services/` mappa minden `X.Id == xId` alakú betöltése végignézve. A maradék mind
+`p.Id == projectId` (ezt hitelesíti a handler) vagy `u.Id == userId` (globális entitás).
+Egyetlen szűretlen maradt, `IntegrationService.VerifyIntegrationAsync` - ezt csak a
+`WebhookController` hívja HMAC-kel már hitelesített integráció azonosítójával, nem felhasználói bemenet.
+
+### SignalR hub: hiányzó tagsági ellenőrzés
+
+**Probléma:**
+A `ProjectHub.JoinProject(projectId)` semmilyen ellenőrzést nem végzett. Bármely bejelentkezett
+felhasználó felcsatlakozhatott tetszőleges projekt csoportjára, és onnantól megkapta az összes
+valós idejű broadcastot: task címek és leírások, kommentek teljes szövege, csatolmány-metaadatok,
+a csapat összetétele és szerepkörei, a teljes activity feed, commit üzenetek és PR címek.
+
+Fontos következmény: ez a hiba **szolgáltatta az IDOR-hoz szükséges azonosítókat**.
+A broadcast payloadok `taskId`, `commentId`, `attachmentId` értékeket hordoznak, tehát a két hiba
+láncba fűzve teljes cross-tenant írási hozzáférést adott egyetlen ismert projekt-GUID-ból.
+
+**Megoldás:**
+- `ProjectHub` konstruktorban megkapja az `AppDbContext`-et (a hub példány hívásonként jön létre saját scope-pal)
+- `JoinProject`: `ProjectMembers.AnyAsync` tagsági ellenőrzés, bukás esetén `HubException`
+- Mindkét metódus `Guid.TryParse`-szal validálja a bemenetet
+- A csoportnév a normalizált GUID-ból épül - ez mellékesen egy néma hibát is megszüntetett:
+  eddig a nyers kliens-string ment a csoportnévbe, a backend broadcast viszont `Guid`-ból,
+  így eltérő betűméret esetén a kliens csendben nem kapott eseményt
+- A frontend `AppLayout` már eddig is `.catch`-elte a hívást, így a hub üzenete toastban jelenik meg
+
+### Stored XSS az ActivityFeed-ben
+
+**Probléma:**
+A `highlightDescription` az aktor nevét `<span>`-be csomagolta, és a kimenet `{@html}`-lel
+renderelődött, escape nélkül. Ez volt az egyetlen `{@html}` a kódbázisban (`innerHTML` sehol),
+de több felhasználói adat is befolyt ide: megjelenítendő név, fájlnév, projektnév, és a git
+webhookon keresztül **commit üzenet és PR cím** is.
+
+A megjelenítendő név volt a legkényelmesebb vektor: 120 karakter, tetszőleges tartalom, bármikor
+módosítható a profil végponton. Enyhítő tényező, hogy a production CSP `script-src 'self'`
+`unsafe-inline` nélkül, tehát a klasszikus token-lopó payload nem fut le - de a markup-injektálás
+(hitelesnek látszó "jelentkezz be újra" link) és a CSS-injektálás (`style-src 'unsafe-inline'`
+engedélyezett) ezzel nincs lefedve. Fejlesztői környezetben nincs CSP, ott a teljes
+script-végrehajtás működik.
+
+**Megoldás:**
+- `highlightDescription` helyére `splitDescription`, ami a leírást `{ text, isActor }` részekre
+  bontja az aktornév első előfordulásánál (a régi `.replace()` szemantikáját tartva)
+- A sablonban `{#each}` + `{#if}`, szöveg-interpolációval - a Svelte itt automatikusan escape-el
+- A kódbázisban ezzel nem maradt `{@html}` és `innerHTML`
+- Mélységi védelem: `RegisterDtoValidator` és `UpdateProfileDtoValidator`
+  `Matches(@"^[^<>&""'`]*$")` szabállyal kizárja a markup-karaktereket a megjelenítendő névből,
+  és ugyanez bekerült a kliensoldali `validateDisplayName`-be is
+
+### Munkamenet-érvénytelenítés jelszó- és 2FA-változáskor
+
+**Probléma:**
+Két külön hiba, közös következménnyel: a felhasználó azt hitte, elhárította az incidenst,
+miközben nem történt semmi.
+
+- `ChangePasswordAsync` és `ResetPasswordAsync` kizárólag a `PasswordHash` mezőt írta felül.
+  A `RefreshTokens` táblában lévő élő tokenek érintetlenek maradtak, tehát a támadó
+  `POST /api/auth/refresh` hívással korlátlanul fenntartotta a hozzáférést.
+- `DisableTotpAsync` se jelszót, se TOTP kódot nem kért: egy ellopott access token elég volt
+  a második faktor leszedéséhez. A `SetupTotpAsync` pedig **aktív 2FA mellett is felülírta
+  a titkot** (`IsTotpEnabled` maradt `true`), amivel a támadó kizárhatta a jogos tulajdonost
+  a saját fiókjából, miközben ő maga bent maradt.
+
+**Megoldás:**
+- Új privát `RevokeAllRefreshTokensAsync(userId)` az `AuthService`-ben (`ExecuteUpdateAsync`,
+  egyetlen UPDATE), a visszavont tokenek száma bekerül a logba
+- Hívja: `ChangePasswordAsync`, `ResetPasswordAsync`, `VerifyAndEnableTotpAsync`, `DisableTotpAsync`
+- `DisableTotpAsync` új `DisableTotpDto`-t kap, `BCrypt.Verify` a jelszóra, hiba esetén 403
+- `SetupTotpAsync` elutasítja a hívást, ha `IsTotpEnabled` már `true`
+- `AuthController`: új `DeleteRefreshTokenCookie()` a válaszban, hogy a böngészőben ne maradjon
+  egy már visszavont tokent hordozó süti
+- Frontend: `UserSettingsModal` a ConfirmModal helyett jelszót kérő űrlapot mutat a 2FA panelen,
+  és `sessionInvalidated` eseményt küld; az `AppLayout` erre lefuttatja a meglévő `handleLogout()`-ot
+  (SignalR bontás + refresh timer leállítás + navigáció)
+
+**Tudatos UX-döntés:**
+A 2FA **bekapcsolása** után is kiléptet a rendszer. Ez extra kattintás, de van haszna:
+az újra-bejelentkezés azonnal leteszteli, hogy az authenticator valóban működik.
+
+### Auth felület: rate limiting, időzítési oracle, fiók-letiltás
+
+**a) Regisztrációs rate limit megkerülése enumerációhoz**
+Probléma: a "foglalt-e az email" ellenőrzés a rate limit **előtt** futott, tehát létező cím esetén
+a metódus a számláló növelése előtt dobott. Korlátlan email-enumeráció.
+Megoldás: a rate limit ellenőrzés a metódus legelejére került, minden ág elé.
+
+**b) Időzítési oracle a bejelentkezésnél**
+Probléma: `user == null || !BCrypt.Verify(...)` - a rövidzár miatt nem létező email esetén a
+BCrypt el sem indult, létező email esetén viszont lefutott (~100 ms). A válaszidő-különbség
+megbízhatóan elárulta, létezik-e a fiók.
+Megoldás: statikus `DummyPasswordHash` (induláskor egyszer kiszámolva), a `Verify` a nem létező
+ágon is lefut ellene. Érinti a `LoginAsync`-et és a `LoginWithTotpAsync`-et is.
+Megjegyzés: a régi, alacsonyabb work factorral mentett jelszavak `Verify`-ja gyorsabb a 12-es
+faktorú dummynál, tehát a különbség a régi fiókoknál nem tűnik el teljesen - jelszóváltáskor rendeződik.
+
+**c) Jelszó-visszaállítás kizárásra használható**
+Probléma: a kulcs `forgot_password:{email}` volt, csak email alapján. Bárki három kéréssel
+egy órára kizárhatott bárkit a jelszó-visszaállításból. Ugyanaz a hiba, amit a loginnál már
+javítottunk `login:{ip}:{email}`-re - itt elmaradt.
+Megoldás: `forgot_password:{ip}:{email}`, mellé egy tágabb `forgot_password_ip:{ip}` limit
+(15/óra) a sok címre szórt támadás ellen.
+
+**d) Verifikációs email újraküldése korlátlan**
+Probléma: nem volt rate limit. Egyszerre email-bombázás az áldozat felé és a Resend havi
+3000-es keret kimerítése - ami után a jelszó-visszaállító levelek sem mennének ki.
+Megoldás: `resend_verification:{ip}:{email}`, 3 kísérlet/óra, a controller 429-et ad rá.
+
+**e) IsActive mező nem volt kikényszerítve**
+Probléma: a `User.IsActive` mező létezett és konfigurálva volt, de a teljes kódbázisban
+**sehol nem volt olvasva**. Ha egy üzemeltető letiltott egy fiókot az adatbázisban - ami a mező
+létezéséből következően az elvárt művelet -, a felhasználó ettől függetlenül be tudott jelentkezni.
+A letiltás csendben hatástalan volt.
+Megoldás: ellenőrzés a `LoginAsync`, `LoginWithTotpAsync` és `RefreshTokenAsync` metódusokban.
+A hibaüzenet szándékosan azonos a hibás jelszóéval, hogy a letiltás ténye ne szivárogjon ki.
+Üzemeltetési tudnivaló: a letiltás csak az új bejelentkezést és a token-megújítást zárja ki,
+a már kiadott access token a lejáratáig érvényes - letiltáskor a `RefreshTokens` sorokat is
+érdemes visszavonni.
+
+### Token-generálás, jelszó-hashelés, konfiguráció-validáció
+
+**Biztonsági tokenek Guid.NewGuid()-ból**
+Probléma: refresh token, email-verifikációs token, jelszó-visszaállító token és meghívó token
+mind `Guid.NewGuid()`-ból származott. A .NET modern futtatókörnyezetében ez a gyakorlatban
+CSPRNG-ből jön és 122 bit entrópiát ad, tehát nem törhető - a kifogás elvi: a dokumentáció
+nem **garantálja** a kriptográfiai minőséget.
+Megoldás: új `Common/Security/SecureTokenGenerator.cs` (`RandomNumberGenerator.GetBytes(32)`,
+URL-biztos Base64, 256 bit). Használatba véve mind a hat `AuthService`-beli helyen és a
+`TeamService` meghívó tokenjénél. A régi tokenek a lejáratukig érvényesek, nincs migráció.
+
+**BCrypt work factor rögzítése**
+Probléma: a `HashPassword(password)` a könyvtár alapértelmezettjét használta, ami nem látszik
+a kódból és egy csomagfrissítéssel csendben megváltozhat.
+Megoldás: `BcryptWorkFactor = 12` konstans mind a három hívásnál. A `Verify` a hash-ből olvassa
+ki a faktort, ezért a meglévő jelszavak érvényben maradnak, és a felhasználók fokozatosan
+kerülnek át jelszóváltáskor.
+
+**JWT_SECRET fail-fast**
+Probléma: csak a **létezés** volt ellenőrizve. Az `ENCRYPTION_KEY`-nél ez példásan meg volt oldva
+(pontosan 32 bájt, különben az app el sem indul), a JWT titoknál hiányzott - egy rövid titok
+esetén a hiba csak az első bejelentkezéskor, futásidőben derült volna ki.
+Megoldás: ugyanaz a minta a `Program.cs`-ben, `UTF8.GetByteCount(jwtSecret) < 32` esetén
+`InvalidOperationException` induláskor.
+
+### Naplózás: személyes adatok kivezetése
+
+**Probléma:**
+Az email címek strukturált mezőként kerültek a Seq-be sikeres és sikertelen bejelentkezésnél,
+regisztrációnál, rate limit eseménynél és jelszó-visszaállításnál. GDPR-szempontból ez
+problémás, és a `SCHEDULE.md` korábban maga is jelezte.
+(Pozitívum, amit az audit külön rögzített: jelszó, token vagy secret **sehol** nem került logba.)
+
+**Megoldás:**
+- Ahol van azonosított felhasználó, ott `UserId` szerepel az email helyett
+- Ahol nincs (sikertelen bejelentkezés, foglalt email, nem létező címre indított visszaállítás),
+  ott új `EmailRef` helper: a JWT titokkal kulcsolt HMAC-SHA256 első 12 hex karaktere
+- Ez determinisztikus, tehát a bejegyzések továbbra is összefűzhetők egy fiókra, de a cím
+  a napló birtokában sem állítható vissza
+- Az `AuthService` egyetlen naplóbejegyzése sem tartalmaz nyers email címet
+
+Hátravan a GDPR-teljességhez: a Seq megőrzési idejének beállítása és a törlési mechanizmus.
+Ez üzemeltetési feladat, nem kódváltozás.
+
+### Git webhook megerősítése
+
+**Fail-open aláírás-ellenőrzés**
+Probléma: a provider-elágazásnak (`GitHub` / `GitLab`) nem volt `else` ága, tehát ismeretlen
+provider esetén **egyetlen ellenőrzés sem futott le**, és a feldolgozás simán továbbment.
+A validátor ma csak a két értéket engedi, tehát nem volt kihasználható - de a szerkezet
+fail-open volt, és egy új provider hozzáadásakor azonnal védtelen végponttá vált volna.
+Megoldás: explicit `else` ág `401 Unauthorized` válasszal és `LogWarning`-gal.
+
+**Hiányzó bemenet-ellenőrzés és korlátozás**
+Probléma: a `JsonDocument.Parse` a `try` blokkon kívül volt (hibás JSON = 500), nem volt
+méretkorlát a payloadon (a teljes body memóriába olvasódik, majd az `EnableBuffering` miatt
+még egyszer pufferelődik), és nem volt rate limit. Az integráció-lekérdezés az aláírás-ellenőrzés
+**előtt** fut, tehát a DB hitelesítés nélkül terhelhető volt.
+Megoldás: a parse saját `try`-ba került (`JsonException` -> 400), `[RequestSizeLimit(1_000_000)]`
+a végpontra, és `webhook:{webhookToken}` kulcsú rate limit (60/perc) **az integráció-lekérdezés előtt**,
+429 + `Retry-After` válasszal.
+
+**Regex felhasználói adatból**
+Probléma: a task-kulcs mintába a `ProjKey` escape nélkül interpolálódott. Jelenleg nem
+kihasználható, mert a validátor `^[A-Z0-9]+$`-ra korlátozza - de a konstrukció törékeny,
+a validátor egyetlen lazítása regex-injektálást és ReDoS-t nyitna egy webhook payloadon futó
+mintaillesztésben.
+Megoldás: `Regex.Escape(project.ProjKey)` és 100 ms-os timeout a `Regex.Matches` hívásra.
+
+### Központi hibakezelés és tipizált kivételek
+
+**Probléma:**
+A `catch (Exception ex) -> BadRequest(ex.Message)` minta **mind a 16 controlleren** végigfutott,
+92 helyen. Három külön baj egyszerre:
+- Információszivárgás: az `ex.Message` bármilyen belső kivétel szövege lehetett - EF Core / Npgsql
+  hibaüzenet (táblanevek, oszlopnevek, constraint-nevek), MinIO SDK hiba (bucket név, endpoint),
+  null reference részletek
+- Felhasználó-enumeráció: az auth végpontokon a service pontos üzenetei mentek ki nyersen
+  ("Ez az email már foglalt!", "Felhasználó nem található!" vs. "Az email cím már van megerősítve!"),
+  ami ellentmondott a forgot-password végponton tudatosan bevezetett általános válasznak
+- Hibás státuszkódok: a "nem található" és a "nincs jogosultság" is 400-ként ment ki, ami a
+  kliensoldali hibakezelést pontatlanná tette és a monitorozásban elrejtette a valódi mintázatokat
+
+Emellett a `GlobalExceptionHandlerMiddleware` nem vizsgálta a `Response.HasStarted` állapotot:
+a streamelt fájlletöltés közben keletkező hiba másodlagos kivételt okozott, ami elfedte az eredetit.
+
+**Megoldás - kivétel-hierarchia:**
+- Új `Common/Exceptions/AppException.cs` absztrakt ős, saját `StatusCode` tulajdonsággal
+- Leszármazottai: `NotFoundException` (404), `ValidationException` (400), `ForbiddenException` (403),
+  `ConflictException` (409, optimistic concurrency és duplikátumok), és a meglévő
+  `RateLimitException` (429), amely szintén erre az ősre került
+- A szerződés egy mondat: **csak az `AppException`-ből származó kivételek üzenete hagyhatja el a szervert**
+
+**Megoldás - middleware:**
+- `AppException` -> saját státuszkód + saját üzenet, `LogWarning`
+- Minden más -> 500 + "Belső szerverhiba történt!", `LogError`, a részletek kizárólag a naplóba
+- Új `WriteErrorAsync` helper `Response.HasStarted` ellenőrzéssel: ha a válasz már elindult,
+  `context.Abort()` a másodlagos kivétel helyett; egyébként `Response.Clear()`, hogy a korábban
+  kirakott `Content-Disposition` ne ragadjon a hibaválaszon
+
+**Megoldás - rétegek átállítása:**
+- 92 `catch` blokk törölve 16 controllerből, a `try` kerettel együtt
+- 177 `throw new Exception` tipizált kivételre cserélve 14 service-ben
+- Besorolás: "nem található" -> 404; "időközben módosult" és duplikátumok -> 409;
+  jogosultsági szabály (saját komment, tulajdonos védelme) -> 403; minden más üzleti szabály -> 400
+- A refactor összesen -855 / +323 sor: nagyobb részt **töröl**, mint amennyit hozzáad
+
+**Két szándékosan megtartott try/catch:**
+a `WebhookController` `JsonException` ága, és az `AuthController.ResendVerification`, ami
+elnyeli a `NotFoundException`/`ValidationException`-t és egységes 200-at ad
+("Ha az email cím megerősítésre vár, elküldtük...") - ugyanaz a minta, mint a forgot-password-nél.
+
+**Egy döntés, ami nem magától értetődő:**
+Üzleti hibára sehol nem adunk 401-et. A frontend axios interceptere a 401-re token-frissítést és
+újraküldést indít, tehát egy hibás jelszó felesleges kört futna. A megerősítést igénylő műveletek
+(2FA kikapcsolása) ezért 403-at adnak, a bejelentkezési hiba 400-at.
+
+**Frontend illesztés:**
+A hibaválasz `{"error": "..."}` alakú JSON lett. A 90 hívási helyet nem írtuk át - a `client.ts`
+interceptorában egy helyen csomagoljuk ki, így az `e.response?.data` továbbra is szöveg marad.
+
+**A regisztráció szándékosan megtartja az "Ez az email már foglalt!" üzenetet:**
+enélkül a felhasználó nem tudná, miért nem jött létre a fiókja. A javított rate limit sorrend
+miatt ezt a végpontot most már ténylegesen fogja a limit (5/óra/IP), ami az enumerációt
+használhatatlanná teszi.
+
+### Fájlfeltöltés megerősítése
+
+**Content-type whitelist nem érvényesült**
+Probléma: a `GeneratePresignedPutUrlAsync` megkapta a `contentType` paramétert, de **sehol nem
+használta** - nem épült be az aláírásba. A `ConfirmUploadAsync` ezen nem javított: csak a méretet
+ellenőrizte, az adatbázisba pedig a kliens által **bejelentett** típus került. A `ValidateFile`
+whitelistje így a presigned úton csak formalitás volt: a felhasználó bejelentett `image/png`-t,
+és bármit feltölthetett.
+Megoldás: `.WithHeaders(["Content-Type"] = contentType)` a presigned argumentumokba - a MinIO
+elutasítja az eltérő fejléccel érkező PUT-ot. Második rétegként a confirm összeveti a
+`StatObject` által visszaadott típust a bejelentettel.
+(Enyhítő tényező volt, amit az audit külön kiemelt: a letöltés `Content-Disposition: attachment`
++ `nosniff` fejlécekkel megy, tehát stored XSS ezen az úton nem volt - ez helyes tervezési döntés.)
+
+**Tárhely-kimerítés**
+Probléma: a presigned PUT-nak nincs szerveroldali méretkorlátja, a tényleges kikényszerítés csak
+a confirm lépésben történik - akkor viszont a fájl már fent van. Aki nem hívja meg a confirmot,
+annak az objektuma az `OrphanCleanupJob` következő futásáig marad, ami `PeriodicTimer`-rel
+**az első tickig végigvárja a teljes intervallumot** (24 óra), és minden újraindítás után elölről kezdi.
+Megoldás: `presigned_upload:{userId}` rate limit (60 kérés / 10 perc), és a cleanup mostantól
+**induláskor is lefut**, nem csak az első intervallum után.
+Nyitva maradt: MinIO bucket lifecycle szabály és tárhelykvóta - üzemeltetési/termékdöntés.
+
+**Feltöltés-megerősítés hiányzó kötései**
+Probléma: a `ConfirmUploadAsync` nem ellenőrizte, hogy a hívó azonos-e a presigned URL kérőjével,
+tehát a 2 perces ablakon belül a projekt bármely tagja megerősíthette más függőben lévő
+feltöltését, és a fájl az ő nevén jelent meg. Emellett a route-ból érkező `taskId` felülírta a
+naplózottat, és sehol nem volt ellenőrizve, hogy az a task a projekthez tartozik-e.
+Megoldás: `log.CreatedById == _currentUserService.UserId` ellenőrzés (403 + `LogWarning`),
+és a `taskId` kötése `ProjectTasks.AnyAsync(t => t.Id == ... && t.ProjectId == projectId)` feltétellel.
+
+### Jogosultsági réteg és üzleti szabályok
+
+**Admin megkerülhette az Owner-only archiválást**
+Probléma: az archiválás dedikált végpontja Owner jogosultságot követel, az általános frissítő
+végpont viszont csak Admint - és az `UpdateProjectDto` tartalmazta az `IsArchived` mezőt, amit
+a service alkalmazott is. Egy Admin `PUT /api/projects/{id}` kéréssel archiválhatta a projektet.
+Visszafelé nem működött: az archivált projekten a `ProjectNotArchivedFilter` blokkolja az írást,
+tehát az Admin nem tudta visszavonni - a gyakorlatban tartós szolgáltatásmegtagadás a projekt felett.
+Megoldás: az `IsArchived` mező **törölve** a DTO-ból, és a service sem állítja többé.
+Állapotváltás kizárólag a két dedikált végponton. A DTO-ban kommentben rögzítve, miért nincs
+ott a mező, hogy egy későbbi "hiányzik egy property" reflex ne tegye vissza.
+
+**ProjectRoleHandler: 500-as hibák és hardcode-olt szerepkörök**
+Probléma: `Guid.Parse` (nem `TryParse`) a claimen és a route értéken, tehát hibás formátumú
+`projectId` az URL-ben kezeletlen `FormatException`-t dobott a jogosultsági rétegben -> 500.
+Emellett a szerepkör-hierarchia hardcode-olt string lista volt, holott a `ProjectRoles` osztály
+létezik: ha bárhol elgépelődik egy szerepkör neve, az `IndexOf` -1-et ad, és a `-1 >= -1`
+összehasonlítás **igaz** - egy ismeretlen szerepkörű tag ismeretlen követelmény esetén átment volna.
+Megoldás: `Guid.TryParse` mindkét helyen (sikertelenség -> `return`, ami elutasítás);
+a hierarchia átkerült a `ProjectRoles.Hierarchy` konstansba új `RankOf()` helperrel;
+és ha akár a szerepkör, akár a követelmény ismeretlen, a handler `LogWarning`-gal elutasít - fail-closed.
+
+**Örökre élő meghívó linkek**
+Probléma: ha a felhasználó nem töltötte ki a lejárat mezőt, `DateTime.MaxValue` került az
+`ExpiresAt`-ba - soha le nem járó, korlátlanul felhasználható meghívó. Egy ilyen link
+(chat-előzmény, e-mail, képernyőkép) évekkel később is beengedte volna a birtokosát.
+Megoldás: `DefaultInviteExpiryDays = 7`. A validátor korábban is 30 napban maximálta a
+megadható értéket, tehát a felső korlát megvolt - csak az alapértelmezés hiányzott.
+
+### Titkosítási migráció és háttérfeladat-stabilitás
+
+**Webhook secret migráció rossz kulccsal adatvesztést okozhatott**
+Probléma: a "plain text-e még?" detektálás azon alapult, hogy a `Decrypt` dob-e kivételt.
+Csakhogy a `Decrypt` több okból is dobhat: rossz `ENCRYPTION_KEY`, sérült adat, base64 hiba.
+Ha az `ENCRYPTION_KEY` bármikor lecserélődik (kulcsrotáció, hibás deploy, helyreállítás másik
+környezetből), a metódus **minden helyesen titkosított secretet** plain textnek minősített volna,
+és újratitkosította volna az új kulccsal a régi ciphertext fölé. Az eredeti secret ezzel
+visszafejthetetlenül elvész, minden Git integráció működésképtelenné válik - és mindez
+hibaüzenet nélkül, mert a művelet "sikeresen" lefut.
+Megoldás:
+- Az `EncryptionService.Encrypt` mostantól `enc:v1:` prefixszel jelöli a kimenetét, a `Decrypt`
+  a prefixes és a régi, prefix nélküli értéket egyaránt kezeli - nincs adatmigrációs kényszer
+- A migráció formátum alapján dönt: a már megjelölt sorokat a lekérdezés ki sem hozza
+  (kulcscsere nem tud kárt tenni bennük); a nyilvánvalóan plain text (nem base64 vagy 28 bájtnál
+  rövidebb) titkosításra kerül; a ciphertextnek látszó, de vissza nem fejthető sorokat
+  **változatlanul hagyjuk** `LogError` mellett - ez rossz kulcsra utal, és épp az újratitkosítás
+  semmisítené meg az eredetit
+- A metódus azonnal kilép, ha nincs feldolgozandó sor, és a `SaveChangesAsync` a `foreach`-en
+  belülre került, hogy egy hibás sor ne vigye magával a többit
+
+**OrphanCleanupJob leállíthatta a teljes API-t**
+Probléma: a `while` cikluson belüli `CleanupOrphansAsync()` hívás körül nem volt `try/catch`.
+A metódus per-elem szinten szépen kezelte a hibákat, de az azt megelőző lekérdezés nem.
+A .NET 6 óta a `BackgroundServiceExceptionBehavior` alapértelmezése `StopHost`: egy átmeneti
+PostgreSQL-hiba a cleanup pillanatában **az egész API-replikát leállította volna**.
+Megoldás: a ciklus törzse `RunCleanupSafelyAsync` wrapperbe került, ami `try/catch`-eli a teljes
+hívást és `LogError`-ral naplóz.
+
+### Infrastruktúra megerősítése
+
+**Redis hitelesítés nélkül futott**
+Probléma: nem volt `requirepass` és a `REDIS_CONNECTION` sem tartalmazott jelszót. A Redis nincs
+kitéve az internetre (nincs `ports:` mapping, ez helyes), de a `pma-internal` bridge hálózaton
+bármelyik konténer korlátlanul elérte. Ez a rate limit kulcsok `DEL`-lel való törlését
+(korlátlan brute force), és a SignalR backplane olvasását/manipulálását tette lehetővé.
+Megoldás: `command: redis-server --requirepass ${REDIS_PASSWORD}` és hitelesített healthcheck.
+Új környezeti változó: `REDIS_PASSWORD`, és a `REDIS_CONNECTION` kiegészítve a jelszóval.
+
+**Hiányzó biztonsági fejlécek**
+Probléma: az API routerre egyetlen middleware volt kötve, és az sem biztonsági célú (`api-ws`,
+ami az `X-Forwarded-Proto`-t állítja). Az `api.trunkpeter.com` válaszai semmilyen biztonsági
+fejlécet nem kaptak. A `frontend-security` middleware-ből pedig hiányzott a HSTS és a `contentTypeNosniff`.
+Megoldás: új `api-security` headers middleware (`contentTypeNosniff`, `frameDeny`, `referrerPolicy`,
+HSTS), rákötve az API routerre a meglévő mellé; a `frontend-security` kiegészítve HSTS-sel és nosniff-fel.
+Tudatos döntés: a `stsSeconds` egyelőre **300 másodperc**, `includeSubdomains` és `preload` nélkül.
+Indok: amit a böngésző eltárolt, azt a szerver nem tudja visszavonni, csak lejáratni - egy 1 éves
+érték egy elrontott aldomain esetén hosszú időre elvágná a felhasználót. A rövid érték hibás
+beállítás esetén 5 perc alatt elévül. Ha egy hét után minden rendben, felvihető 31536000-re.
+
+**A konténerek root felhasználóként futottak**
+Probléma: egyik Dockerfile sem tartalmazott `USER` direktívát. Egy kódfuttatási hiba esetén a
+támadó azonnal root a konténer névterében, ami megkönnyíti a kitörési kísérleteket és az
+oldalirányú mozgást a belső hálózaton.
+Megoldás: `USER app` a backend runtime stage-ében (az 5178-as port 1024 fölött van, tehát
+nem-rootként is köthető); a frontend runtime image `nginx:alpine` helyett
+`nginxinc/nginx-unprivileged:alpine` `EXPOSE 8080`-nal. Ehhez az `nginx.conf` `listen` direktívája
+és a Traefik `loadbalancer.server.port` is 8080-ra változott.
+
+**Nginx verzió szivárgás**
+Probléma: nem volt `server_tokens off;`, így a `Server` fejléc kiadta a pontos nginx verziót.
+Megoldás: `server_tokens off;` a `server` blokkba.
+
+**Refresh token cookie egységesítése**
+Probléma: a `logout` `Cookies.Delete` hívása csak `Path`-t adott meg, `Domain`-t nem - a sütit
+viszont `Domain=.trunkpeter.com`-mal állítottuk be, tehát a böngésző nem azonosította, és a süti
+production-ben **bent maradt**. Emellett a domain hardcode-olva volt a controllerben.
+Megoldás: új `Common/Options/CookieOptions.cs`, a `Program.cs` a `COOKIE_DOMAIN` környezeti
+változóból tölti, és a beállító/törlő fejléc egyetlen `BuildCookieOptions()` helperből épül -
+így a két oldal nem tud eltérni. Új környezeti változó: `COOKIE_DOMAIN`.
+
+**Két nem biztonsági hiba, ami itt derült ki:**
+- `npm install` -> `npm ci`: a `package-lock.json` mostantól kötelező érvényű, a build reprodukálható
+- `ENV VITE_SIGNALR_KEEPALIVE_ENABLED=$VITE_SIGNALR_KEEPALIVE_SECONDS` copy-paste hiba (lásd lent)
+- `VITE_JWT_ACCESS_TOKEN_LIFETIME` build arg: a compose átadta, de a Dockerfile-ban nem volt
+  `ARG` deklaráció, így csendben elveszett
+
+### CI pipeline bevezetése
+
+**Probléma:**
+A `.github/workflows/` üres volt. Biztonsági vagy funkcionális regressziót semmi nem fogott el,
+a 745 soros tesztlefedettség csak akkor futott, ha valaki kézzel elindította.
+
+**Megoldás:**
+- Új `.github/workflows/ci.yml`, push és pull request eseményre
+- Backend job: `dotnet restore` / `build` / `test` a `ProjectManager.slnx`-re, .NET 10
+- Frontend job: `npm ci` + `npm run build`, Node 20, npm cache a lockfile alapján
+- A `npm ci` ugyanaz, mint a Dockerfile-ban - a CI és a production build ugyanazt a
+  függőségi fát használja
+- Típusellenőrzés jelenleg nincs benne, mert a `build` script csak `vite build`;
+  ha később bekerül a `svelte-check`, külön lépésként jöhet
+
+### SignalR keepalive - a deploy után előjött hiba
+
+**Probléma:**
+A biztonsági javítások deployja után a WebSocket kapcsolat kb. 30 másodpercenként megszakadt,
+majd automatikusan helyreállt, és újra megszakadt. Kliensoldali hibaüzenet:
+`Server returned an error on close: Connection closed with an error.`
+
+**Ok:**
+A hibát az infrastruktúra-etapban javított `ENV` elgépelés hozta elő:
+
+```dockerfile
+ENV VITE_SIGNALR_KEEPALIVE_ENABLED=$VITE_SIGNALR_KEEPALIVE_SECONDS   # régi, hibás
+```
+
+A kliens `import.meta.env.VITE_SIGNALR_KEEPALIVE_ENABLED === 'true'` alapján dönt. Az elgépelés
+miatt ez a változó a **másodpercek** értékét kapta (`"50"`), és `"50" === 'true'` hamis - tehát a
+`withKeepAliveInterval(...)` hívás **soha nem futott le**. Végig a SignalR beépített 15 másodperces
+alapértéke tartotta életben a kapcsolatot.
+
+Az elgépelés javítása után a beállítás **először aktiválódott**: a kliens 50 másodpercenként
+pingelt, miközben a szerver `ClientTimeoutInterval` alapértéke 30 másodperc. A szerver minden
+alkalommal bontotta a kapcsolatot, mielőtt a kliens megszólalt volna.
+
+**Megoldás:**
+- `AddSignalR` explicit időzítést kapott: `KeepAliveInterval = 15s`, `ClientTimeoutInterval = 60s`
+- A kliensoldali érték 5 és 30 másodperc közé szorítva, eltérés esetén `console.warn`
+- `VITE_SIGNALR_KEEPALIVE_SECONDS` 50-ről 15-re állítva (ez a dokumentált és a könyvtár alapértéke)
+- A kettő együtt garantálja a SignalR alapszabályát: a szerver timeoutja legalább kétszerese
+  a kliens ping-periódusának
+
+**Tanulság a dokumentációhoz:**
+A korábbi "SignalR WebSocket keepalive" fejezet szerint a funkció elkészült és production-ben
+tesztelve lett, a "Cloudflare timeout nem következik be" ellenőrzés pedig zöld lett.
+Mindkettő igaz volt a **végeredményt** tekintve, de nem attól, amitől hittük: a beállított 50
+másodperc soha nem érvényesült, a 15 másodperces alapértelmezés dolgozott helyette.
+Ilyet nagyon nehéz észrevenni, mert a rendszer működik - csak nem a feltételezett okból.
+
+### Tudatosan nyitva hagyott tételek
+
+Ezek a javítások szándékosan maradtak ki, mert üzemeltetési vagy termékdöntést igényelnek:
+
+- **MinIO service account**: az alkalmazás a `MINIO_ROOT_USER` credentiallel dolgozik.
+  Korlátozott jogú service account létrehozása MinIO-oldali művelet (`mc admin user add` +
+  bucket policy), nem compose-változás.
+- **MinIO bucket lifecycle és tárhelykvóta**: a presigned feltöltés rate limitje és a
+  gyakoribb cleanup enyhíti a kockázatot, de a lifecycle szabály akkor is véd, ha a job nem fut.
+- **Seq megőrzési idő és törlési mechanizmus**: a naplókból kikerült a nyers email cím,
+  de a GDPR-teljességhez retention policy is kell.
+- **HSTS felemelése 1 évre**, majd külön mérlegelés után `includeSubdomains`.
+  A `preload` tudatos, nehezen visszafordítható döntés - ne audit-javítás mellékhatásaként kerüljön be.
+- **GitHub IP-allowlist a webhook végponton**: külső listát (`https://api.github.com/meta`)
+  és periodikus frissítést igényel.
+- **Access token a SignalR query stringjében**: ez a WebSocket kapcsolat szabványos megoldása,
+  nem hiba (a böngésző WebSocket API-ja nem enged egyedi fejlécet). Következménye, hogy a JWT
+  megjelenik a Traefik és a Cloudflare hozzáférési naplóiban - a válasz erre a Traefik access log
+  konfigurálása és az alacsony `JWT_EXPIRY_MINUTES`, nem kódváltozás.
+- **Jogosultsági regressziós tesztek**: a CI most már fut, de az IDOR javításokra még nincs
+  automatizált teszt (idegen projekt entitás-ID -> 404). Ez a legfontosabb következő lépés.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
