@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Columns;
 using ProjectManager.API.Hubs;
@@ -36,12 +37,12 @@ namespace ProjectManager.API.Services.ColumnService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             var column = new ColumnDefinition
             {
@@ -100,23 +101,23 @@ namespace ProjectManager.API.Services.ColumnService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             var column = await _context.ColumnDefinitions
                 .FirstOrDefaultAsync(c => c.Id == columnId && c.BoardId == boardId && !c.IsDeleted);
             if (column == null)
-                throw new Exception("Oszlop nem található");
+                throw new NotFoundException("Oszlop nem található");
             if (column.Position == 0)
-                throw new Exception("A Backlog oszlop nem törölhető!");
+                throw new ValidationException("A Backlog oszlop nem törölhető!");
 
             var hasTask = await _context.ProjectTasks.AnyAsync(t => t.ColumnId == columnId);
             if (hasTask)
-                throw new Exception("Az oszlop nem törölhető, mert taskok találhatóak benne!");
+                throw new ValidationException("Az oszlop nem törölhető, mert taskok találhatóak benne!");
 
             //Soft delete
             column.IsDeleted = true;
@@ -128,7 +129,7 @@ namespace ProjectManager.API.Services.ColumnService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("Az oszlop időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -166,12 +167,12 @@ namespace ProjectManager.API.Services.ColumnService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             var columns = await _context.ColumnDefinitions
                 .Where(c => c.BoardId == boardId && !c.IsDeleted)
@@ -184,12 +185,12 @@ namespace ProjectManager.API.Services.ColumnService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             var backlogColumn = await _context.ColumnDefinitions
                 .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == boardId);
@@ -201,9 +202,9 @@ namespace ProjectManager.API.Services.ColumnService
                 .ToListAsync();
 
             if (columns.Count != order.Count)
-                throw new Exception("Egy vagy több oszlop nem található!");
+                throw new NotFoundException("Egy vagy több oszlop nem található!");
             if (backlogColumn != null && order.Any(o => o.Id == backlogColumn.Id && o.Position != 0))
-                throw new Exception("A Backlog oszlop pozíciója nem változtatható!");
+                throw new ValidationException("A Backlog oszlop pozíciója nem változtatható!");
 
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
@@ -322,17 +323,17 @@ namespace ProjectManager.API.Services.ColumnService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             var column = await _context.ColumnDefinitions
                 .FirstOrDefaultAsync(c => c.Id == columnId && c.BoardId == boardId && !c.IsDeleted);
             if (column == null)
-                throw new Exception("Oszlop nem található");
+                throw new NotFoundException("Oszlop nem található");
 
             _context.Entry(column).OriginalValues["xmin"] = dto.RowVersion;
 
@@ -346,7 +347,7 @@ namespace ProjectManager.API.Services.ColumnService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("Az oszlop időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("Az oszlop időközben módosult, kérjük próbáld újra!");
             }
 
             try

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Common.Options;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Hubs;
@@ -47,7 +48,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
 
             if (attachment == null)
-                throw new Exception("Fájl nem található!");
+                throw new NotFoundException("Fájl nem található!");
 
             await _fileStorageService.DeleteFileAsync(attachment.StorageKey);
             _logger.LogInformation("Fájl törölve | AttachmentId: {AttachmentId} | StorageKey: {StorageKey}", attachmentId, attachment.StorageKey);
@@ -97,7 +98,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
 
             if (attachment == null)
-                throw new Exception("Fájl nem található!");
+                throw new NotFoundException("Fájl nem található!");
 
             await _fileStorageService.StreamFileAsync(attachment.StorageKey, destination, ct);
         }
@@ -263,31 +264,31 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(p => p.StorageKey == dto.StorageKey
                                         && p.ProjectId == projectId);
             if (log == null)
-                throw new Exception("Érvénytelen storage key!");
+                throw new ValidationException("Érvénytelen storage key!");
 
             //Lejárt-e?
             if (log.ExpiresAt < DateTime.UtcNow)
             {
                 _logger.LogWarning("Lejárt presigned URL confirm kísérlet | StorageKey: {StorageKey}", dto.StorageKey);
-                throw new Exception("A feltöltési URL lejárt!");
+                throw new ValidationException("A feltöltési URL lejárt!");
             }
 
             //Duplikált confirm ellenőrzés
             if (log.Confirmed)
-                throw new Exception("Ez a fájl már meg lett erősítve!");
+                throw new ConflictException("Ez a fájl már meg lett erősítve!");
 
             //Duplikált Attachment ellenőrzés (unique constraint előtt)
             if (await _context.Attachments.AnyAsync(a => a.StorageKey == dto.StorageKey))
-                throw new Exception("Ez a fájl már fel lett töltve!");
+                throw new ConflictException("Ez a fájl már fel lett töltve!");
 
             //MinIO-ban létezik-e ténylegesen?
             var objectInfo = await _fileStorageService.GetObjectInfoAsync(dto.StorageKey);
             if (objectInfo == null)
-                throw new Exception("A fájl nem található a tárolóban!");
+                throw new NotFoundException("A fájl nem található a tárolóban!");
 
             //Méret ellenőrzés
             if (objectInfo.Size > log.SizeBytes * 1.1) // 10% tolerancia
-                throw new Exception("A fájl mérete nem egyezik!");
+                throw new ValidationException("A fájl mérete nem egyezik!");
 
             //Attachment betöltése UploadedBy-jal
             var uploadedBy = await _context.Users
@@ -333,7 +334,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     _context.ChangeTracker.Clear();
                     log.Confirmed = true; //reset after clear
                     if (attempt == maxRetries - 1)
-                        throw new Exception("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
+                        throw new ValidationException("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
                 }
             }
 
@@ -389,7 +390,7 @@ namespace ProjectManager.API.Services.AttachmentService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var attachment = await _context.Attachments
                 .Include(a => a.UploadedBy)
@@ -456,13 +457,13 @@ namespace ProjectManager.API.Services.AttachmentService
             if (sizeBytes > maxSizeBytes)
             {
                 _logger.LogWarning("Fájl méret limit túllépve | Size: {SizeBytes} | Limit: {MaxSizeBytes}", sizeBytes, maxSizeBytes);
-                throw new Exception($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
+                throw new ValidationException($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
             }
             
             if (!AllowedContentTypes.Contains(contentType))
             {
                 _logger.LogWarning("Nem engedélyezett fájltípus | ContentType: {ContentType}", contentType);
-                throw new Exception($"A {contentType} fájltípus nem engedélyezett!");
+                throw new ValidationException($"A {contentType} fájltípus nem engedélyezett!");
             }
                 
         }

@@ -29,16 +29,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<CommentResponseDto>>> GetCommentsAsync(Guid projectId, Guid taskId)
         {
-            try
-            {
-                var response = await _commentService.GetCommentsAsync(projectId, taskId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _commentService.GetCommentsAsync(projectId, taskId);
+            return Ok(response);
         }
 
         [HttpPost]
@@ -47,16 +39,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<CommentResponseDto>> CommentOnTaskAsync(Guid projectId, Guid taskId, [FromBody] CreateCommentDto dto)
         {
-            try
-            {
-                var response = await _commentService.CommentOnTaskAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _commentService.CommentOnTaskAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         [HttpDelete("{commentId}")]
@@ -65,16 +49,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteCommentFromTaskAsync(Guid projectId, Guid taskId, Guid commentId)
         {
-            try
-            {
-                await _commentService.DeleteCommentFromTaskAsync(projectId, taskId, commentId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _commentService.DeleteCommentFromTaskAsync(projectId, taskId, commentId);
+            return NoContent();
         }
     }
 }

@@ -29,16 +29,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<BoardResponseDto>> CreateBoardAsync(Guid projectId, [FromBody] CreateBoardDto dto)
         {
-            try
-            {
-                var response = await _boardService.CreateBoardAsync(projectId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _boardService.CreateBoardAsync(projectId, dto);
+            return Ok(response);
         }
 
         [HttpDelete("{boardId}")]
@@ -47,16 +39,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteBoardAsync(Guid projectId, Guid boardId)
         {
-            try
-            {
-                await _boardService.DeleteBoardAsync(projectId, boardId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _boardService.DeleteBoardAsync(projectId, boardId);
+            return NoContent();
         }
 
         [HttpGet]
@@ -67,16 +51,8 @@ namespace ProjectManager.API.Controllers
             Guid projectId,
             [FromQuery] string? scope = null)
         {
-            try
-            {
-                var response = await _boardService.GetBoardsAsync(projectId, scope);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _boardService.GetBoardsAsync(projectId, scope);
+            return Ok(response);
         }
 
         [HttpPatch("{boardId}")]
@@ -85,16 +61,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<BoardResponseDto>> UpdateBoardAsync(Guid projectId, Guid boardId, [FromBody] UpdateBoardDto dto)
         {
-            try
-            {
-                var response = await _boardService.UpdateBoardAsync(projectId, boardId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _boardService.UpdateBoardAsync(projectId, boardId, dto);
+            return Ok(response);
         }
     }
 }

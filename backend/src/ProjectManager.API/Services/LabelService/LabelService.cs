@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Labels;
 using ProjectManager.API.Hubs;
@@ -27,23 +28,23 @@ namespace ProjectManager.API.Services.LabelService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             //A címke azonosítója a kérésből jön: enélkül idegen projekt címkéje is
             //rákerülhet a taskra, és a neve/színe megjelenik a felületen
             var labelExists = await _context.Labels
                 .AnyAsync(l => l.Id == labelId && l.ProjectId == projectId);
             if (!labelExists)
-                throw new Exception("Cimke nem található!");
+                throw new NotFoundException("Cimke nem található!");
 
             var existing = await _context.LabelTasks.FirstOrDefaultAsync(lt => lt.TaskId == taskId && lt.LabelId == labelId);
             if (existing != null)
-                throw new Exception("Ez a cimke már hozzá van rendelve ehhez a feladathoz!");
+                throw new ConflictException("Ez a cimke már hozzá van rendelve ehhez a feladathoz!");
 
             var labelTask = new LabelTask
             {
@@ -70,7 +71,7 @@ namespace ProjectManager.API.Services.LabelService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var label = new Label
             {
@@ -107,12 +108,12 @@ namespace ProjectManager.API.Services.LabelService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var label = await _context.Labels
                 .FirstOrDefaultAsync(l => l.Id == labelId && l.ProjectId == projectId);
             if (label == null)
-                throw new Exception("Cimke nem található");
+                throw new NotFoundException("Cimke nem található");
 
             _context.Labels.Remove(label);
             await _context.SaveChangesAsync();
@@ -134,7 +135,7 @@ namespace ProjectManager.API.Services.LabelService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var labels = await _context.Labels
                 .Where(l => l.ProjectId == projectId)
@@ -153,16 +154,16 @@ namespace ProjectManager.API.Services.LabelService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             var labelTask = await _context.LabelTasks.FirstOrDefaultAsync(lt => lt.TaskId == taskId && lt.LabelId == labelId);
             if (labelTask == null)
-                throw new Exception("Ez a cimke nincs ehhez a feladathoz rendelve!");
+                throw new ValidationException("Ez a cimke nincs ehhez a feladathoz rendelve!");
 
             _context.LabelTasks.Remove(labelTask);
             await _context.SaveChangesAsync();

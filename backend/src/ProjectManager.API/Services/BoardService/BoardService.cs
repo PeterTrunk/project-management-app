@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Boards;
 using ProjectManager.API.DTOs.Columns;
@@ -35,7 +36,7 @@ namespace ProjectManager.API.Services.BoardService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             // Ha az új board isDefault = true, akkor a többi boardon hamissá tesszük
             if (dto.IsDefault)
@@ -145,12 +146,12 @@ namespace ProjectManager.API.Services.BoardService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if(board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
             
             _context.Boards.Remove(board);
 
@@ -160,7 +161,7 @@ namespace ProjectManager.API.Services.BoardService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A board időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A board időközben módosult, kérjük próbáld újra!");
             }
             
             try
@@ -200,7 +201,7 @@ namespace ProjectManager.API.Services.BoardService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var boardsQuery = _context.Boards
                 .Where(b => b.ProjectId == projectId)
@@ -242,12 +243,12 @@ namespace ProjectManager.API.Services.BoardService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var board = await _context.Boards
                 .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
-                throw new Exception("Board nem található");
+                throw new NotFoundException("Board nem található");
 
             _context.Entry(board).OriginalValues["xmin"] = dto.RowVersion;
 
@@ -276,7 +277,7 @@ namespace ProjectManager.API.Services.BoardService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A board időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A board időközben módosult, kérjük próbáld újra!");
             }
 
 

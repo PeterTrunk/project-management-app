@@ -976,7 +976,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             var existing = await _context.TaskAssignments
                 .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
             if (existing != null)
-                throw new ValidationException("Ez a felhasználó már hozzá van rendelve!");
+                throw new ConflictException("Ez a felhasználó már hozzá van rendelve!");
 
             await _context.TaskAssignments.AddAsync(new TaskAssignment
             {

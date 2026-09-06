@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Statistics;
 
@@ -18,7 +19,7 @@ namespace ProjectManager.API.Services.StatisticsService
             var sprint = await _context.Sprints
                 .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található!");
+                throw new NotFoundException("Sprint nem található!");
 
             var startDate = DateTime.SpecifyKind(
                 sprint.StartDate ?? DateTime.UtcNow.AddDays(-14), DateTimeKind.Utc);

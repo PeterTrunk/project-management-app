@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Common.Security;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
 using ProjectManager.API.Hubs;
@@ -42,7 +43,7 @@ namespace ProjectManager.API.Services.TeamService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             // 32 karakter, kötőjel nélkül
             var token = SecureTokenGenerator.Generate();
@@ -80,7 +81,7 @@ namespace ProjectManager.API.Services.TeamService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var members = await _context.ProjectMembers
                 .Where(pm => pm.ProjectId == projectId)
@@ -104,15 +105,15 @@ namespace ProjectManager.API.Services.TeamService
                 .FirstOrDefaultAsync(i => i.Token == token);
 
             if (invite == null)
-                throw new Exception("Érvénytelen meghívó link!");
+                throw new ValidationException("Érvénytelen meghívó link!");
 
             // Lejárt?
             if (invite.ExpiresAt < DateTime.UtcNow)
-                throw new Exception("A meghívó link lejárt!");
+                throw new ValidationException("A meghívó link lejárt!");
 
             // MaxUses elérve?
             if (invite.MaxUses.HasValue && invite.UseCount >= invite.MaxUses)
-                throw new Exception("A meghívó link maximális használati száma elérve!");
+                throw new ValidationException("A meghívó link maximális használati száma elérve!");
 
             var callerId = _currentUserService.UserId;
 
@@ -120,7 +121,7 @@ namespace ProjectManager.API.Services.TeamService
             var existingMember = await _context.ProjectMembers
                 .FirstOrDefaultAsync(pm => pm.ProjectId == invite.ProjectId && pm.UserId == callerId);
             if (existingMember != null)
-                throw new Exception("Már tagja vagy ennek a projektnek!");
+                throw new ConflictException("Már tagja vagy ennek a projektnek!");
 
             // Hozzáadás Member szerepkörrel
             var member = new ProjectMember
@@ -189,21 +190,21 @@ namespace ProjectManager.API.Services.TeamService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             // Owner nem távolítható el
             if (project.OwnerId == userId)
-                throw new Exception("A projekt tulajdonosa nem távolítható el!");
+                throw new ForbiddenException("A projekt tulajdonosa nem távolítható el!");
 
             // Saját magát sem távolíthatja el a hívó
             var callerId = _currentUserService.UserId;
             if (callerId == userId)
-                throw new Exception("Saját magad nem távolíthatod el!");
+                throw new ForbiddenException("Saját magad nem távolíthatod el!");
 
             var member = await _context.ProjectMembers
                 .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == userId);
             if (member == null)
-                throw new Exception("A felhasználó nem tagja a projektnek!");
+                throw new ValidationException("A felhasználó nem tagja a projektnek!");
 
             _context.ProjectMembers.Remove(member);
 
@@ -245,17 +246,17 @@ namespace ProjectManager.API.Services.TeamService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             // Owner szerepköre nem módosítható
             if (project.OwnerId == userId)
-                throw new Exception("A projekt tulajdonosának szerepköre nem módosítható!");
+                throw new ForbiddenException("A projekt tulajdonosának szerepköre nem módosítható!");
 
             var member = await _context.ProjectMembers
                 .Include(pm => pm.User)
                 .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == userId);
             if (member == null)
-                throw new Exception("A felhasználó nem tagja a projektnek!");
+                throw new ValidationException("A felhasználó nem tagja a projektnek!");
 
             member.ProjectRole = dto.ProjectRole;
             await _context.SaveChangesAsync();
@@ -329,7 +330,7 @@ namespace ProjectManager.API.Services.TeamService
                 .FirstOrDefaultAsync(i => i.ProjectId == projectId && i.Token == token);
 
             if (invite == null)
-                throw new Exception("Meghívó nem található!");
+                throw new NotFoundException("Meghívó nem található!");
 
             _context.ProjectInvites.Remove(invite);
             await _context.SaveChangesAsync();

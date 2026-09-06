@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Integration;
 using ProjectManager.API.Hubs;
@@ -46,7 +47,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var project = await _context.Projects
                 .FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
             
             var existing = await _context.Integrations
                 .FirstOrDefaultAsync(i =>
@@ -54,7 +55,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     i.Provider == dto.Provider &&
                     i.RepoFullName == dto.RepoFullName);
             if (existing != null)
-                throw new Exception("Ez az integráció már létezik!");
+                throw new ConflictException("Ez az integráció már létezik!");
 
             var integration = new Integration
             {
@@ -121,7 +122,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var integration = await _context.Integrations
                 .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
             if (integration == null)
-                throw new Exception("Integráció nem található!");
+                throw new NotFoundException("Integráció nem található!");
 
             _context.Integrations.Remove(integration);
             await _context.SaveChangesAsync();
@@ -165,7 +166,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var integration = await _context.Integrations
                 .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
             if (integration == null)
-                throw new Exception("Integráció nem található!");
+                throw new NotFoundException("Integráció nem található!");
 
             integration.IsEnabled = isEnabled;
             integration.UpdatedAt = DateTime.UtcNow;
@@ -228,7 +229,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var integration = await _context.Integrations
                 .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
             if (integration == null)
-                throw new Exception("Integráció nem található!");
+                throw new NotFoundException("Integráció nem található!");
 
             integration.WebhookToken = Guid.NewGuid().ToString("N");
             integration.UpdatedAt = DateTime.UtcNow;
@@ -277,7 +278,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var integration = await _context.Integrations
                 .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
             if (integration == null)
-                throw new Exception("Integráció nem található");
+                throw new NotFoundException("Integráció nem található");
 
             integration.WebhookSecret = _encryptionService.Encrypt(newSecret);
             integration.IsVerified = false;
@@ -305,7 +306,7 @@ namespace ProjectManager.API.Services.IntegrationService
             var integration = await _context.Integrations
                 .FirstOrDefaultAsync(i => i.Id == integrationId);
             if (integration == null)
-                throw new Exception("Integráció nem található!");
+                throw new NotFoundException("Integráció nem található!");
 
             integration.IsVerified = true;
             integration.UpdatedAt = DateTime.UtcNow;

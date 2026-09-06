@@ -112,52 +112,44 @@ namespace ProjectManager.API.Controllers
                 return BadRequest("Érvénytelen JSON payload!");
             }
 
-            try
+            if (integration.Provider == "GitHub")
             {
-                if (integration.Provider == "GitHub")
+                switch (gitHubEvent)
                 {
-                    switch (gitHubEvent)
-                    {
-                        case "ping":
-                            await _integrationService.VerifyIntegrationAsync(integration.Id);
-                            return Ok("pong");
-                        case "push":
-                            await _gitWebhookService.ProcessPushEventAsync(
-                                integration.ProjectId, integration.Id, payloadJson);
-                            break;
-                        case "pull_request":
-                            await _gitWebhookService.ProcessPullRequestEventAsync(
-                                integration.ProjectId, integration.Id, payloadJson);
-                            break;
-                        default:
-                            //Ismeretlen event - ignoráljuk
-                            return Ok("Event ignored");
-                    }
+                    case "ping":
+                        await _integrationService.VerifyIntegrationAsync(integration.Id);
+                        return Ok("pong");
+                    case "push":
+                        await _gitWebhookService.ProcessPushEventAsync(
+                            integration.ProjectId, integration.Id, payloadJson);
+                        break;
+                    case "pull_request":
+                        await _gitWebhookService.ProcessPullRequestEventAsync(
+                            integration.ProjectId, integration.Id, payloadJson);
+                        break;
+                    default:
+                        //Ismeretlen event - ignoráljuk
+                        return Ok("Event ignored");
                 }
-                else if (integration.Provider == "GitLab")
+            }
+            else if (integration.Provider == "GitLab")
+            {
+                switch (gitLabEvent)
                 {
-                    switch (gitLabEvent)
-                    {
-                        case "Push Hook":
-                            await _gitWebhookService.ProcessPushEventAsync(
-                                integration.ProjectId, integration.Id, payloadJson);
-                            break;
-                        case "Merge Request Hook":
-                            await _gitWebhookService.ProcessPullRequestEventAsync(
-                                integration.ProjectId, integration.Id, payloadJson);
-                            break;
-                        default:
-                            return Ok("Event ignored");
-                    }
+                    case "Push Hook":
+                        await _gitWebhookService.ProcessPushEventAsync(
+                            integration.ProjectId, integration.Id, payloadJson);
+                        break;
+                    case "Merge Request Hook":
+                        await _gitWebhookService.ProcessPullRequestEventAsync(
+                            integration.ProjectId, integration.Id, payloadJson);
+                        break;
+                    default:
+                        return Ok("Event ignored");
                 }
+            }
 
-                return Ok("Webhook processed!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            return Ok("Webhook processed!");
         }
     }
 }

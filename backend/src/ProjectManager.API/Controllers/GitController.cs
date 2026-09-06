@@ -33,16 +33,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<CommitLinkResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<CommitLinkResponseDto>>> GetUnmatchedCommitsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _gitService.GetUnmatchedCommitsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _gitService.GetUnmatchedCommitsAsync(projectId);
+            return Ok(response);
         }
         
         [HttpGet("unmatched-prs")]
@@ -50,16 +42,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<PrLinkResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<PrLinkResponseDto>>> GetUnmatchedPrsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _gitService.GetUnmatchedPrsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _gitService.GetUnmatchedPrsAsync(projectId);
+            return Ok(response);
         }
         
         [HttpPost("commits/{commitId}/assign/{taskId}")]
@@ -67,16 +51,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> AssignCommitToTaskAsync(Guid projectId, Guid commitId, Guid taskId)
         {
-            try
-            {
-                await _gitService.AssignCommitToTaskAsync(projectId, commitId, taskId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _gitService.AssignCommitToTaskAsync(projectId, commitId, taskId);
+            return NoContent();
         }
         
         [HttpPost("prs/{prId}/assign/{taskId}")]
@@ -84,16 +60,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> AssignPrToTaskAsync(Guid projectId, Guid prId, Guid taskId)
         {
-            try
-            {
-                await _gitService.AssignPrToTaskAsync(projectId, prId, taskId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _gitService.AssignPrToTaskAsync(projectId, prId, taskId);
+            return NoContent();
         }
     }
 }

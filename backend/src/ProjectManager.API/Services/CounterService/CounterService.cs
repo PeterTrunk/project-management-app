@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using System.Data;
 
@@ -35,7 +36,7 @@ namespace ProjectManager.API.Services.CounterService
                             .FirstOrDefaultAsync(pc => pc.ProjectId == projectId);
 
                         if (counter == null)
-                            throw new Exception("Számláló nem található");
+                            throw new NotFoundException("Számláló nem található");
 
                         var startNum = counter.LastNum + 1;
                         counter.LastNum += count;
@@ -58,13 +59,13 @@ namespace ProjectManager.API.Services.CounterService
                     _context.ChangeTracker.Clear();
 
                     if (attempt == maxRetries - 1)
-                        throw new Exception("A task létrehozása nem sikerült, kérjük próbáld újra!");
+                        throw new ValidationException("A task létrehozása nem sikerült, kérjük próbáld újra!");
 
                     await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)));
                 }
             }
 
-            throw new Exception("A task létrehozása nem sikerült, kérjük próbáld újra!");
+            throw new ValidationException("A task létrehozása nem sikerült, kérjük próbáld újra!");
         }
     }
 }
