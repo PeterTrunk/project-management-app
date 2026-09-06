@@ -30,16 +30,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ColumnResponseDto>> CreateColumnAsync(Guid projectId, Guid boardId, [FromBody] CreateColumnDto dto)
         {
-            try
-            {
-                var response = await _columnService.CreateColumnAsync(projectId, boardId, dto);
-                return Created(string.Empty, response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _columnService.CreateColumnAsync(projectId, boardId, dto);
+            return Created(string.Empty, response);
         }
 
         [HttpDelete("{columnId}")]
@@ -48,16 +40,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteColumnAsync(Guid projectId, Guid boardId, Guid columnId)
         {
-            try
-            {
-                await _columnService.DeleteColumnAsync(projectId, boardId, columnId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _columnService.DeleteColumnAsync(projectId, boardId, columnId);
+            return NoContent();
         }
 
         [HttpGet]
@@ -66,17 +50,9 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ColumnResponseDto>>> GetColumnsAsync(Guid projectId, Guid boardId)
         {
-            try
-            {
-                var response = await _columnService.GetColumnsAsync(projectId, boardId);
-                return Ok(response);
+            var response = await _columnService.GetColumnsAsync(projectId, boardId);
+            return Ok(response);
 
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
         }
 
         [HttpPatch("{columnId}")]
@@ -85,16 +61,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ColumnResponseDto>> UpdateColumnAsync(Guid projectId, Guid boardId, Guid columnId, UpdateColumnDto dto)
         {
-            try
-            {
-                var response = await _columnService.UpdateColumnAsync(projectId, boardId, columnId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _columnService.UpdateColumnAsync(projectId, boardId, columnId, dto);
+            return Ok(response);
         }
 
         [HttpPost("reorder")]
@@ -103,16 +71,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ColumnResponseDto>>> OrderColumnsAsync(Guid projectId, Guid boardId, [FromBody] List<ColumnOrderDto> order)
         {
-            try
-            {
-                var response = await _columnService.OrderColumnsAsync(projectId, boardId, order);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _columnService.OrderColumnsAsync(projectId, boardId, order);
+            return Ok(response);
         }
     }
 }

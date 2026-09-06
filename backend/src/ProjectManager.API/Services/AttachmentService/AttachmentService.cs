@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Common.Options;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.Hubs;
@@ -10,6 +11,7 @@ using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.FileStorageService;
+using ProjectManager.API.Services.RateLimit;
 
 namespace ProjectManager.API.Services.AttachmentService
 {
@@ -22,15 +24,17 @@ namespace ProjectManager.API.Services.AttachmentService
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly ILogger<AttachmentService> _logger;
         private readonly AttachmentOptions _attachmentOptions;
+        private readonly IRateLimitService _rateLimitService;
 
         public AttachmentService(
-            AppDbContext context, 
-            IFileStorageService fileStorageService, 
-            IActivityService activityService, 
-            ICurrentUserService currentUserService, 
+            AppDbContext context,
+            IFileStorageService fileStorageService,
+            IActivityService activityService,
+            ICurrentUserService currentUserService,
             IHubContext<ProjectHub> hubContext,
             ILogger<AttachmentService> logger,
-            IOptions<AttachmentOptions> attachmentOptions)
+            IOptions<AttachmentOptions> attachmentOptions,
+            IRateLimitService rateLimitService)
         {
             _context = context;
             _fileStorageService = fileStorageService;
@@ -39,6 +43,7 @@ namespace ProjectManager.API.Services.AttachmentService
             _hubContext = hubContext;
             _logger = logger;
             _attachmentOptions = attachmentOptions.Value;
+            _rateLimitService = rateLimitService;
         }
 
         public async Task DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
@@ -47,7 +52,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
 
             if (attachment == null)
-                throw new Exception("Fájl nem található!");
+                throw new NotFoundException("Fájl nem található!");
 
             await _fileStorageService.DeleteFileAsync(attachment.StorageKey);
             _logger.LogInformation("Fájl törölve | AttachmentId: {AttachmentId} | StorageKey: {StorageKey}", attachmentId, attachment.StorageKey);
@@ -97,7 +102,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(a => a.Id == attachmentId && a.ProjectId == projectId);
 
             if (attachment == null)
-                throw new Exception("Fájl nem található!");
+                throw new NotFoundException("Fájl nem található!");
 
             await _fileStorageService.StreamFileAsync(attachment.StorageKey, destination, ct);
         }
@@ -218,6 +223,17 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<PresignedUrlResponseDto> GetPresignedUploadUrlAsync(Guid projectId, Guid? taskId, PresignedUrlRequestDto dto)
         {
+            //A presigned PUT-nak nincs szerveroldali méretkorlátja, és a tényleges kikényszerítés csak a confirm lépésben történik.
+            //Akkor viszont a fájl már fent van. Aki nem hívja meg a confirmot, annak az objektuma a
+            //Cleanup job következő futásáig marad. A rate limit ezt a ciklust töri meg.
+            var (isLimited, retryAfter) = await _rateLimitService.IsRateLimitedAsync(
+                $"presigned_upload:{_currentUserService.UserId}", 60, TimeSpan.FromMinutes(10));
+            if (isLimited)
+            {
+                _logger.LogWarning("Rate limit elérve presigned URL igénylésnél | UserId: {UserId}", _currentUserService.UserId);
+                throw new RateLimitException($"Túl sok feltöltési kérés. Próbáld újra {retryAfter} másodperc múlva!");
+            }
+
             //Validáció
             ValidateFile(dto.ContentType, dto.SizeBytes);
 
@@ -263,31 +279,64 @@ namespace ProjectManager.API.Services.AttachmentService
                 .FirstOrDefaultAsync(p => p.StorageKey == dto.StorageKey
                                         && p.ProjectId == projectId);
             if (log == null)
-                throw new Exception("Érvénytelen storage key!");
+                throw new ValidationException("Érvénytelen storage key!");
 
             //Lejárt-e?
             if (log.ExpiresAt < DateTime.UtcNow)
             {
                 _logger.LogWarning("Lejárt presigned URL confirm kísérlet | StorageKey: {StorageKey}", dto.StorageKey);
-                throw new Exception("A feltöltési URL lejárt!");
+                throw new ValidationException("A feltöltési URL lejárt!");
             }
 
             //Duplikált confirm ellenőrzés
             if (log.Confirmed)
-                throw new Exception("Ez a fájl már meg lett erősítve!");
+                throw new ConflictException("Ez a fájl már meg lett erősítve!");
 
             //Duplikált Attachment ellenőrzés (unique constraint előtt)
             if (await _context.Attachments.AnyAsync(a => a.StorageKey == dto.StorageKey))
-                throw new Exception("Ez a fájl már fel lett töltve!");
+                throw new ConflictException("Ez a fájl már fel lett töltve!");
 
             //MinIO-ban létezik-e ténylegesen?
             var objectInfo = await _fileStorageService.GetObjectInfoAsync(dto.StorageKey);
             if (objectInfo == null)
-                throw new Exception("A fájl nem található a tárolóban!");
+                throw new NotFoundException("A fájl nem található a tárolóban!");
 
             //Méret ellenőrzés
             if (objectInfo.Size > log.SizeBytes * 1.1) // 10% tolerancia
-                throw new Exception("A fájl mérete nem egyezik!");
+                throw new ValidationException("A fájl mérete nem egyezik!");
+
+            //A ténylegesen feltöltött objektum típusa is egyezzen a bejelentettel.
+            //A presigned URL már aláírásba kötötte a Content-Type-ot, ez a második
+            //védelmi réteg - és ez kerül az adatbázisba, nem a kliens bejelentése.
+            var storedContentType = objectInfo.ContentType;
+            if (!string.IsNullOrEmpty(storedContentType)
+                && !string.Equals(storedContentType, log.ContentType, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Content-Type eltérés a feltöltésnél | StorageKey: {StorageKey} | Bejelentett: {Declared} | Tárolt: {Stored}",
+                    dto.StorageKey, log.ContentType, storedContentType);
+                throw new ValidationException("A fájl típusa nem egyezik a bejelentettel!");
+            }
+
+            //A route-ból érkező taskId felülírhatja a naplózottat, ezért ellenőrizni kell, hogy tényleg ehhez a projekthez tartozik-e
+            var effectiveTaskId = taskId ?? log.TaskId;
+            if (effectiveTaskId.HasValue)
+            {
+                var taskBelongsToProject = await _context.ProjectTasks
+                    .AnyAsync(t => t.Id == effectiveTaskId.Value && t.ProjectId == projectId);
+                if (!taskBelongsToProject)
+                    throw new NotFoundException("Task nem található!");
+            }
+
+            //Csak az kérheti a megerősítést, aki a presigned URL-t kérte.
+            //Enélkül a projekt bármely tagja megerősíthetné más függőben lévő feltöltését, és a fájl az ő nevén jelenne meg.
+            if (log.CreatedById != _currentUserService.UserId)
+            {
+                _logger.LogWarning(
+                    "Idegen feltöltés megerősítési kísérlete | StorageKey: {StorageKey} | Kérő: {RequesterId} | Megerősítő: {ConfirmerId}",
+                    dto.StorageKey, log.CreatedById, _currentUserService.UserId);
+                throw new ForbiddenException("Ezt a feltöltést nem te kezdeményezted!");
+            }
 
             //Attachment betöltése UploadedBy-jal
             var uploadedBy = await _context.Users
@@ -312,7 +361,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     {
                         Id = Guid.NewGuid(),
                         ProjectId = projectId,
-                        TaskId = taskId ?? log.TaskId,
+                        TaskId = effectiveTaskId,
                         UploadedById = _currentUserService.UserId,
                         UploadedBy = uploadedBy!,
                         FileName = log.FileName,
@@ -333,7 +382,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     _context.ChangeTracker.Clear();
                     log.Confirmed = true; //reset after clear
                     if (attempt == maxRetries - 1)
-                        throw new Exception("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
+                        throw new ValidationException("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
                 }
             }
 
@@ -389,7 +438,7 @@ namespace ProjectManager.API.Services.AttachmentService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             var attachment = await _context.Attachments
                 .Include(a => a.UploadedBy)
@@ -456,13 +505,13 @@ namespace ProjectManager.API.Services.AttachmentService
             if (sizeBytes > maxSizeBytes)
             {
                 _logger.LogWarning("Fájl méret limit túllépve | Size: {SizeBytes} | Limit: {MaxSizeBytes}", sizeBytes, maxSizeBytes);
-                throw new Exception($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
+                throw new ValidationException($"A fájl mérete meghaladja a {maxSizeMb}MB limitet!");
             }
             
             if (!AllowedContentTypes.Contains(contentType))
             {
                 _logger.LogWarning("Nem engedélyezett fájltípus | ContentType: {ContentType}", contentType);
-                throw new Exception($"A {contentType} fájltípus nem engedélyezett!");
+                throw new ValidationException($"A {contentType} fájltípus nem engedélyezett!");
             }
                 
         }

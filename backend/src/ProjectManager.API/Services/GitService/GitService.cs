@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Git;
 using ProjectManager.API.Hubs;
@@ -80,12 +81,12 @@ namespace ProjectManager.API.Services.GitService
                     cl.Id == commitId &&
                     integrationIds.Contains(cl.IntegrationId));
             if (commit == null)
-                throw new Exception("Commit nem található!");
+                throw new NotFoundException("Commit nem található!");
 
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található!");
+                throw new NotFoundException("Task nem található!");
 
             commit.TaskId = taskId;
             await _context.SaveChangesAsync();
@@ -138,12 +139,12 @@ namespace ProjectManager.API.Services.GitService
                     pl.Id == prId &&
                     integrationIds.Contains(pl.IntegrationId));
             if (pr == null)
-                throw new Exception("PR nem található!");
+                throw new NotFoundException("PR nem található!");
 
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található!");
+                throw new NotFoundException("Task nem található!");
 
             pr.TaskId = taskId;
             await _context.SaveChangesAsync();

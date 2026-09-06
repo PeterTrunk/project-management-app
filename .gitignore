@@ -4,6 +4,9 @@
 .env
 .env.local
 
+# Biztonsági riport - élő rendszer sebezhetőségeit írja le, nem publikus
+SECURITY-AUDIT.md
+
 # .NET
 backend/**/bin/
 backend/**/obj/

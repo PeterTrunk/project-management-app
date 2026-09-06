@@ -33,16 +33,8 @@ namespace ProjectManager.API.Controllers
             Guid projectId,
             [FromQuery] string? scope = null)
         {
-            try
-            {
-                var response = await _sprintService.GetSprintsAsync(projectId, scope);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.GetSprintsAsync(projectId, scope);
+            return Ok(response);
         }
 
         [HttpPost]
@@ -51,16 +43,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> CreateSprintAsync(Guid projectId, [FromBody] CreateSprintDto dto)
         {
-            try
-            {
-                var response = await _sprintService.CreateSprintAsync(projectId, dto);
-                return Created(string.Empty, response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.CreateSprintAsync(projectId, dto);
+            return Created(string.Empty, response);
         }
 
         [HttpPut("{sprintId}")]
@@ -69,16 +53,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> UpdateSprintAsync(Guid projectId, Guid sprintId, [FromBody] UpdateSprintDto dto)
         {
-            try
-            {
-                var response = await _sprintService.UpdateSprintAsync(projectId, sprintId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.UpdateSprintAsync(projectId, sprintId, dto);
+            return Ok(response);
         }
 
         [HttpDelete("{sprintId}")]
@@ -87,16 +63,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteSprintAsync(Guid projectId, Guid sprintId)
         {
-            try
-            {
-                await _sprintService.DeleteSprintAsync(projectId, sprintId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _sprintService.DeleteSprintAsync(projectId, sprintId);
+            return NoContent();
         }
 
         [HttpGet("{sprintId}/unfinished")]
@@ -105,16 +73,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<TaskResponseDto>>> GetUnfinishedTasksAsync(Guid projectId, Guid sprintId)
         {
-            try
-            {
-                var response = await _sprintService.GetUnfinishedTasksAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.GetUnfinishedTasksAsync(projectId, sprintId);
+            return Ok(response);
         }
 
         [HttpPatch("{sprintId}/plan")]
@@ -123,16 +83,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> PlanSprintAsync(Guid projectId, Guid sprintId)
         {
-            try
-            {
-                var response = await _sprintService.PlanSprintAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.PlanSprintAsync(projectId, sprintId);
+            return Ok(response);
         }
 
         [HttpPatch("{sprintId}/activate")]
@@ -141,16 +93,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> ActivateSprintAsync(Guid projectId, Guid sprintId)
         {
-            try
-            {
-                var response = await _sprintService.ActivateSprintAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.ActivateSprintAsync(projectId, sprintId);
+            return Ok(response);
         }
 
         [HttpPost("{sprintId}/complete")]
@@ -159,16 +103,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> CompleteSprintAsync(Guid projectId, Guid sprintId, [FromBody] Guid? targetSprintId)
         {
-            try
-            {
-                var response = await _sprintService.CompleteSprintAsync(projectId, sprintId, targetSprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.CompleteSprintAsync(projectId, sprintId, targetSprintId);
+            return Ok(response);
         }
 
         [HttpPost("{sprintId}/tasks/{taskId}")]
@@ -181,16 +117,8 @@ namespace ProjectManager.API.Controllers
             Guid taskId,
             [FromBody] AssignTaskToSprintDto dto)
         {
-            try
-            {
-                var response = await _sprintService.AssignTaskToSprintAsync(projectId, taskId, sprintId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _sprintService.AssignTaskToSprintAsync(projectId, taskId, sprintId, dto);
+            return Ok(response);
         }
 
         [HttpDelete("{sprintId}/tasks/{taskId}")]
@@ -199,16 +127,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveTaskFromSprintAsync(Guid projectId, Guid sprintId, Guid taskId, [FromBody] AssignTaskToSprintDto dto)
         {
-            try
-            {
-                await _sprintService.RemoveTaskFromSprintAsync(projectId, taskId, dto);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _sprintService.RemoveTaskFromSprintAsync(projectId, taskId, dto);
+            return NoContent();
         }
     }
 }

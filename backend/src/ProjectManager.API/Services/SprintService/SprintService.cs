@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.DTOs.Git;
@@ -44,11 +45,12 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
@@ -57,7 +59,7 @@ namespace ProjectManager.API.Services.SprintService
                 var currentlyActive = await _context.Sprints
                     .AnyAsync(s => s.State == SprintStates.Active && s.ProjectId == projectId);
                 if (currentlyActive)
-                    throw new Exception("Már van Aktív sprint!");
+                    throw new ConflictException("Már van Aktív sprint!");
 
                 sprint.State = SprintStates.Active;
 
@@ -173,20 +175,21 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             if (targetSprintId.HasValue)
             {
                 var targetSprint = await _context.Sprints
                     .FirstOrDefaultAsync(s => s.Id == targetSprintId && s.ProjectId == projectId);
                 if (targetSprint == null)
-                    throw new Exception("A cél sprint nem található");
+                    throw new NotFoundException("A cél sprint nem található");
                 if (targetSprint.State == SprintStates.Completed)
-                    throw new Exception("A cél sprint már le van zárva!");
+                    throw new ValidationException("A cél sprint már le van zárva!");
             }
 
             List<ProjectTask> unfinishedTasks = new();
@@ -379,7 +382,7 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var sprint = new Sprint
             {
@@ -440,11 +443,12 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             var tasks = await _context.ProjectTasks.Where(t => t.SprintId == sprintId).ToListAsync();
             foreach ( var task in tasks )
@@ -459,7 +463,7 @@ namespace ProjectManager.API.Services.SprintService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A sprint időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A sprint időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -496,7 +500,7 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var query = _context.Sprints
                 .Where(s => s.ProjectId == projectId)
@@ -523,11 +527,12 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             var tasks = await _context.ProjectTasks
                 .Where(t => t.SprintId == sprintId && t.CompletedAt == null)
@@ -568,11 +573,12 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
@@ -692,11 +698,12 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             _context.Entry(sprint).OriginalValues["RowVersion"] = dto.RowVersion;
 
@@ -711,7 +718,7 @@ namespace ProjectManager.API.Services.SprintService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A sprint időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A sprint időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -760,17 +767,19 @@ namespace ProjectManager.API.Services.SprintService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található");
+                throw new NotFoundException("Task nem található");
 
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
-            var sprint = await _context.Sprints.FirstOrDefaultAsync(s => s.Id == sprintId);
+            var sprint = await _context.Sprints
+                .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
-                throw new Exception("Sprint nem található");
+                throw new NotFoundException("Sprint nem található");
 
             if (task.BoardId.HasValue && sprint.State == SprintStates.Active)
             {
@@ -807,7 +816,7 @@ namespace ProjectManager.API.Services.SprintService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -874,9 +883,10 @@ namespace ProjectManager.API.Services.SprintService
 
         public async Task RemoveTaskFromSprintAsync(Guid projectId, Guid taskId, AssignTaskToSprintDto dto)
         {
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található");
+                throw new NotFoundException("Task nem található");
 
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
@@ -925,7 +935,7 @@ namespace ProjectManager.API.Services.SprintService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
             }
 
             try

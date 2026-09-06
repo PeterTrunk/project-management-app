@@ -15,7 +15,7 @@ namespace ProjectManager.API.Services.Auth
         //TOTP
         Task<TotpSetupResponseDto> SetupTotpAsync();
         Task<bool> VerifyAndEnableTotpAsync(string token);
-        Task DisableTotpAsync();
+        Task DisableTotpAsync(DisableTotpDto dto);
         Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto);
         Task<bool> IsTotpRequiredAsync(string email);
         Task VerifyEmailAsync(string token);

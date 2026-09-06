@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pipelines.Sockets.Unofficial.Arenas;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
 using ProjectManager.API.DTOs.Git;
@@ -47,20 +48,40 @@ namespace ProjectManager.API.Services.ProjectTaskService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var createdById = _currentUserService.UserId;
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == createdById);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
+
+            //A DTO-ból érkező board- és oszlop-azonosító is a projekthez kell tartozzon,
+            //különben idegen projekt boardjára lehetne taskot létrehozni
+            if (dto.BoardId.HasValue)
+            {
+                var boardExists = await _context.Boards
+                    .AnyAsync(b => b.Id == dto.BoardId && b.ProjectId == projectId);
+                if (!boardExists)
+                    throw new NotFoundException("Board nem található!");
+            }
 
             ColumnDefinition? column = null;
             if (dto.ColumnId.HasValue)
             {
                 column = await _context.ColumnDefinitions
-                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId
+                        && !cd.IsDeleted
+                        && cd.Board.ProjectId == projectId);
                 if (column == null)
-                    throw new Exception("Oszlop nem található!");
+                    throw new NotFoundException("Oszlop nem található!");
+            }
+
+            if (dto.SprintId.HasValue)
+            {
+                var sprintExists = await _context.Sprints
+                    .AnyAsync(s => s.Id == dto.SprintId && s.ProjectId == projectId);
+                if (!sprintExists)
+                    throw new NotFoundException("Sprint nem található!");
             }
 
             var taskNumber = await _counterService.GetNextTaskNumberAsync(projectId);
@@ -168,11 +189,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
             );
         }
 
-        public async Task DeleteTaskAsync(Guid taskId)
+        public async Task DeleteTaskAsync(Guid projectId, Guid taskId)
         {
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            //A jogosultság-ellenőrzés az URL projectId-jára vonatkozik, ezért a taskot
+            //is arra kell szűrni - különben idegen projekt taskja is törölhető
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             // Cascade delete automatikusan törli a kapcsolódó entitásokat
             // (TaskAssignment, LabelTask, Comment, Attachment, Activity)
@@ -186,7 +210,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -288,18 +312,18 @@ namespace ProjectManager.API.Services.ProjectTaskService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var task = await _context.ProjectTasks
                 .Include(t => t.CreatedByUser)
                 .Include(t => t.ColumnDefinition)
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             var assignments = await _context.TaskAssignments
                 .Where(ta => ta.TaskId == task.Id)
@@ -330,27 +354,29 @@ namespace ProjectManager.API.Services.ProjectTaskService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var task = await _context.ProjectTasks
                 .Include(t => t.CreatedByUser)
-                .FirstOrDefaultAsync(t => t.Id == taskId);
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             if (task.ClosedAt.HasValue)
-                throw new Exception("Lezárt sprint taskja nem mozgatható!");
+                throw new ValidationException("Lezárt sprint taskja nem mozgatható!");
 
             ColumnDefinition? column = null;
             if (dto.ColumnId.HasValue)
             {
                 column = await _context.ColumnDefinitions
-                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId && !cd.IsDeleted);
+                    .FirstOrDefaultAsync(cd => cd.Id == dto.ColumnId
+                        && !cd.IsDeleted
+                        && cd.Board.ProjectId == projectId);
                 if (column == null)
-                    throw new Exception("Oszlop nem található");
+                    throw new NotFoundException("Oszlop nem található");
 
                 if (column.WipLimit.HasValue)
                 {
@@ -358,7 +384,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         .CountAsync(t => t.ColumnId == dto.ColumnId && t.Id != taskId);
 
                     if (currentTaskCount >= column.WipLimit.Value)
-                        throw new Exception($"Az oszlop WIP limitje ({column.WipLimit.Value}) elérte a maximumot!");
+                        throw new ValidationException($"Az oszlop WIP limitje ({column.WipLimit.Value}) elérte a maximumot!");
                 }
             }
 
@@ -366,23 +392,24 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (dto.AfterTaskId != null)
             {
                 prevTask = await _context.ProjectTasks
-                    .FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId);
+                    .FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId);
                 if (prevTask == null)
-                    throw new Exception("Előző feladat nem található");
+                    throw new NotFoundException("Előző feladat nem található");
             }
 
             ProjectTask? nextTask;
             if (prevTask == null)
             {
                 nextTask = await _context.ProjectTasks
-                    .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                    .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
                     .OrderBy(t => t.Position)
                     .FirstOrDefaultAsync();
             }
             else
             {
                 nextTask = await _context.ProjectTasks
-                    .Where(t => t.ColumnId == dto.ColumnId
+                    .Where(t => t.ProjectId == projectId
+                             && t.ColumnId == dto.ColumnId
                              && string.Compare(t.Position, prevTask.Position) > 0
                              && t.Id != taskId)
                     .OrderBy(t => t.Position)
@@ -398,16 +425,17 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position);
 
                 prevTask = dto.AfterTaskId != null
-                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId)
+                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
                     : null;
 
                 nextTask = prevTask == null
                     ? await _context.ProjectTasks
-                        .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                        .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
                         .OrderBy(t => t.Position)
                         .FirstOrDefaultAsync()
                     : await _context.ProjectTasks
-                        .Where(t => t.ColumnId == dto.ColumnId
+                        .Where(t => t.ProjectId == projectId
+                                 && t.ColumnId == dto.ColumnId
                                  && string.Compare(t.Position, prevTask.Position) > 0
                                  && t.Id != taskId)
                         .OrderBy(t => t.Position)
@@ -431,16 +459,17 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 );
 
                 prevTask = dto.AfterTaskId != null
-                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId)
+                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
                     : null;
 
                 nextTask = prevTask == null
                     ? await _context.ProjectTasks
-                        .Where(t => t.ColumnId == dto.ColumnId && t.Id != taskId)
+                        .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
                         .OrderBy(t => t.Position)
                         .FirstOrDefaultAsync()
                     : await _context.ProjectTasks
-                        .Where(t => t.ColumnId == dto.ColumnId
+                        .Where(t => t.ProjectId == projectId
+                                 && t.ColumnId == dto.ColumnId
                                  && string.Compare(t.Position, prevTask.Position) > 0
                                  && t.Id != taskId)
                         .OrderBy(t => t.Position)
@@ -484,7 +513,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -561,18 +590,19 @@ namespace ProjectManager.API.Services.ProjectTaskService
             return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
-        public async Task<TaskResponseDto> UpdateTaskAsync(Guid taskId, UpdateTaskDto dto)
+        public async Task<TaskResponseDto> UpdateTaskAsync(Guid projectId, Guid taskId, UpdateTaskDto dto)
         {
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             if (dto.Title != null) task.Title = dto.Title;
             if (dto.Description != null) task.Description = dto.Description;
@@ -588,7 +618,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
             }
 
             try
@@ -659,13 +689,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var task = await _context.ProjectTasks
                 .Include(t => t.CreatedByUser)
-                .FirstOrDefaultAsync(t => t.Id == taskId);
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található");
+                throw new NotFoundException("Task nem található");
 
             //RowVersion beállítása az optimistic concurrency-hez
             _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
@@ -692,7 +722,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 }
                 catch (DbUpdateConcurrencyException)
                 {
-                    throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                    throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
                 }
 
                 try
@@ -716,14 +746,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             else
             {
-                var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == dto.BoardId);
+                var board = await _context.Boards
+                    .FirstOrDefaultAsync(b => b.Id == dto.BoardId && b.ProjectId == projectId);
                 if (board == null)
-                    throw new Exception("Board nem található");
+                    throw new NotFoundException("Board nem található");
 
                 var backlogColumn = await _context.ColumnDefinitions
                     .FirstOrDefaultAsync(c => c.Position == 0 && c.BoardId == dto.BoardId);
                 if (backlogColumn == null)
-                    throw new Exception("Backlog oszlop nem található");
+                    throw new NotFoundException("Backlog oszlop nem található");
                 
                 task.BoardId = dto.BoardId;
                 task.CompletedAt = null;
@@ -795,7 +826,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 }
                 catch (DbUpdateConcurrencyException)
                 {
-                    throw new Exception("A task időközben módosult, kérjük próbáld újra!");
+                    throw new ConflictException("A task időközben módosult, kérjük próbáld újra!");
                 }
 
                 try
@@ -932,16 +963,20 @@ namespace ProjectManager.API.Services.ProjectTaskService
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található!");
+                throw new NotFoundException("Task nem található!");
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            //Csak a projekt tagja rendelhető hozzá: enélkül tetszőleges felhasználó
+            //azonosítója beküldhető, és a válasz visszaadja a nevét
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == userId
+                    && _context.ProjectMembers.Any(pm => pm.ProjectId == projectId && pm.UserId == u.Id));
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
             var existing = await _context.TaskAssignments
                 .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
             if (existing != null)
-                throw new Exception("Ez a felhasználó már hozzá van rendelve!");
+                throw new ConflictException("Ez a felhasználó már hozzá van rendelve!");
 
             await _context.TaskAssignments.AddAsync(new TaskAssignment
             {
@@ -984,20 +1019,22 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
         public async Task RemoveAssigneeAsync(Guid projectId, Guid taskId, Guid userId)
         {
-            var assignment = await _context.TaskAssignments
-                .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
-            if (assignment == null)
-                throw new Exception("Ez a felhasználó nincs hozzárendelve!");
-
+            //A projekt-szűrés előbb fut, mint a hozzárendelés keresése: így idegen
+            //projekt taskjáról nem derül ki, hogy egyáltalán létezik-e
             var task = await _context.ProjectTasks
                 .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Task nem található!");
+                throw new NotFoundException("Task nem található!");
+
+            var assignment = await _context.TaskAssignments
+                .FirstOrDefaultAsync(ta => ta.TaskId == taskId && ta.UserId == userId);
+            if (assignment == null)
+                throw new ValidationException("Ez a felhasználó nincs hozzárendelve!");
 
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
 
             _context.TaskAssignments.Remove(assignment);

@@ -26,16 +26,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectMemberResponseDto>> JoinProjectAsync(string token)
         {
-            try
-            {
-                var response = await _teamService.JoinProjectAsync(token);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _teamService.JoinProjectAsync(token);
+            return Ok(response);
         }
     }
 }

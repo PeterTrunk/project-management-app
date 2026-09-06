@@ -1,8 +1,8 @@
 <script lang="ts">
+    import { createEventDispatcher } from 'svelte';
     import { authStore, login } from '../stores/authStore';
     import { changePasswordAsync, updateProfileAsync, resendVerificationAsync, meAsync } from '../api/authApi';
     import { setupTotpAsync, verifyTotpAsync, disableTotpAsync } from '../api/authApi';
-    import ConfirmModal from './ConfirmModal.svelte';
     import { tokenStore } from '../stores/tokenStore';
 
     import { themeStore, toggleTheme } from '../stores/themeStore';
@@ -15,7 +15,12 @@
     themeStore.subscribe(t => currentTheme = t);
 
     export let isUserSettingsOpen = false;
-    let isDisableTotpConfirmOpen = false;
+
+    //A szerver a jelszó- és 2FA-műveletek után minden munkamenetet érvénytelenít,
+    //ezért a szülő komponensnek rendes kijelentkezést kell futtatnia
+    const dispatch = createEventDispatcher<{ sessionInvalidated: { reason: string } }>();
+
+    let disableTotpPassword = '';
 
     let resendSent = false;
 
@@ -38,7 +43,7 @@
     let totpSetupUri = '';
     let totpQrCode = '';
     let totpToken = '';
-    let totpStep: 'idle' | 'setup' | 'verify' = 'idle';
+    let totpStep: 'idle' | 'setup' | 'verify' | 'disable' = 'idle';
     let copied = false;
 
     $: if (isUserSettingsOpen) {
@@ -66,9 +71,14 @@
             return;
         }
         try {
-            var response = await changePasswordAsync({ currentPassword, newPassword });
+            await changePasswordAsync({ currentPassword, newPassword });
+            currentPassword = '';
+            newPassword = '';
+            newPasswordConfirm = '';
             success = 'Sikeres változtatás!';
-            notify.success('Sikeres változtatás!');
+            dispatch('sessionInvalidated', {
+                reason: 'A jelszó megváltozott, ezért minden munkamenet lezárult. Jelentkezz be újra!'
+            });
         } catch (e: any) {
             const message = e.response?.data ?? e.message ?? 'Hiba történt a jelszóváltoztatás közben!';
             error = message;
@@ -116,17 +126,12 @@
         try {
             await verifyTotpAsync(totpToken);
             isTotpEnabled = true;
-            login(tokenStore.get() ?? '', {
-                userId: $authStore.user?.userId ?? '',
-                email: $authStore.user?.email ?? '',
-                displayName: $authStore.user?.displayName ?? '',
-                isTotpEnabled: true,
-                isEmailVerified: $authStore.user?.isEmailVerified ?? false
-            });
             totpStep = 'idle';
             totpToken = '';
             success = '2FA sikeresen aktiválva!';
-            notify.success('2FA sikeresen aktiválva!');
+            dispatch('sessionInvalidated', {
+                reason: '2FA aktiválva. Jelentkezz be újra - most már az authenticator kódjára is szükség lesz!'
+            });
         } catch (e: any) {
             const message = e.response?.data ?? e.message ?? 'Érvénytelen TOTP token!';
             error = message;
@@ -134,20 +139,30 @@
         }
     }
 
+    function startDisableTotp() {
+        error = '';
+        success = '';
+        disableTotpPassword = '';
+        totpStep = 'disable';
+    }
+
+    function cancelDisableTotp() {
+        error = '';
+        disableTotpPassword = '';
+        totpStep = 'idle';
+    }
+
     async function handleDisableTotp() {
         error = '';
         try {
-            await disableTotpAsync();
+            await disableTotpAsync(disableTotpPassword);
+            disableTotpPassword = '';
             isTotpEnabled = false;
-            login(tokenStore.get() ?? '', {
-                userId: $authStore.user?.userId ?? '',
-                email: $authStore.user?.email ?? '',
-                displayName: $authStore.user?.displayName ?? '',
-                isTotpEnabled: false,
-                isEmailVerified: $authStore.user?.isEmailVerified ?? false
-            });
+            totpStep = 'idle';
             success = '2FA kikapcsolva!';
-            notify.success('2FA kikapcsolva!');
+            dispatch('sessionInvalidated', {
+                reason: 'A 2FA kikapcsolva, ezért minden munkamenet lezárult. Jelentkezz be újra!'
+            });
         } catch (e: any) {
             const message = e.response?.data ?? e.message ?? 'Hiba történt a 2FA kikapcsolásakor!';
             error = message;
@@ -271,9 +286,29 @@
 
                         <!-- TOTP 2FA szekció -->
                         <h3>Kétfaktoros hitelesítés</h3>
-                        {#if isTotpEnabled}
+                        {#if isTotpEnabled && totpStep === 'disable'}
                             <p class="totp-status enabled"><ShieldCheck size={15} /> 2FA aktív</p>
-                            <button class="danger-btn" on:click={() => isDisableTotpConfirmOpen = true}>
+                            <p class="hint">
+                                A kikapcsoláshoz add meg a jelenlegi jelszavad. A művelet után
+                                minden munkameneted lezárul, és újra be kell jelentkezned.
+                            </p>
+                            <form on:submit|preventDefault={handleDisableTotp}>
+                                <input
+                                    type="password"
+                                    placeholder="Jelenlegi jelszó"
+                                    bind:value={disableTotpPassword}
+                                    autocomplete="current-password"
+                                />
+                                <button type="submit" class="danger-btn" disabled={!disableTotpPassword}>
+                                    2FA kikapcsolása
+                                </button>
+                            </form>
+                            <button class="secondary-btn" on:click={cancelDisableTotp}>
+                                Mégse
+                            </button>
+                        {:else if isTotpEnabled}
+                            <p class="totp-status enabled"><ShieldCheck size={15} /> 2FA aktív</p>
+                            <button class="danger-btn" on:click={startDisableTotp}>
                                 2FA kikapcsolása
                             </button>
                         {:else if totpStep === 'idle'}
@@ -333,16 +368,6 @@
         </div>
     </div>
 </div>
-
-{#if isDisableTotpConfirmOpen}
-    <ConfirmModal
-        bind:isOpen={isDisableTotpConfirmOpen}
-        title="2FA kikapcsolása"
-        message="Biztosan kikapcsolod a kétfaktoros hitelesítést? Fiókod kevésbé lesz biztonságos!"
-        confirmText="Kikapcsolás"
-        onConfirm={handleDisableTotp}
-    />
-{/if}
 
 <style>
     .modal-overlay {

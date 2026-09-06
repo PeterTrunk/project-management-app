@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pipelines.Sockets.Unofficial.Arenas;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Project;
 using ProjectManager.API.Hubs;
@@ -40,7 +41,7 @@ namespace ProjectManager.API.Services.ProjectService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
             //MinIO cleanup: összes attachment törlése
             var attachments = await _context.Attachments
@@ -91,7 +92,7 @@ namespace ProjectManager.API.Services.ProjectService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
             project.IsArchived = true;
             await _context.SaveChangesAsync();
 
@@ -130,7 +131,7 @@ namespace ProjectManager.API.Services.ProjectService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
             project.IsArchived = false;
             await _context.SaveChangesAsync();
 
@@ -170,7 +171,7 @@ namespace ProjectManager.API.Services.ProjectService
             var ownerId = _currentUserService.UserId;
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == ownerId);
             if (owner == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
             
             var project = new Project
             {
@@ -284,11 +285,11 @@ namespace ProjectManager.API.Services.ProjectService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == project.OwnerId);
             if (owner == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
             
             var response = new ProjectResponseDto
             {
@@ -332,15 +333,14 @@ namespace ProjectManager.API.Services.ProjectService
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
 
             if (project == null)
-                throw new Exception("Projekt nem található");
+                throw new NotFoundException("Projekt nem található");
 
             if (dto.Name != null) project.Name = dto.Name;
             if (dto.Description != null) project.Description = dto.Description;
-            if (dto.IsArchived.HasValue) project.IsArchived = dto.IsArchived.Value;
 
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == project.OwnerId);
             if (owner == null)
-                throw new Exception("Tulajdonos nem található");
+                throw new NotFoundException("Tulajdonos nem található");
 
             await _context.SaveChangesAsync();
 

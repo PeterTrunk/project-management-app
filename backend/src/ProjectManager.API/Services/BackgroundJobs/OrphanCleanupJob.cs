@@ -26,9 +26,27 @@ namespace ProjectManager.API.Services.BackgroundJobs
         {
             using var timer = new PeriodicTimer(TimeSpan.FromHours(_cleanupOptions.OrphanCleanupIntervalHours));
 
+            //A PeriodicTimer az első tickig végigvárja a teljes intervallumot, és minden újraindítás után elölről kezdi.
+            //Enélkül egy 24 órás ciklusnál a megerősítés nélkül feltöltött fájlok sokáig a tárolóban maradnának.
+            await RunCleanupSafelyAsync();
+
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
+                await RunCleanupSafelyAsync();
+            }
+        }
+
+        //A BackgroundServiceExceptionBehavior alapértelmezése StopHost: egy kezeletlen kivétel innen a TELJES API-replikát leállítaná.
+        //Egy átmeneti PostgreSQL-hiba nem állítja le a szolgáltatást.
+        private async Task RunCleanupSafelyAsync()
+        {
+            try
+            {
                 await CleanupOrphansAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Orphan cleanup ciklus hiba");
             }
         }
 

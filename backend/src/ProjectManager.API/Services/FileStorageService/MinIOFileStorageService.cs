@@ -117,9 +117,16 @@ namespace ProjectManager.API.Services.FileStorageService
 
         public async Task<string> GeneratePresignedPutUrlAsync(string storageKey, string contentType, int expirySeconds = 120)
         {
+            //A Content-Type bekerül az aláírásba: a MinIO elutasítja azt a PUT-ot, ahol eltérő Content-Type fejléccel érkezik. 
+            //Enélkül a whitelist a presigned úton csak formalitás volt:
+            //Ha kliens image/png-t jelentett be, és bármit feltölthetett.
             var args = new PresignedPutObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
+                .WithHeaders(new Dictionary<string, string>
+                {
+                    ["Content-Type"] = contentType
+                })
                 .WithExpiry(expirySeconds);
 
             return await _presignedMinioClient.PresignedPutObjectAsync(args);

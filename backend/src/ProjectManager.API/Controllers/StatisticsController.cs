@@ -26,16 +26,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<TaskStatusDistributionDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<TaskStatusDistributionDto>>> GetTaskStatusDistributionAsync(Guid projectId, [FromQuery] Guid? sprintId = null)
         {
-            try
-            {
-                var response = await _statisticsService.GetTaskStatusDistributionAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _statisticsService.GetTaskStatusDistributionAsync(projectId, sprintId);
+            return Ok(response);
         }
         
         [HttpGet("burndown")]
@@ -43,16 +35,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<BurndownDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<BurndownDataPointDto>>> GetBurndownAsync(Guid projectId, [FromQuery] Guid sprintId)
         {
-            try
-            {
-                var response = await _statisticsService.GetBurndownAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _statisticsService.GetBurndownAsync(projectId, sprintId);
+            return Ok(response);
         }
         
         [HttpGet("workload")]
@@ -60,16 +44,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<WorkloadDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<WorkloadDataPointDto>>> GetWorkloadAsync(Guid projectId, [FromQuery] Guid? sprintId = null)
         {
-            try
-            {
-                var response = await _statisticsService.GetWorkloadAsync(projectId, sprintId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _statisticsService.GetWorkloadAsync(projectId, sprintId);
+            return Ok(response);
         }
         
         [HttpGet("velocity")]
@@ -77,16 +53,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<VelocityDataPointDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<VelocityDataPointDto>>> GetVelocityAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _statisticsService.GetVelocityAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _statisticsService.GetVelocityAsync(projectId);
+            return Ok(response);
         }
         
         [HttpGet("cumulative-flow")]
@@ -98,17 +66,9 @@ namespace ProjectManager.API.Controllers
             [FromQuery] DateTime dateTo,
             [FromQuery] Guid? boardId = null)
         {
-            try
-            {
-                var response = await _statisticsService.GetCumulativeFlowAsync(
-                    projectId, dateFrom, dateTo, boardId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _statisticsService.GetCumulativeFlowAsync(
+                projectId, dateFrom, dateTo, boardId);
+            return Ok(response);
         }
     }
 }

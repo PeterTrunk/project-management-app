@@ -10,9 +10,5 @@
         /// Opcionális Projekt leírás, max 1000 karakter
         /// </summary>
         public string? Description { get; set; }
-        /// <summary>
-        /// Arhiváltság / Aktivitás állapot, Egy projekt arhivált: Csak megtekintésre megmarad, softdelete-szerű
-        /// </summary>
-        public bool? IsArchived { get; set; }
     }
 }

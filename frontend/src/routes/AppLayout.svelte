@@ -176,6 +176,14 @@
         push('/');
     }
 
+    //Jelszóváltás és 2FA módosítás után a szerver minden refresh tokent visszavon,
+    //így a kliensnek is rendesen le kell bontania a munkamenetet
+    async function handleSessionInvalidated(event: CustomEvent<{ reason: string }>) {
+        isUserSettingsOpen = false;
+        notify.success(event.detail.reason);
+        await handleLogout();
+    }
+
     let projects: ProjectResponse[] = [];
     let activeProject: ProjectResponse | null = null;
     let currentProjectId = '';
@@ -447,8 +455,9 @@
 />
 {/if}
 {#if isUserSettingsOpen}
-<UserSettingsModal 
+<UserSettingsModal
     bind:isUserSettingsOpen={isUserSettingsOpen}
+    on:sessionInvalidated={handleSessionInvalidated}
 />
 {/if}
 

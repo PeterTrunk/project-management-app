@@ -29,16 +29,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ProjectMemberResponseDto>>> GetMembersAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _teamService.GetMembersAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _teamService.GetMembersAsync(projectId);
+            return Ok(response);
         }
 
         [HttpDelete("{userId}")]
@@ -47,16 +39,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveMemberAsync(Guid projectId, Guid userId)
         {
-            try
-            {
-                await _teamService.RemoveMemberAsync(projectId, userId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _teamService.RemoveMemberAsync(projectId, userId);
+            return NoContent();
         }
 
         [HttpPatch("{userId}/role")]
@@ -65,16 +49,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectMemberResponseDto>> UpdateMemberRoleAsync(Guid projectId, Guid userId, [FromBody] UpdateMemberRoleDto dto)
         {
-            try
-            {
-                var response = await _teamService.UpdateMemberRoleAsync(projectId, userId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _teamService.UpdateMemberRoleAsync(projectId, userId, dto);
+            return Ok(response);
         }
 
         [HttpPost("invite")]
@@ -83,16 +59,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<InviteLinkResponseDto>> GenerateInviteLinkAsync(Guid projectId, [FromBody] GenerateInviteLinkDto dto)
         {
-            try
-            {
-                var response = await _teamService.GenerateInviteLinkAsync(projectId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _teamService.GenerateInviteLinkAsync(projectId, dto);
+            return Ok(response);
         }
 
         [HttpGet("invites")]
@@ -101,16 +69,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<InviteLinkResponseDto>>> GetInvitationsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _teamService.GetInvitationsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _teamService.GetInvitationsAsync(projectId);
+            return Ok(response);
         }
 
         [HttpDelete("invites/{token}")]
@@ -119,16 +79,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteInvitationAsync(Guid projectId, string token)
         {
-            try
-            {
-                await _teamService.DeleteInvitationAsync(projectId, token);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _teamService.DeleteInvitationAsync(projectId, token);
+            return NoContent();
         }
     }
 }

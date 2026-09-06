@@ -28,16 +28,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<IntegrationResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<IntegrationResponseDto>>> GetIntegrationsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _integrationService.GetIntegrationsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _integrationService.GetIntegrationsAsync(projectId);
+            return Ok(response);
         }
         
         [HttpPost]
@@ -45,16 +37,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(IntegrationResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<IntegrationResponseDto>> CreateIntegrationAsync(Guid projectId, [FromBody] CreateIntegrationDto dto)
         {
-            try
-            {
-                var response = await _integrationService.CreateIntegrationAsync(projectId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _integrationService.CreateIntegrationAsync(projectId, dto);
+            return Ok(response);
         }
         
         [HttpDelete("{integrationId}")]
@@ -62,16 +46,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> DeleteIntegrationAsync(Guid projectId, Guid integrationId)
         {
-            try
-            {
-                await _integrationService.DeleteIntegrationAsync(projectId, integrationId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _integrationService.DeleteIntegrationAsync(projectId, integrationId);
+            return NoContent();
         }
         
         [HttpPost("{integrationId}/regenerate")]
@@ -79,16 +55,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(IntegrationResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<IntegrationResponseDto>> RegenerateWebhookTokenAsync(Guid projectId, Guid integrationId)
         {
-            try
-            {
-                var response = await _integrationService.RegenerateWebhookTokenAsync(projectId, integrationId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _integrationService.RegenerateWebhookTokenAsync(projectId, integrationId);
+            return Ok(response);
         }
 
         [HttpPatch("{integrationId}/toggle")]
@@ -96,16 +64,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> EnableDisableIntegrationAsync(Guid projectId, Guid integrationId, [FromQuery] bool isEnabled)
         {
-            try
-            {
-                await _integrationService.EnableDisableIntegrationAsync(projectId, integrationId, isEnabled);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _integrationService.EnableDisableIntegrationAsync(projectId, integrationId, isEnabled);
+            return NoContent();
         }
 
         [HttpPost("{integrationId}/reset-secret")]
@@ -113,16 +73,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> ResetWebhookSecretAsync(Guid projectId, Guid integrationId, [FromBody] ResetWebhookSecretDto dto)
         {
-            try
-            {
-                await _integrationService.ResetWebhookSecretAsync(projectId, integrationId, dto.NewSecret);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _integrationService.ResetWebhookSecretAsync(projectId, integrationId, dto.NewSecret);
+            return NoContent();
         }
     }
 }

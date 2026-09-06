@@ -64,6 +64,11 @@ export function validateDisplayName(name: string): string | null {
         if (min) errors.push(min);
         const max = maxLength(name, 120, 'Megjelenítési név');
         if (max) errors.push(max);
+
+        //Ugyanaz a korlátozás, mint szerveroldalon: a név activity-leírásokba interpolálódik,
+        //ezért a markup-karaktereket kizárjuk. Ez csak kényelmi visszajelzés - a tényleges kikényszerítés a backend validátoré.
+        if (/[<>&"'`]/.test(name))
+            errors.push('A megjelenítési név nem tartalmazhat < > & " \' ` karaktereket!');
     }
     return errors.length > 0 ? errors.join('\n') : null;
 }

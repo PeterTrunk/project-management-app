@@ -29,16 +29,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<AttachmentResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<AttachmentResponseDto>>> GetProjectAttachmentsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _attachmentService.GetProjectAttachmentsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.GetProjectAttachmentsAsync(projectId);
+            return Ok(response);
         }
 
         //Task szintű lista
@@ -47,16 +39,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(List<AttachmentResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<List<AttachmentResponseDto>>> GetTaskAttachmentsAsync(Guid projectId, Guid taskId)
         {
-            try
-            {
-                var response = await _attachmentService.GetTaskAttachmentsAsync(projectId, taskId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.GetTaskAttachmentsAsync(projectId, taskId);
+            return Ok(response);
         }
 
         //Projekt feltöltés
@@ -65,23 +49,15 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> UploadProjectAttachmentAsync(Guid projectId, IFormFile file)
         {
-            try
-            {
-                using var stream = file.OpenReadStream();
-                var response = await _attachmentService.UploadProjectAttachmentAsync(
-                    projectId,
-                    stream,
-                    file.FileName,
-                    file.ContentType,
-                    file.Length
-                );
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            using var stream = file.OpenReadStream();
+            var response = await _attachmentService.UploadProjectAttachmentAsync(
+                projectId,
+                stream,
+                file.FileName,
+                file.ContentType,
+                file.Length
+            );
+            return Ok(response);
         }
 
         //Task feltöltés
@@ -90,24 +66,16 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(typeof(AttachmentResponseDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AttachmentResponseDto>> UploadTaskAttachmentAsync(Guid projectId, Guid taskId, IFormFile file)
         {
-            try
-            {
-                using var stream = file.OpenReadStream();
-                var response = await _attachmentService.UploadTaskAttachmentAsync(
-                    projectId,
-                    taskId,
-                    stream,
-                    file.FileName,
-                    file.ContentType,
-                    file.Length
-                );
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            using var stream = file.OpenReadStream();
+            var response = await _attachmentService.UploadTaskAttachmentAsync(
+                projectId,
+                taskId,
+                stream,
+                file.FileName,
+                file.ContentType,
+                file.Length
+            );
+            return Ok(response);
         }
 
         //Letöltés (projekt és task szintű egyaránt)
@@ -115,26 +83,18 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = PolicyNames.ProjectViewer)]
         public async Task<IActionResult> DownloadAttachmentAsync(Guid projectId, Guid attachmentId, CancellationToken ct)
         {
-            try
-            {
-                var attachment = await _attachmentService.GetAttachmentMetadataAsync(projectId, attachmentId);
-                if (attachment == null)
-                    return NotFound();
+            var attachment = await _attachmentService.GetAttachmentMetadataAsync(projectId, attachmentId);
+            if (attachment == null)
+                return NotFound();
 
-                var encodedFileName = Uri.EscapeDataString(attachment.FileName);
-                Response.Headers["Content-Disposition"] =$"attachment; filename*=UTF-8''{encodedFileName}";
-                Response.Headers["X-Content-Type-Options"] = "nosniff";
-                Response.ContentType = attachment.ContentType;
+            var encodedFileName = Uri.EscapeDataString(attachment.FileName);
+            Response.Headers["Content-Disposition"] =$"attachment; filename*=UTF-8''{encodedFileName}";
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            Response.ContentType = attachment.ContentType;
 
-                await _attachmentService.DownloadAttachmentAsync(projectId, attachmentId, Response.Body, ct);
+            await _attachmentService.DownloadAttachmentAsync(projectId, attachmentId, Response.Body, ct);
 
-                return new EmptyResult();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            return new EmptyResult();
         }
 
         //Törlés (projekt és task szintű egyaránt)
@@ -142,16 +102,8 @@ namespace ProjectManager.API.Controllers
         [Authorize(Policy = PolicyNames.ProjectMember)]
         public async Task<IActionResult> DeleteAttachmentAsync(Guid projectId, Guid attachmentId)
         {
-            try
-            {
-                await _attachmentService.DeleteAttachmentAsync(projectId, attachmentId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _attachmentService.DeleteAttachmentAsync(projectId, attachmentId);
+            return NoContent();
         }
 
         //Task szintű presigned URL
@@ -163,16 +115,8 @@ namespace ProjectManager.API.Controllers
             Guid taskId, 
             [FromBody] PresignedUrlRequestDto dto)
         {
-            try
-            {
-                var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         //Projekt szintű presigned URL
@@ -183,16 +127,8 @@ namespace ProjectManager.API.Controllers
             Guid projectId, 
             [FromBody] PresignedUrlRequestDto dto)
         {
-            try
-            {
-                var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, null, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.GetPresignedUploadUrlAsync(projectId, null, dto);
+            return Ok(response);
         }
 
         //Task szintű confirm
@@ -202,16 +138,8 @@ namespace ProjectManager.API.Controllers
         public async Task<ActionResult<AttachmentResponseDto>> ConfirmTaskUploadAsync(
             Guid projectId, Guid taskId, [FromBody] ConfirmUploadDto dto)
         {
-            try
-            {
-                var response = await _attachmentService.ConfirmUploadAsync(projectId, taskId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.ConfirmUploadAsync(projectId, taskId, dto);
+            return Ok(response);
         }
 
         //Projekt szintű confirm
@@ -221,16 +149,8 @@ namespace ProjectManager.API.Controllers
         public async Task<ActionResult<AttachmentResponseDto>> ConfirmProjectUploadAsync(
             Guid projectId, [FromBody] ConfirmUploadDto dto)
         {
-            try
-            {
-                var response = await _attachmentService.ConfirmUploadAsync(projectId, null, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _attachmentService.ConfirmUploadAsync(projectId, null, dto);
+            return Ok(response);
         }
     }
 }

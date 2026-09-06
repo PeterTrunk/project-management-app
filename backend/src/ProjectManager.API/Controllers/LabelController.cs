@@ -30,16 +30,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<LabelResponseDto>>> GetLabelsAsync(Guid projectId)
         {
-            try
-            {
-                var response = await _labelService.GetLabelsAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _labelService.GetLabelsAsync(projectId);
+            return Ok(response);
         }
 
         [HttpPost]
@@ -48,16 +40,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<LabelResponseDto>> CreateLabelAsync(Guid projectId, [FromBody] CreateLabelDto dto)
         {
-            try
-            {
-                var response = await _labelService.CreateLabelAsync(projectId, dto);
-                return Created(string.Empty, response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _labelService.CreateLabelAsync(projectId, dto);
+            return Created(string.Empty, response);
         }
 
         [HttpDelete("{labelId}")]
@@ -66,16 +50,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteLabelAsync(Guid projectId, Guid labelId)
         {
-            try
-            {
-                await _labelService.DeleteLabelAsync(projectId, labelId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _labelService.DeleteLabelAsync(projectId, labelId);
+            return NoContent();
         }
 
         [HttpPost("tasks/{taskId}/labels/{labelId}")]
@@ -84,16 +60,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> AddLabelToTask(Guid projectId, Guid taskId, Guid labelId)
         {
-            try
-            {
-                await _labelService.AddLabelToTaskAsync(projectId, taskId, labelId);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _labelService.AddLabelToTaskAsync(projectId, taskId, labelId);
+            return Ok();
         }
 
         [HttpDelete("tasks/{taskId}/labels/{labelId}")]
@@ -102,16 +70,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveLabelFromTask(Guid projectId, Guid taskId, Guid labelId)
         {
-            try
-            {
-                await _labelService.RemoveLabelFromTaskAsync(projectId, taskId, labelId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _labelService.RemoveLabelFromTaskAsync(projectId, taskId, labelId);
+            return NoContent();
         }
     }
 }

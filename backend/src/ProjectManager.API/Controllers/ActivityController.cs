@@ -34,17 +34,9 @@ namespace ProjectManager.API.Controllers
             [FromQuery] DateTime? dateFrom = null,
             [FromQuery] DateTime? dateTo = null)
         {
-            try
-            {
-                var response = await _activityService.GetActivitiesAsync(
-                    projectId, page, pageSize, entityType, actorName, dateFrom, dateTo);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _activityService.GetActivitiesAsync(
+                projectId, page, pageSize, entityType, actorName, dateFrom, dateTo);
+            return Ok(response);
         }
     }
 }

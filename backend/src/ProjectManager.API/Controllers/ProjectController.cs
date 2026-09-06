@@ -28,16 +28,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectResponseDto>> CreateProjectAsync([FromBody] CreateProjectDto dto)
         {
-            try
-            {
-                var response = await _projectservice.CreateProjectAsync(dto);
-                return Created(string.Empty ,response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _projectservice.CreateProjectAsync(dto);
+            return Created(string.Empty ,response);
         }
 
         [HttpGet]
@@ -46,16 +38,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<ProjectResponseDto>>> GetProjectsAsync()
         {
-            try
-            {
-                var response = await _projectservice.GetProjectsAsync();
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _projectservice.GetProjectsAsync();
+            return Ok(response);
         }
 
         [HttpGet("{projectId}")]
@@ -64,16 +48,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectResponseDto>> GetProjectById(Guid projectId)
         {
-            try
-            {
-                var response = await _projectservice.GetProjectByIdAsync(projectId);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _projectservice.GetProjectByIdAsync(projectId);
+            return Ok(response);
         }
 
         [HttpPut("{projectId}")]
@@ -83,16 +59,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectResponseDto>> UpdateProject(Guid projectId, [FromBody] UpdateProjectDto dto)
         {
-            try
-            {
-                var response = await _projectservice.UpdateProjectAsync(projectId, dto);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            var response = await _projectservice.UpdateProjectAsync(projectId, dto);
+            return Ok(response);
         }
         
         [HttpPatch("{projectId}/archive")]
@@ -101,16 +69,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> ArchiveProject(Guid projectId)
         {
-            try
-            {
-                await _projectservice.ArchiveProjectAsync(projectId);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _projectservice.ArchiveProjectAsync(projectId);
+            return Ok();
         }
 
         [HttpPatch("{projectId}/unarchive")]
@@ -119,16 +79,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> UnarchiveProject(Guid projectId)
         {
-            try
-            {
-                await _projectservice.UnarchiveProjectAsync(projectId);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _projectservice.UnarchiveProjectAsync(projectId);
+            return Ok();
         }
 
         [HttpDelete("{projectId}")]
@@ -137,16 +89,8 @@ namespace ProjectManager.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteProjectAsync(Guid projectId)
         {
-            try
-            {
-                await _projectservice.DeleteProjectAsync(projectId);
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hiba | {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
+            await _projectservice.DeleteProjectAsync(projectId);
+            return NoContent();
         }
     }
 }

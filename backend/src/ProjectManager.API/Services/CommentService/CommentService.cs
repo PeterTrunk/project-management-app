@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Comments;
 using ProjectManager.API.Hubs;
@@ -35,16 +36,17 @@ namespace ProjectManager.API.Services.CommentService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             var userId = _currentUserService.UserId;
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
-                throw new Exception("Felhasználó nem található!");
+                throw new NotFoundException("Felhasználó nem található!");
 
 
             var comment = new Comment
@@ -112,19 +114,23 @@ namespace ProjectManager.API.Services.CommentService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
-            var comment = await _context.Comments.FirstOrDefaultAsync(c => c.Id == commentId);
+            //A komment a most már projektre szűrt taskhoz kell tartozzon, különben
+            //idegen projekt kommentje is törölhető
+            var comment = await _context.Comments
+                .FirstOrDefaultAsync(c => c.Id == commentId && c.TaskId == taskId);
             if (comment == null)
-                throw new Exception("Comment nem található");
+                throw new NotFoundException("Comment nem található");
 
             var callerId = _currentUserService.UserId;
             if (comment.UserId != callerId)
-                throw new Exception("Csak a saját kommentedet törölheted!");
+                throw new ForbiddenException("Csak a saját kommentedet törölheted!");
 
             _context.Comments.Remove(comment);
 
@@ -169,11 +175,12 @@ namespace ProjectManager.API.Services.CommentService
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
             if (project == null)
-                throw new Exception("Projekt nem található!");
+                throw new NotFoundException("Projekt nem található!");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
-                throw new Exception("Feladat nem található");
+                throw new NotFoundException("Feladat nem található");
 
             var comments = await _context.Comments
                 .Where(c => c.TaskId == taskId)

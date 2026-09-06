@@ -3147,6 +3147,28 @@ csak görgetéssel lehetett taskot találni a select-tag-ben ami nagy projektné
 - Szűrés: sprint alapján (completed sprintek is elérhetőek)
 - A kiválasztottat fogjuk hozzárendelni
 
+### Cache-elés (kihagyott, tervezett)
+
+**Miért lett kihagyva:**
+- A Svelte store-ok már implicit cache-ként funkcionálnak
+  (labels, members, boards betöltés után store-ban maradnak, lényeges frissítéseket megkapja a websocket-en keresztül)
+- SignalR WebSocket kapcsolat miatt frequent cache invalidáció szükséges
+  - komplex implementáció, magas karbantartási költség
+- Redis már az infrastruktúrában van (SignalR backplane)
+  - backend cache technikailag gyorsan megvalósítható lenne
+
+**Mikor lenne érdemes bevezetni:**
+- Nagy felhasználószámos terheléstesztek alapján
+- Ha mérhetően magas DB terhelés mutatkozik
+- Ha a SignalR invalidáció komplexitása kezelhető marad
+
+**Lehetséges megközelítés ha szükségessé válik:**
+- IDistributedCache + Redis (már meglévő infrastruktúra)
+- Replika-safe (szemben az IMemoryCache-sel)
+- TTL alapú invalidáció + SignalR esemény alapú invalidáció
+- Cache-elhető adatok: Labels, Members, Boards, Project adatok
+- Nem cache-elhető: Tasks, Activities, Comments, Statistics
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

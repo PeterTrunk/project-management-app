@@ -151,12 +151,31 @@
         }
     }
 
-    function highlightDescription(activity: ActivityResponse): string {
-    return activity.description.replace(
-        activity.actorName,
-        `<span class="actor-name">${activity.actorName}</span>`
-    );
-}
+    type DescriptionPart = { text: string; isActor: boolean };
+
+    // A leírást az aktor nevének első előfordulásánál vágjuk szét, hogy a kiemelés
+    // {@html} nélkül megoldható legyen - a Svelte szöveg-interpoláció escape-el.
+    function splitDescription(activity: ActivityResponse): DescriptionPart[] {
+        const description = activity.description ?? '';
+        const actorName = activity.actorName ?? '';
+
+        const index = actorName ? description.indexOf(actorName) : -1;
+        if (index === -1)
+            return [{ text: description, isActor: false }];
+
+        const parts: DescriptionPart[] = [];
+
+        if (index > 0)
+            parts.push({ text: description.slice(0, index), isActor: false });
+
+        parts.push({ text: actorName, isActor: true });
+
+        const rest = description.slice(index + actorName.length);
+        if (rest)
+            parts.push({ text: rest, isActor: false });
+
+        return parts;
+    }
 </script>
 
 <div class="filter-toolbar">
@@ -226,7 +245,7 @@
                     <div class="activity-content">
                         <div class="activity-row stack-480">
                             <p class="activity-description">
-                                {@html highlightDescription(activity)}
+                                {#each splitDescription(activity) as part}{#if part.isActor}<span class="actor-name">{part.text}</span>{:else}{part.text}{/if}{/each}
                             </p>
                             <span class="activity-time">{formatDate(activity.createdAt)}</span>
                         </div>
