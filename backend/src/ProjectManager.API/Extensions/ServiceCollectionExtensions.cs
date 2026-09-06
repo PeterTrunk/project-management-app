@@ -89,7 +89,15 @@ namespace ProjectManager.API.Extensions
 
         public static IServiceCollection AddRedisAndSignalR(this IServiceCollection services, string? redisConnection)
         {
-            var signalRBuilder = services.AddSignalR();
+            //Explicit időzítés, hogy a kliens és a szerver ne mondhasson ellent egymásnak.
+            //A szabály: a ClientTimeoutInterval legyen legalább kétszerese annak, amilyen gyakran a kliens pingel (VITE_SIGNALR_KEEPALIVE_SECONDS).
+            //Az alapértelmezett 30 másodperc mellett egy 30 mp-nél ritkábban pingelő kliens kapcsolatát a szerver folyamatosan bontotta.
+            //A kliens oldali érték maximuma ezért 30 mp.
+            var signalRBuilder = services.AddSignalR(options =>
+            {
+                options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+                options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+            });
             if (!string.IsNullOrEmpty(redisConnection))
             {
                 //SignalR backplane
