@@ -23,6 +23,11 @@ namespace ProjectManager.API.Services.TeamService
         private readonly EmailOptions _emailOptions;
         private readonly ILogger<TeamService> _logger;
 
+        //A validátor 30 napban maximálja a megadható értéket.
+        //Ez az alapértelmezés, ha a felhasználó nem tölti ki a mezőt
+        //Így nincs többé "végtelen" meghívó: kitöltetlen mező esetén 7 nap.
+        private const int DefaultInviteExpiryDays = 7;
+
         public TeamService(
             AppDbContext context, 
             IHubContext<ProjectHub> hubContext, 
@@ -56,9 +61,7 @@ namespace ProjectManager.API.Services.TeamService
                 ProjectId = projectId,
                 CreatedById = _currentUserService.UserId,
                 Token = token,
-                ExpiresAt = dto.ExpiresInDays.HasValue
-                    ? DateTime.UtcNow.AddDays(dto.ExpiresInDays.Value)
-                    : DateTime.MaxValue,  // végtelen
+                ExpiresAt = DateTime.UtcNow.AddDays(dto.ExpiresInDays ?? DefaultInviteExpiryDays),
                 MaxUses = dto.MaxUses,
                 UseCount = 0,
                 CreatedAt = DateTime.UtcNow

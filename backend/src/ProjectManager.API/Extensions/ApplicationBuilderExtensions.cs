@@ -61,24 +61,71 @@ namespace ProjectManager.API.Extensions
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
 
-            var integrations = await context.Integrations.ToListAsync();
-            foreach (var integration in integrations)
+            //Csak a jelöletlen sorok érdekelnek. A már megjelölt (enc:v1:) értékekhez hozzá sem nyúlunk
+            //Így egy kulcscsere nem tud kárt tenni bennük.
+            var pending = await context.Integrations
+                .Where(i => !i.WebhookSecret.StartsWith(EncryptionService.Prefix))
+                .ToListAsync();
+
+            if (pending.Count == 0)
+                return;
+
+            Serilog.Log.Information("WebhookSecret migráció indul | Érintett sorok: {Count}", pending.Count);
+
+            foreach (var integration in pending)
             {
+                //A jelöletlen érték kétféle lehet: plain text, vagy a jelölés bevezetése előtti ciphertext.
+                //A kettőt a Decrypt sikeressége különbözteti meg:
+                //DE ha a Decrypt hibázik, az rossz ENCRYPTION_KEY-t is jelenthet.
+                //Ilyenkor NEM titkosítunk újra, mert azzal helyrehozhatatlanul
+                //felülírnánk az eredeti secretet: naplózunk és kihagyjuk a sort.
+                string migrated;
+
+                if (LooksLikeCiphertext(integration.WebhookSecret))
+                {
+                    try
+                    {
+                        var plaintext = encryption.Decrypt(integration.WebhookSecret);
+                        migrated = encryption.Encrypt(plaintext);
+                    }
+                    catch (Exception ex)
+                    {
+                        Serilog.Log.Error(ex,
+                            "WebhookSecret nem fejthető vissza - a sor változatlan marad. " +
+                            "Ellenőrizd az ENCRYPTION_KEY-t! | IntegrationId: {IntegrationId}",
+                            integration.Id);
+                        continue;
+                    }
+                }
+                else
+                {
+                    migrated = encryption.Encrypt(integration.WebhookSecret);
+                }
+
+                integration.WebhookSecret = migrated;
+
                 try
                 {
-                    //Ha már titkosított Decrypt sikeres lesz, kihagyjuk
-                    encryption.Decrypt(integration.WebhookSecret);
+                    //Soronkénti mentés: egy hibás sor ne vigye magával a többit
+                    await context.SaveChangesAsync();
+                    Serilog.Log.Information("Integration WebhookSecret migrálva | IntegrationId: {IntegrationId}", integration.Id);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    //Ha Decrypt hibát dob,akkor még plain text, titkosítjuk
-                    integration.WebhookSecret = encryption.Encrypt(integration.WebhookSecret);
-                    Serilog.Log.Information("Integration WebhookSecret titkosítva | IntegrationId: {IntegrationId}", integration.Id);
+                    Serilog.Log.Error(ex, "WebhookSecret mentési hiba | IntegrationId: {IntegrationId}", integration.Id);
+                    context.ChangeTracker.Clear();
                 }
             }
 
-            await context.SaveChangesAsync();
             Serilog.Log.Information("WebhookSecret migráció befejezve");
+        }
+
+        //A mi ciphertextünk base64, és dekódolva legalább nonce + tag hosszú.
+        //Ennél rövidebb vagy nem base64 érték biztosan plain text.
+        private static bool LooksLikeCiphertext(string value)
+        {
+            var buffer = new byte[value.Length];
+            return Convert.TryFromBase64String(value, buffer, out var written) && written >= 12 + 16;
         }
     }
 }

@@ -337,7 +337,6 @@ namespace ProjectManager.API.Services.ProjectService
 
             if (dto.Name != null) project.Name = dto.Name;
             if (dto.Description != null) project.Description = dto.Description;
-            if (dto.IsArchived.HasValue) project.IsArchived = dto.IsArchived.Value;
 
             var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == project.OwnerId);
             if (owner == null)

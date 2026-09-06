@@ -42,6 +42,14 @@ try
     // Environment variables kinyerése
     var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
         ?? throw new InvalidOperationException("JWT_SECRET nincs beállítva!");
+
+    //Fail-fast a gyenge titokra: a HMAC-SHA256 kulcsa 256 bitnél rövidebb ne legyen.
+    //Enélkül a hiba csak az első bejelentkezéskor, futásidőben derülne ki:
+    //ugyanaz a minta, amit az ENCRYPTION_KEY-nél már alkalmazva van.
+    if (System.Text.Encoding.UTF8.GetByteCount(jwtSecret) < 32)
+        throw new InvalidOperationException(
+            "A JWT_SECRET legalább 32 bájt hosszú legyen (HMAC-SHA256 kulcsméret)!");
+
     var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
         ?? throw new InvalidOperationException("JWT_ISSUER nincs beállítva!");
     var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
@@ -96,6 +104,12 @@ try
     builder.Services.Configure<ApiOptions>(options =>
     {
         options.BaseUrl = apiBaseUrl;
+    });
+
+    //Refresh token süti. A COOKIE_DOMAIN üresen hagyva host-only sütit ad - fejlesztői környezetben ez a helyes viselkedés.
+    builder.Services.Configure<ProjectManager.API.Common.Options.CookieOptions>(options =>
+    {
+        options.Domain = Environment.GetEnvironmentVariable("COOKIE_DOMAIN");
     });
 
     //DB

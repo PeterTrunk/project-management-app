@@ -11,6 +11,17 @@ namespace ProjectManager.API.Services.EncryptionService
         private const int NonceSize = 12;
         private const int TagSize = 16;
 
+        //Explicit jelölés: enélkül a "titkosított-e már?" kérdésre csak a Decrypt sikeressége válaszolna,
+        //ami rossz kulcs esetén is hibát dob - és a hívó tévesen plain textnek minősítené a helyesen titkosított adatot.
+        public const string Prefix = "enc:v1:";
+
+        /// <summary>
+        /// Igaz, ha az érték biztosan a mi titkosított formátumunk. A prefix nélküli (régi) ciphertextekre hamisat ad, 
+        /// amelyeket a Decrypt továbbra is kezel.
+        /// </summary>
+        public static bool IsEncrypted(string? value) =>
+            value != null && value.StartsWith(Prefix, StringComparison.Ordinal);
+
         public EncryptionService(IOptions<EncryptionOptions> options)
         {
             _key = Convert.FromBase64String(options.Value.Key);
@@ -37,12 +48,17 @@ namespace ProjectManager.API.Services.EncryptionService
             ciphertext.CopyTo(result, NonceSize);
             tag.CopyTo(result, NonceSize + ciphertext.Length);
 
-            return Convert.ToBase64String(result);
+            return Prefix + Convert.ToBase64String(result);
         }
 
         public string Decrypt(string base64Ciphertext)
         {
-            var data = Convert.FromBase64String(base64Ciphertext);
+            //A prefix nélküli értékek a jelölés bevezetése előtt keletkeztek
+            var payload = base64Ciphertext.StartsWith(Prefix, StringComparison.Ordinal)
+                ? base64Ciphertext[Prefix.Length..]
+                : base64Ciphertext;
+
+            var data = Convert.FromBase64String(payload);
 
             var nonce = data[..NonceSize];
             var tag = data[^TagSize..];

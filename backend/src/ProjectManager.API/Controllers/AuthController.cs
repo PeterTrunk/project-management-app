@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Services.Auth;
@@ -14,13 +15,16 @@ namespace ProjectManager.API.Controllers
     {
         private readonly IAuthService _authService;
         private readonly ILogger<AuthController> _logger;
+        private readonly Common.Options.CookieOptions _cookieOptions;
 
         public AuthController(
             IAuthService authservice,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            IOptions<Common.Options.CookieOptions> cookieOptions)
         {
             _authService = authservice;
             _logger = logger;
+            _cookieOptions = cookieOptions.Value;
         }
 
         [HttpPost("register")]
@@ -219,37 +223,35 @@ namespace ProjectManager.API.Controllers
 
         private void SetRefreshTokenCookie(string refreshToken, bool rememberMe = false)
         {
-            var isProd = HttpContext.RequestServices
-                .GetRequiredService<IWebHostEnvironment>()
-                .IsProduction();
+            var options = BuildCookieOptions();
+            options.Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : null;
 
-            Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = isProd,
-                SameSite = isProd ? SameSiteMode.Strict : SameSiteMode.Lax,
-                Domain = isProd ? ".trunkpeter.com" : null,
-                Path = "/api/auth",
-                Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : null
-            });
+            Response.Cookies.Append("refreshToken", refreshToken, options);
         }
 
         //A törlő Set-Cookie fejlécnek pontosan ugyanazokat az attribútumokat kell hordoznia,
         //mint a beállítónak - eltérő Domain vagy Path esetén a böngésző nem azonosítja a sütit, és az bent marad
         private void DeleteRefreshTokenCookie()
         {
+            Response.Cookies.Delete("refreshToken", BuildCookieOptions());
+        }
+
+        //Egy forrásból épül a beállító és a törlő fejléc is:
+        //Eltérő Domain vagy Path esetén a böngésző nem azonosítja a sütit, és az bent marad
+        private CookieOptions BuildCookieOptions()
+        {
             var isProd = HttpContext.RequestServices
                 .GetRequiredService<IWebHostEnvironment>()
                 .IsProduction();
 
-            Response.Cookies.Delete("refreshToken", new CookieOptions
+            return new CookieOptions
             {
                 HttpOnly = true,
                 Secure = isProd,
                 SameSite = isProd ? SameSiteMode.Strict : SameSiteMode.Lax,
-                Domain = isProd ? ".trunkpeter.com" : null,
-                Path = "/api/auth"
-            });
+                Domain = string.IsNullOrWhiteSpace(_cookieOptions.Domain) ? null : _cookieOptions.Domain,
+                Path = _cookieOptions.Path
+            };
         }
     }
 }
