@@ -29,9 +29,17 @@ namespace ProjectManager.API.Services.LabelService
             if (project == null)
                 throw new Exception("Projekt nem található!");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
                 throw new Exception("Feladat nem található");
+
+            //A címke azonosítója a kérésből jön: enélkül idegen projekt címkéje is
+            //rákerülhet a taskra, és a neve/színe megjelenik a felületen
+            var labelExists = await _context.Labels
+                .AnyAsync(l => l.Id == labelId && l.ProjectId == projectId);
+            if (!labelExists)
+                throw new Exception("Cimke nem található!");
 
             var existing = await _context.LabelTasks.FirstOrDefaultAsync(lt => lt.TaskId == taskId && lt.LabelId == labelId);
             if (existing != null)
@@ -101,7 +109,8 @@ namespace ProjectManager.API.Services.LabelService
             if (project == null)
                 throw new Exception("Projekt nem található!");
 
-            var label = await _context.Labels.FirstOrDefaultAsync(l => l.Id == labelId);
+            var label = await _context.Labels
+                .FirstOrDefaultAsync(l => l.Id == labelId && l.ProjectId == projectId);
             if (label == null)
                 throw new Exception("Cimke nem található");
 
@@ -146,7 +155,8 @@ namespace ProjectManager.API.Services.LabelService
             if (project == null)
                 throw new Exception("Projekt nem található!");
 
-            var task = await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+            var task = await _context.ProjectTasks
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
             if (task == null)
                 throw new Exception("Feladat nem található");
 

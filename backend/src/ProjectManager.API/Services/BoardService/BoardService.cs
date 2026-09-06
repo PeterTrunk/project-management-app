@@ -147,7 +147,8 @@ namespace ProjectManager.API.Services.BoardService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if(board == null)
                 throw new Exception("Board nem található");
             
@@ -243,7 +244,8 @@ namespace ProjectManager.API.Services.BoardService
             if (project == null)
                 throw new Exception("Projekt nem található");
 
-            var board = await _context.Boards.FirstOrDefaultAsync(b => b.Id == boardId);
+            var board = await _context.Boards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.ProjectId == projectId);
             if (board == null)
                 throw new Exception("Board nem található");
 
