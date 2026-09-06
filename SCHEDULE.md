@@ -3684,6 +3684,189 @@ Ezek a javítások szándékosan maradtak ki, mert üzemeltetési vagy termékd�
 - **Jogosultsági regressziós tesztek**: a CI most már fut, de az IDOR javításokra még nincs
   automatizált teszt (idegen projekt entitás-ID -> 404). Ez a legfontosabb következő lépés.
 
+### Függőség-audit és az npm supply chain kockázat
+
+**Miért készült:**
+A biztonsági audit tudatosan kihagyta a dependency/CVE ellenőrzést ("nincs dependency audit" -
+a lefedettség korlátai között rögzítve). Ezt utólag pótoltuk, egy konkrét incidens kapcsán:
+2026. március 31-én egy axios karbantartói fiók feltörése után rosszindulatú verziók kerültek fel
+az npm-re (1.14.1 és 0.30.4), amelyek egy `plain-crypto-js` nevű álfüggőségen keresztül
+juttattak be távoli hozzáférést biztosító kódot.
+
+**Amit az npm registryben ellenőriztünk:**
+A pontos mechanizmust külső forrás nélkül nem tudtuk igazolni, a verziótörténet viszont
+egyértelmű nyomot hagyott:
+
+```
+1.14.0    2026-03-27
+   ???                <- 1.14.1 HIÁNYZIK a registryből
+1.15.0    2026-04-08
+
+0.30.3    létezik
+   ???                <- 0.30.4 HIÁNYZIK a registryből
+```
+
+Az npm nem tartalmaz lyukas verziósorozatot: egy hiányzó verzió két meglévő között azt jelenti,
+hogy kiadták, majd visszavonták (unpublish, 72 órán belül lehetséges). Pontosan az a két verzió
+hiányzik, amit a beszámoló megnevez, két külön kiadási ágon - ez nem egy elrontott build utólagos
+takarítására vall, hanem koordinált visszavonásra. A dátum is illeszkedik: március 31. beleesik
+az 1.14.0 és az 1.15.0 közötti résbe.
+
+**A projekt nem volt érintett:**
+A lockfile az `axios@1.13.6`-ot rögzítette integrity hash-sel, ami 2026-02-27-én jelent meg -
+egy hónappal a kompromittált kiadás előtt. A `plain-crypto-js` sehol nem szerepelt a fában.
+A 2025 szeptemberi npm-hullám érintett csomagjai (`chalk`, `debug`, `ansi-styles`, `strip-ansi`,
+`color-convert`) szintén tiszták voltak: a fában vagy nem szerepeltek, vagy a régebbi,
+nem érintett kiadási ágon álltak.
+
+**Az eredmény:**
+- **Backend (NuGet): tiszta.** `dotnet list package --vulnerable --include-transitive` mindkét
+  projektre "no vulnerable packages". 12 csomag elavult (a legnagyobb elmaradás: `Resend`
+  0.8.0 -> 0.16.0, `Swashbuckle` 9 -> 10), de egyik sem hordoz ismert sebezhetőséget.
+- **Frontend (npm): 12 találat** - 8 magas, 3 közepes, 1 alacsony.
+
+**A 12 találat valós kitettsége:**
+Az `npm audit` nem tudja, milyen környezetben fut a kód, ezért a nyers számnál fontosabb volt
+végignézni, mi érinti ténylegesen ezt az alkalmazást:
+
+| Csomag | Találat jellege | Érinti? |
+|---|---|---|
+| axios (11 advisory) | Zöme Node.js adapter: NO_PROXY bypass, SSRF, proxy-auth szivárgás, maxBodyLength | Nem - a böngésző-build XHR/fetch adaptert használ |
+| axios (prototype pollution) | Config merge, validateStatus, parseReviver gadgetek | Elvben igen, de kihasználásához már futó támadó-JS kell |
+| svelte (4 advisory) | 3 db SSR XSS, 1 db DOM clobbering | Az SSR-esek nem (ez SPA), a DOM clobbering elvben igen |
+| vite (4 advisory) | Mind a dev szerverre: path traversal, fs.deny bypass, WebSocket fájlolvasás | Productionben nem, csak fejlesztői gépen |
+| esbuild, nanoid, postcss, picomatch | Build-lánc, vite tranzitív | Dev-only, production bundle-be nem kerül |
+| ws | Memory exhaustion DoS (signalr tranzitív) | Nem - a signalr futásidejű platform-ellenőrzéssel dönt, a ws nincs a böngésző bundle-ben |
+| follow-redirects, form-data | axios tranzitív | Node-only adapter |
+
+Egyik találat sem adott azonnal kihasználható támadási felületet ebben az alkalmazásban.
+A frissítés indoka nem a súlyosság volt, hanem hogy a lemaradás ne nőjön akkorára, ahol
+egy jövőbeli valódi incidens már nagy ugrást igényel.
+
+### Csomagfrissítés a 30 napos szabállyal
+
+**Probléma a naiv megközelítéssel:**
+Az első javaslat a legfrissebb elérhető verziókra frissített volna. Ez rossz reflex: **a legfrissebb
+kiadás az, amelyiknél a legkevesebb idő volt egy esetleges kompromittálás észlelésére.**
+A márciusi axios-esetet órák alatt elkapták, a 2025 szeptemberi hullámot napok alatt - de ez
+nem garantált, és a lemaradás nélkül futó projekt pontosan a felfedezés előtti ablakba lép be.
+
+**A szabály:**
+Ne a legfrissebb verziót vegyük, hanem a legfrissebb olyat, ami **legalább 30 napja kint van**
+és már lezárja az összes nyitott advisoryt. Egy hónap alatt a csomagot sok ezer projekt lehúzta,
+a biztonsági cégek elemezték - ha van benne valami, addigra kiderül.
+
+Ez formalizálja azt a szokást, ami a márciusi incidenskor megvédte a projektet: a csomagok
+nem frissülnek reflexből minden alkalommal.
+
+**Megoldás - a frissített csomagok:**
+
+| Csomag | Erről | Erre | A verzió kora | Elérhető legújabb |
+|---|---|---|---|---|
+| `axios` | 1.13.6 | 1.19.0 | 40 nap | 1.20.0 (11 napos - kihagyva) |
+| `svelte` | 5.53.9 | 5.56.8 | 43 nap | 5.57.0 (8 napos - kihagyva) |
+| `vite` | 7.3.1 | 7.3.6 | 74 nap | 7.3.6 |
+| `echarts` | 6.0.0 | 6.1.0 | 111 nap | 6.1.0 |
+| `@microsoft/signalr` | 10.0.0 | 10.0.11 | 34 nap | 10.0.11 |
+| `ws` (tranzitív) | 7.5.10 | 7.5.13 | 51 nap | 7.5.13 |
+
+**Megoldás - overrides a build-láncra:**
+Az öt közvetlen csomag frissítése után öt tranzitív találat maradt, mert az `npm install` nem nyúl
+olyan csomagokhoz, amelyeket nem kérünk. Négyüknél a szülő verziótartománya engedte a javítást,
+de a legfrissebb elérhető verzió túl friss volt (a `postcss` 8.5.28 például 3 napos), ezért
+`overrides`-szal rögzítettük a szabálynak megfelelőt:
+
+```json
+"overrides": {
+  "postcss": "8.5.26",   "nanoid": "3.3.18",
+  "picomatch": "4.0.5",  "esbuild": "0.28.1"
+}
+```
+
+Mind a négy kizárólag a build-lánc része, a production bundle-be nem kerül.
+Ezek az `overrides` bejegyzések **ideiglenesek**: amikor a vite egy későbbi verziója magától
+behúzza a javított verziókat, törölhetők.
+A `ws`-hez nem kellett override: a signalr `^7.5.10` tartománya engedi a javított 7.5.13-at.
+
+**Eredmény: 12 találatból 0.**
+
+### A lockfile diff mint kötelező review-lépés
+
+**Probléma:**
+A márciusi támadás nem egy meglévő csomag verziószámának emelésével működött, hanem egy
+**új álfüggőség** (`plain-crypto-js`) beillesztésével. Egy frissítés átnézésénél tehát nem elég
+a verziószámokat végigfutni - az újonnan **megjelenő csomagneveket** kell keresni.
+
+**Megoldás:**
+A frissítés után a lockfile diffet erre a szempontra néztük át. Négy új csomag került a fába,
+mind az axios új `https-proxy-agent` függősége miatt:
+
+```
++ https-proxy-agent  5.0.1   (2022-04-14, 1606 napja)
++ agent-base         6.0.2   (2020-10-23, 2144 napja)
++ ms                 2.1.3   (2020-12-08, 2098 napja)
++ debug              4.4.3   (2025-09-13,  358 napja)
+```
+
+Csomag nem tűnt el, ismeretlen név nem jelent meg.
+
+**A `debug` esete jól mutatja, miért érdemes ezt megnézni.** Ez az a csomag, amelyik a 2025
+szeptemberi npm-hullám egyik fő áldozata volt, és a verziótörténete elmondja a történetet:
+
+```
+4.4.1   2025-05-13
+4.4.2   2025-09-08   <- a kompromittált kiadás
+4.4.3   2025-09-13   <- 5 nappal később: a tiszta javítás
+```
+
+A fába a 4.4.3 került, ami 358 napja kint van. Rendben van - de csak azért tudjuk ezt,
+mert megnéztük.
+
+**Ellenőrzés:**
+- `npm audit` -> 0 sebezhetőség
+- `npm run build` -> sikeres, 4599 modul, csak a korábbi figyelmeztetések (chunk méret,
+  signalr `/*#__PURE__*/` komment)
+- A production bundle átvizsgálva: a `https-proxy-agent`, `agent-base`, `proxy-from-env` és
+  `follow-redirects` **egyike sem szerepel benne** - ez visszaigazolja, hogy az axios
+  proxy/SSRF advisory-k valóban nem érintették ezt az alkalmazást
+
+### Amiért ez a kontroll egyáltalán működik
+
+Érdemes összekötni két, egymástól függetlenül született döntést.
+
+Az infrastruktúra-etapban a frontend Dockerfile `npm install`-ról **`npm ci`**-re váltott
+(eredetileg reprodukálható build indokkal), és a CI is ezt használja. Ez a váltás az, ami a
+verziókontrollt egyáltalán lehetővé teszi:
+
+| | `npm install` (korábban) | `npm ci` (mostantól) |
+|---|---|---|
+| Mit telepít | A tartománynak megfelelő legfrissebbet | Pontosan azt, ami a lockfile-ban van |
+| Kompromittált patch verzió | Bekerülhet egy sima újra-build során, fájlmódosítás nélkül | Csak explicit lockfile-commit útján, ami látszik a review-ban |
+
+Korábban egy Dokploy redeploy - anélkül, hogy bárki bármit módosított volna - behúzhatott volna
+egy frissen kompromittált patch verziót. Mostantól a lockfile a belépési kapu.
+
+**A teljes védelmi lánc:**
+
+| Réteg | Állapot |
+|---|---|
+| A lockfile a belépési kapu (`npm ci`) | kész |
+| Minimum kiadási életkor (30 nap) | kész, szabályként rögzítve |
+| Lockfile diff: új csomagnevek keresése | kész, review-szokásként |
+| Rendszeres advisory-ellenőrzés | hátravan |
+
+**Hátravan:**
+- **`npm audit` a CI-be**, külön ütemezett jobként (pl. heti futás), ne a build részeként -
+  egy új advisory ne állítsa meg a fejlesztést olyankor sem, amikor nem érint minket
+- **4 major verzióugrás**: TypeScript 5 -> 7, Vite 7 -> 8, svelte-spa-router 4 -> 5,
+  `@sveltejs/vite-plugin-svelte` 6 -> 7. Egyik sem hordoz nyitott sebezhetőséget, mindegyik
+  saját tesztelést igényel.
+- **Backend NuGet frissítés**: 12 elavult csomag, sebezhetőség nélkül. A `Resend` 0.8 -> 0.16
+  a legnagyobb ugrás, azt külön érdemes nézni.
+- **Az `overrides` bejegyzések eltávolítása**, amint a vite magától behúzza a javított verziókat.
+- **Frissítési ritmus**: negyedévente `npm audit`, és ami sebezhető, azt 30 napnál régebbi
+  verzióra. Soron kívül csak akkor, ha egy advisory ténylegesen érinti a futó rendszert.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
