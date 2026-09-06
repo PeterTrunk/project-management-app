@@ -301,6 +301,11 @@ namespace ProjectManager.API.Controllers
                 await _authService.ResendVerificationEmailAsync(dto.Email);
                 return Ok("Megerősítő email elküldve!");
             }
+            catch (RateLimitException ex)
+            {
+                _logger.LogWarning("Rate limit | {Message}", ex.Message);
+                return StatusCode(429, ex.Message);
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Hiba | {Message}", ex.Message);

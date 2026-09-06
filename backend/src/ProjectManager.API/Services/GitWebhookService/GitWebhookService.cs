@@ -8,6 +8,7 @@ using System.Runtime.Intrinsics.Arm;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ProjectManager.API.Services.GitWebhookService
 {
@@ -358,10 +359,13 @@ namespace ProjectManager.API.Services.GitWebhookService
             if (project == null) return new List<ProjectTask>();
 
             //Valid Regexek: PM-123, #PM-123, [PM-123], (PM-123)
-            var pattern = $@"(?:^|[\s\[(\#])({project.ProjKey}-\d+)(?:$|[\s\])\.,!])";
-            var matches = System.Text.RegularExpressions.Regex.Matches(
+            //A ProjKey escape-elve kerül a mintába: a validátor ma ugyan csak [A-Z0-9]-t enged,
+            //de egyetlen lazítása regex-injektálást nyitna egy webhook payloadon futó illesztésben. A timeout a ReDoS ellen véd.
+            var pattern = $@"(?:^|[\s\[(\#])({Regex.Escape(project.ProjKey)}-\d+)(?:$|[\s\])\.,!])";
+            var matches = Regex.Matches(
                 text, pattern,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase,
+                TimeSpan.FromMilliseconds(100));
 
             var taskKeys = matches
                 .Select(m => m.Groups[1].Value.ToUpper())

@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using OtpNet;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Common.Options;
+using ProjectManager.API.Common.Security;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
@@ -13,6 +14,7 @@ using ProjectManager.API.Services.EmailService;
 using ProjectManager.API.Services.RateLimit;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace ProjectManager.API.Services.Auth
@@ -26,6 +28,15 @@ namespace ProjectManager.API.Services.Auth
         private readonly ILogger<AuthService> _logger;
         private readonly JwtOptions _jwtOptions;
         private readonly IHttpContextAccessor _httpContextAccessor;
+
+        //Explicit work factor: enélkül a könyvtár alapértelmezettjét használnánk, amely egy csomagfrissítéssel csendben megváltozhat.
+        //A Verify a hash-ből olvassa ki a faktort, ezért a korábban mentett jelszavak továbbra is érvényesek maradnak.
+        private const int BcryptWorkFactor = 12;
+
+        //A nem létező email ágán is le kell futnia egy BCrypt ellenőrzésnek,
+        //különben a válaszidő elárulja, létezik-e a fiók. Egyszer számoljuk ki, induláskor.
+        private static readonly string DummyPasswordHash =
+            BCrypt.Net.BCrypt.HashPassword("timing-equalization-placeholder", BcryptWorkFactor);
 
         public AuthService(
             AppDbContext context, 
@@ -45,30 +56,56 @@ namespace ProjectManager.API.Services.Auth
             _httpContextAccessor = httpContextAccessor;
         }
 
+        private string GetIpAddress() =>
+            _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        //Az email cím nem kerülhet nyersen a naplóba. A JWT titokkal kulcsolt HMAC determinisztikus,
+        //tehát a bejegyzések továbbra is összefűzhetők egy fiókra, de a cím a napló birtokában sem állítható vissza.
+        private string EmailRef(string? email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return "unknown";
+
+            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_jwtOptions.Secret));
+            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant()));
+            return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+        }
+
         public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
         {
             //Rate limiting
-            var ipAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var ipAddress = GetIpAddress();
             var (isLimited, retryAfter) = await _rateLimitService
                 .IsRateLimitedAsync($"login:{ipAddress}:{dto.Email}", 5, TimeSpan.FromMinutes(15));
             if (isLimited)
             {
-                _logger.LogWarning("Rate limit elérve bejelentkezésnél | Email: {Email}", dto.Email);
+                _logger.LogWarning("Rate limit elérve bejelentkezésnél | EmailRef: {EmailRef}", EmailRef(dto.Email));
                 throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
             }
-                
-            //Db ellenörzése
+
+            //DB ellenörzése
             var user = await _context.Users.FirstOrDefaultAsync(user => user.Email == dto.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+
+            //A Verify akkor is lefut, ha nincs ilyen felhasználó: így a válaszidő nem árulja el a fiók létezését
+            var isPasswordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user?.PasswordHash ?? DummyPasswordHash);
+
+            if (user == null || !isPasswordValid)
             {
-                _logger.LogWarning("Sikertelen bejelentkezés | Email: {Email}", dto.Email);
+                _logger.LogWarning("Sikertelen bejelentkezés | EmailRef: {EmailRef}", EmailRef(dto.Email));
+                throw new Exception("Hibás email vagy jelszó!");
+            }
+
+            //Letiltott fiók nem léphet be - a hibaüzenet szándékosan általános
+            if (!user.IsActive)
+            {
+                _logger.LogWarning("Bejelentkezési kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
                 throw new Exception("Hibás email vagy jelszó!");
             }
 
             //Ha TOTP aktív akkor ne adjunk JWT-t, csak jelezzük hogy kell a TOTP token
             if (user.IsTotpEnabled)
             {
-                _logger.LogInformation("TOTP szükséges | Email: {Email}", user.Email);
+                _logger.LogInformation("TOTP szükséges | UserId: {UserId}", user.Id);
                 return new AuthResponseDto
                 {
                     RequiresTotp = true,
@@ -84,7 +121,7 @@ namespace ProjectManager.API.Services.Auth
             //Refresh Token
             var refreshTokenEntry = new RefreshToken
             {
-                Token = Guid.NewGuid().ToString(),
+                Token = SecureTokenGenerator.Generate(),
                 UserId = user.Id,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
                 RememberMe = dto.RememberMe
@@ -93,7 +130,7 @@ namespace ProjectManager.API.Services.Auth
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Sikeres bejelentkezés | Email: {Email}", user.Email);
+            _logger.LogInformation("Sikeres bejelentkezés | UserId: {UserId}", user.Id);
 
             return new AuthResponseDto
             {
@@ -133,12 +170,8 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto, string ipAddress)
         {
-            if(await _context.Users.AnyAsync(u => u.Email == dto.Email))
-            {
-                _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | Email: {Email}", dto.Email);
-                throw new Exception("Ez az email már foglalt!");
-            }
-
+            //A rate limit MINDEN ág előtt fut: ha a foglaltság-ellenőrzés előzné meg,
+            //a támadó a számláló növelése nélkül tesztelhetne tetszőleges címeket
             var (isLimited, retryAfter) = await _rateLimitService
                 .IsRateLimitedAsync($"register:{ipAddress}", 5, TimeSpan.FromHours(1));
             if (isLimited)
@@ -146,12 +179,18 @@ namespace ProjectManager.API.Services.Auth
                 _logger.LogWarning("Rate limit elérve regisztrációnál | IP: {IpAddress}", ipAddress);
                 throw new RateLimitException($"Túl sok regisztrációs kísérlet. Próbáld újra {retryAfter} másodperc múlva!");
             }
-                
+
+            if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
+            {
+                _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | EmailRef: {EmailRef}", EmailRef(dto.Email));
+                throw new Exception("Ez az email már foglalt!");
+            }
+
 
             User user = new User();
             user.Email = dto.Email;
             user.DisplayName = dto.DisplayName;
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password, BcryptWorkFactor);
 
             //A felvétel DB-be + mentés
             await _context.AddAsync(user);
@@ -163,20 +202,20 @@ namespace ProjectManager.API.Services.Auth
             //Refresh Token
             var refreshTokenEntry = new RefreshToken
             {
-                Token = Guid.NewGuid().ToString(),
+                Token = SecureTokenGenerator.Generate(),
                 UserId = user.Id,
                 ExpiresAt = DateTime.UtcNow.AddDays(30),
             };
 
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
 
-            var verificationToken = Guid.NewGuid().ToString("N");
+            var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
 
-            _logger.LogInformation("Sikeres regisztráció | Email: {Email}", user.Email);
+            _logger.LogInformation("Sikeres regisztráció | UserId: {UserId}", user.Id);
 
             return new AuthResponseDto
             {
@@ -190,7 +229,7 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> RefreshTokenAsync(string refreshToken)
         {
-            //Feltételes UPDATE - csak akkor állítja is_revoked = true-ra
+            //Feltételes UPDATE, csak akkor állítja is_revoked = true-ra
             //ha is_revoked még false, ettől atomikus: nem lehet race condition!
             var rowsAffected = await _context.RefreshTokens
                 .Where(rf => rf.Token == refreshToken && !rf.IsRevoked)
@@ -218,12 +257,19 @@ namespace ProjectManager.API.Services.Auth
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
+            //Letiltott fiók a meglévő refresh tokenjével sem újíthat meg munkamenetet
+            if (!user.IsActive)
+            {
+                _logger.LogWarning("Token megújítási kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
+                throw new Exception("Token nem található vagy már felhasználva!");
+            }
+
             var accessToken = CreateToken(user);
 
             var newRefreshTokenEntry = new RefreshToken
             {
                 ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
-                Token = Guid.NewGuid().ToString(),
+                Token = SecureTokenGenerator.Generate(),
                 UserId = user.Id,
                 RememberMe = refreshTokenEntry.RememberMe
             };
@@ -290,7 +336,7 @@ namespace ProjectManager.API.Services.Auth
                 throw new Exception("Hibás jelenlegi jelszó!");
             }
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword, BcryptWorkFactor);
             await _context.SaveChangesAsync();
 
             //Minden meglévő munkamenet érvénytelenítése - a jelszóváltás célja pont az,
@@ -391,9 +437,8 @@ namespace ProjectManager.API.Services.Auth
             user.IsTotpEnabled = true;
             await _context.SaveChangesAsync();
 
-            //A 2FA bekapcsolása előtt nyitott munkamenetek még második faktor nélkül
-            //jöhettek létre, ezeket is érvényteleníteni kell, különben a védelem
-            //megkerülhető marad egy régi kapcsolaton keresztül
+            //A 2FA bekapcsolása előtt nyitott munkamenetek még 2FA nélkül jöhettek létre,
+            //ezeket is érvényteleníteni kell, különben a védelem megkerülhető marad egy régi kapcsolaton keresztül
             var revokedCount = await RevokeAllRefreshTokensAsync(userId);
 
             _logger.LogInformation(
@@ -430,19 +475,30 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
         {
-            var ipAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var ipAddress = GetIpAddress();
             var (isLimited, retryAfter) = await _rateLimitService
                 .IsRateLimitedAsync($"login:{ipAddress}:{dto.Email}", 5, TimeSpan.FromMinutes(15));
             if (isLimited)
             {
-                _logger.LogWarning("Rate limit elérve TOTP bejelentkezésnél | Email: {Email}", dto.Email);
+                _logger.LogWarning("Rate limit elérve TOTP bejelentkezésnél | EmailRef: {EmailRef}", EmailRef(dto.Email));
                 throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
-            }   
+            }
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+
+            var isPasswordValid = BCrypt.Net.BCrypt.Verify(
+                dto.Password,
+                user?.PasswordHash ?? DummyPasswordHash);
+
+            if (user == null || !isPasswordValid)
             {
-                _logger.LogWarning("Sikertelen TOTP bejelentkezés - hibás jelszó | Email: {Email}", dto.Email);
+                _logger.LogWarning("Sikertelen TOTP bejelentkezés - hibás jelszó | EmailRef: {EmailRef}", EmailRef(dto.Email));
+                throw new Exception("Hibás email vagy jelszó!");
+            }
+
+            if (!user.IsActive)
+            {
+                _logger.LogWarning("TOTP bejelentkezési kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
                 throw new Exception("Hibás email vagy jelszó!");
             }
 
@@ -460,7 +516,7 @@ namespace ProjectManager.API.Services.Auth
 
             if (!isValid)
             {
-                _logger.LogWarning("Sikertelen TOTP bejelentkezés - érvénytelen token | Email: {Email}", dto.Email);
+                _logger.LogWarning("Sikertelen TOTP bejelentkezés - érvénytelen token | UserId: {UserId}", user.Id);
                 throw new Exception("Érvénytelen TOTP token!");
             } 
 
@@ -468,7 +524,7 @@ namespace ProjectManager.API.Services.Auth
 
             var refreshTokenEntry = new RefreshToken
             {
-                Token = Guid.NewGuid().ToString(),
+                Token = SecureTokenGenerator.Generate(),
                 UserId = user.Id,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
                 RememberMe = dto.RememberMe
@@ -477,7 +533,7 @@ namespace ProjectManager.API.Services.Auth
             await _context.RefreshTokens.AddAsync(refreshTokenEntry);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Sikeres TOTP bejelentkezés | Email: {Email}", user.Email);
+            _logger.LogInformation("Sikeres TOTP bejelentkezés | UserId: {UserId}", user.Id);
 
             return new AuthResponseDto
             {
@@ -511,13 +567,24 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task ResendVerificationEmailAsync(string email)
         {
+            //Enélkül a végpont email-bombázásra és a levélküldő kvóta kimerítésére használható,
+            //utóbbi a jelszó-visszaállító leveleket is megbénítaná
+            var ipAddress = GetIpAddress();
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"resend_verification:{ipAddress}:{email}", 3, TimeSpan.FromHours(1));
+            if (isLimited)
+            {
+                _logger.LogWarning("Rate limit elérve verifikációs email újraküldésnél | EmailRef: {EmailRef}", EmailRef(email));
+                throw new RateLimitException($"Túl sok kérés. Próbáld újra {retryAfter} másodperc múlva!");
+            }
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
             if (user.IsEmailVerified)
                 throw new Exception("Az email cím már van megerősítve!");
 
-            var verificationToken = Guid.NewGuid().ToString("N");
+            var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
             await _context.SaveChangesAsync();
 
@@ -526,19 +593,30 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task ForgotPasswordAsync(string email)
         {
+            //A kulcs IP-t is tartalmaz: csak email alapján bárki kizárhatna bárkit a jelszó-visszaállításból
+            var ipAddress = GetIpAddress();
             var (isLimited, retryAfter) = await _rateLimitService
-                .IsRateLimitedAsync($"forgot_password:{email}", 3, TimeSpan.FromHours(1));
+                .IsRateLimitedAsync($"forgot_password:{ipAddress}:{email}", 3, TimeSpan.FromHours(1));
             if (isLimited)
             {
-                _logger.LogWarning("Rate limit elérve jelszó visszaállításnál | Email: {Email}", email);
+                _logger.LogWarning("Rate limit elérve jelszó visszaállításnál | EmailRef: {EmailRef}", EmailRef(email));
                 throw new RateLimitException($"Meghaladtad a maximális jelszó változtatási kisérletek számát!. Próbáld újra {retryAfter} másodperc múlva!");
+            }
+
+            //Tágabb, csak IP-alapú limit a sok címre szórt támadás ellen
+            var (isIpLimited, ipRetryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"forgot_password_ip:{ipAddress}", 15, TimeSpan.FromHours(1));
+            if (isIpLimited)
+            {
+                _logger.LogWarning("IP szintű rate limit elérve jelszó visszaállításnál | IP: {IpAddress}", ipAddress);
+                throw new RateLimitException($"Túl sok kérés. Próbáld újra {ipRetryAfter} másodperc múlva!");
             }
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             //Biztonsági okokból ne jelezzük ha nem létezik a user
             if (user == null)
             {
-                _logger.LogInformation("Jelszó visszaállítás nem létező email-re | Email: {Email}", email);
+                _logger.LogInformation("Jelszó visszaállítás nem létező email-re | EmailRef: {EmailRef}", EmailRef(email));
                 return;
             }
             //Régi tokenek érvénytelenítése
@@ -548,7 +626,7 @@ namespace ProjectManager.API.Services.Auth
             foreach (var oldToken in oldTokens)
                 oldToken.IsUsed = true;
 
-            var token = Guid.NewGuid().ToString("N");
+            var token = SecureTokenGenerator.Generate();
             var resetToken = new PasswordResetToken
             {
                 Id = Guid.NewGuid(),
@@ -587,7 +665,7 @@ namespace ProjectManager.API.Services.Auth
                 throw new Exception("A token lejárt!");
             }
 
-            resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, BcryptWorkFactor);
             resetToken.IsUsed = true;
             await _context.SaveChangesAsync();
 

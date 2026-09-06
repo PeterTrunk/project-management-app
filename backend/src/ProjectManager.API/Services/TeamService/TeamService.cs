@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
+using ProjectManager.API.Common.Security;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
 using ProjectManager.API.Hubs;
@@ -44,7 +45,7 @@ namespace ProjectManager.API.Services.TeamService
                 throw new Exception("Projekt nem található!");
 
             // 32 karakter, kötőjel nélkül
-            var token = Guid.NewGuid().ToString("N");
+            var token = SecureTokenGenerator.Generate();
 
             var frontendUrl = _emailOptions.FrontendUrl;
 
