@@ -14,6 +14,11 @@ WORKDIR /app
 
 COPY --from=builder /app/publish .
 
+# Nem rootként futunk: egy esetleges kódfuttatási hiba így nem ad azonnal root
+# jogot a konténer névterében. Az 'app' felhasználó az aspnet image része.
+# Az 5178-as port 1024 fölött van, tehát nem-rootként is köthető.
+USER app
+
 EXPOSE 5178
 
 ENTRYPOINT ["dotnet", "ProjectManager.API.dll"]
