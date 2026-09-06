@@ -110,10 +110,7 @@ namespace ProjectManager.API.Controllers
                 if (!string.IsNullOrEmpty(refreshToken))
                     await _authService.LogoutAsync(refreshToken);
 
-                Response.Cookies.Delete("refreshToken", new CookieOptions
-                {
-                    Path = "/api/auth"
-                });
+                DeleteRefreshTokenCookie();
                 return Ok();
             }
             catch (Exception ex)
@@ -152,6 +149,10 @@ namespace ProjectManager.API.Controllers
             {
                 var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 await _authService.ChangePasswordAsync(userId, dto);
+
+                //A szerver minden refresh tokent visszavont, így a böngészőben maradt
+                //süti már használhatatlan - takarítsuk el
+                DeleteRefreshTokenCookie();
                 return Ok();
             }
             catch (Exception ex)
@@ -211,6 +212,8 @@ namespace ProjectManager.API.Controllers
                 var success = await _authService.VerifyAndEnableTotpAsync(dto.Token);
                 if (!success)
                     return BadRequest("Érvénytelen TOTP token!");
+
+                DeleteRefreshTokenCookie();
                 return Ok("2FA sikeresen aktiválva!");
             }
             catch (Exception ex)
@@ -225,12 +228,18 @@ namespace ProjectManager.API.Controllers
         [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> DisableTotp()
+        public async Task<ActionResult> DisableTotp([FromBody] DisableTotpDto dto)
         {
             try
             {
-                await _authService.DisableTotpAsync();
+                await _authService.DisableTotpAsync(dto);
+                DeleteRefreshTokenCookie();
                 return Ok("2FA kikapcsolva!");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning("Sikertelen 2FA kikapcsolás | {Message}", ex.Message);
+                return Unauthorized(ex.Message);
             }
             catch (Exception ex)
             {
@@ -353,6 +362,25 @@ namespace ProjectManager.API.Controllers
                 Domain = isProd ? ".trunkpeter.com" : null,
                 Path = "/api/auth",
                 Expires = rememberMe ? DateTime.UtcNow.AddDays(30) : null
+            });
+        }
+
+        //A törlő Set-Cookie fejlécnek pontosan ugyanazokat az attribútumokat kell
+        //hordoznia, mint a beállítónak - eltérő Domain vagy Path esetén a böngésző
+        //nem azonosítja a sütit, és az bent marad
+        private void DeleteRefreshTokenCookie()
+        {
+            var isProd = HttpContext.RequestServices
+                .GetRequiredService<IWebHostEnvironment>()
+                .IsProduction();
+
+            Response.Cookies.Delete("refreshToken", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = isProd,
+                SameSite = isProd ? SameSiteMode.Strict : SameSiteMode.Lax,
+                Domain = isProd ? ".trunkpeter.com" : null,
+                Path = "/api/auth"
             });
         }
     }

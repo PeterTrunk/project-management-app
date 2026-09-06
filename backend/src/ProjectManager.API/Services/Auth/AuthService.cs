@@ -293,7 +293,21 @@ namespace ProjectManager.API.Services.Auth
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Jelszó sikeresen megváltoztatva | UserId: {UserId}", userId);
+            //Minden meglévő munkamenet érvénytelenítése - a jelszóváltás célja pont az,
+            //hogy egy esetleges támadó hozzáférése megszűnjön
+            var revokedCount = await RevokeAllRefreshTokensAsync(userId);
+
+            _logger.LogInformation(
+                "Jelszó sikeresen megváltoztatva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}", userId, revokedCount);
+        }
+
+        //Egy felhasználó összes nem revoked refresh tokenjének revoke-olja.
+        //Jelszóváltás, jelszó-visszaállítás és 2FA módosítás után kinyirja a munkameneteket.
+        private async Task<int> RevokeAllRefreshTokensAsync(Guid userId)
+        {
+            return await _context.RefreshTokens
+                .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+                .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.IsRevoked, true));
         }
 
         public async Task<UserProfileDto> ChangeUserProfileAsync(Guid userId, UpdateProfileDto dto)
@@ -319,6 +333,15 @@ namespace ProjectManager.API.Services.Auth
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
+
+            //Aktív 2FA mellett a secret nem írható felül: különben egy eltulajdonított
+            //munkamenettel kizárható a jogos tulajdonos a saját fiókjából új secret felülírással
+            if (user.IsTotpEnabled)
+            {
+                _logger.LogWarning("2FA újrabeállítási kísérlet aktív 2FA mellett | UserId: {UserId}", userId);
+                throw new InvalidOperationException(
+                    "A kétfaktoros hitelesítés már aktív. Előbb kapcsold ki, majd állítsd be újra!");
+            }
 
             //Random 20 byte-os secret generálás
             var secretKey = KeyGeneration.GenerateRandomKey(20);
@@ -368,11 +391,17 @@ namespace ProjectManager.API.Services.Auth
             user.IsTotpEnabled = true;
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("TOTP sikeresen aktiválva | UserId: {UserId}", userId);
+            //A 2FA bekapcsolása előtt nyitott munkamenetek még második faktor nélkül
+            //jöhettek létre, ezeket is érvényteleníteni kell, különben a védelem
+            //megkerülhető marad egy régi kapcsolaton keresztül
+            var revokedCount = await RevokeAllRefreshTokensAsync(userId);
+
+            _logger.LogInformation(
+                "TOTP sikeresen aktiválva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}", userId, revokedCount);
             return true;
         }
 
-        public async Task DisableTotpAsync()
+        public async Task DisableTotpAsync(DisableTotpDto dto)
         {
             var userId = _currentUserService.UserId;
 
@@ -380,11 +409,23 @@ namespace ProjectManager.API.Services.Auth
             if (user == null)
                 throw new Exception("Felhasználó nem található!");
 
+            //Ismételt hitelesítés: egy ellopott access token önmagában ne tudja
+            //leszedni a fiókról a második faktort
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Sikertelen 2FA kikapcsolás - hibás jelszó | UserId: {UserId}", userId);
+                throw new UnauthorizedAccessException("Hibás jelszó!");
+            }
+
             user.TotpSecret = null;
             user.IsTotpEnabled = false;
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("TOTP kikapcsolva | UserId: {UserId}", userId);
+            //A 2FA szintjének csökkentése után minden korábbi munkamenet érvénytelen
+            var revokedCount = await RevokeAllRefreshTokensAsync(userId);
+
+            _logger.LogInformation(
+                "TOTP kikapcsolva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}", userId, revokedCount);
         }
 
         public async Task<AuthResponseDto> LoginWithTotpAsync(LoginWithTotpDto dto)
@@ -492,7 +533,6 @@ namespace ProjectManager.API.Services.Auth
                 _logger.LogWarning("Rate limit elérve jelszó visszaállításnál | Email: {Email}", email);
                 throw new RateLimitException($"Meghaladtad a maximális jelszó változtatási kisérletek számát!. Próbáld újra {retryAfter} másodperc múlva!");
             }
-                
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             //Biztonsági okokból ne jelezzük ha nem létezik a user
@@ -551,7 +591,13 @@ namespace ProjectManager.API.Services.Auth
             resetToken.IsUsed = true;
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Jelszó sikeresen visszaállítva | UserId: {UserId}", resetToken.UserId);
+            //A visszaállítás gyakran épp fiókátvétel utáni történhet - a támadó
+            //munkamenetét revoke-oljuk
+            var revokedCount = await RevokeAllRefreshTokensAsync(resetToken.UserId);
+
+            _logger.LogInformation(
+                "Jelszó sikeresen visszaállítva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}",
+                resetToken.UserId, revokedCount);
         }
     }
 }
