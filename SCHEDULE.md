@@ -3867,6 +3867,130 @@ egy frissen kompromittált patch verziót. Mostantól a lockfile a belépési ka
 - **Frissítési ritmus**: negyedévente `npm audit`, és ami sebezhető, azt 30 napnál régebbi
   verzióra. Soron kívül csak akkor, ha egy advisory ténylegesen érinti a futó rendszert.
 
+### SignalR újracsatlakozás: csoport-visszalépés és állapot-újraszinkronizálás
+
+**A kiinduló probléma:**
+Mi történjen azokkal az eseményekkel, amelyek a SignalR kapcsolat szakadása alatt keletkeznek?
+A kód átolvasása közben viszont kiderült, hogy az ujracsatlakozási logika csak látszólag volt helyes, valóságban nem a megfelelő csoporthoz kapcsolódott (Egy teljesen másik csoporthoz ujracsatlakozáskor => Régi csoportból nem kap üzeneteket).
+
+**Probléma:**
+A SignalR csoport-tagság a `connectionId`-hoz kötődik
+(`ProjectHub.JoinProject`: `Groups.AddToGroupAsync(Context.ConnectionId, $"project-{pid}")`).
+Automatikus újracsatlakozáskor a SignalR új connectionId-t ad, és a régi csoport-tagság
+megszűnik.
+
+A kliensen viszont a `joinProject` kizárólag a `projectStore.subscribe` handlerből hívódott,
+és ott is csak akkor, ha az aktív projekt ténylegesen változott. Az `onreconnected` mindössze
+egy toastot írt ki.
+
+Ebből az következett, hogy **minden újracsatlakozás után a kliens kimaradt a projekt
+csoportjából, és onnantól egyetlen valós idejű eseményt sem kapott**, amíg a felhasználó át nem
+váltott egy másik projektre és vissza. A "Kapcsolat helyreállt!" üzenet ilyenkor félrevezető
+volt: a kapcsolat valóban helyreállt, de a feliratkozás nem.
+
+Ez nem elméleti hiba volt: a keepalive elgépelés miatt a kliens 30 másodpercenként
+újracsatlakozott, tehát a felület gyakorlatilag folyamatosan némán állt.
+
+**Miért teljes újratöltés, és nem delta vagy replay:**
+A teljes újratöltés első ránézésre pazarlónak tűnik, de rossz viszonyítási ponthoz mérve.
+A projektváltás **ma is** ugyanezt a hat párhuzamos kérést futtatja, és a felhasználó ezt naponta
+sokszor kiváltja. Egy újracsatlakozás - a keepalive javítás óta - ennél lényegesen ritkább.
+
+A két takarékosabb alternatíva, áruk aránytalan:
+
+- **Delta sync (`?since=`)**: `UpdatedAt` kellene minden entitásra **és** törlés-nyilvántartás
+  (soft delete vagy tombstone tábla), mert a "mi változott X óta" lekérdezés nem tudja
+  visszaadni azt, ami eltűnt. Migráció a legtöbb táblán, plusz entitásonkénti merge-logika.
+- **Event log / replay**: új `ProjectEvent` tábla sorszámmal, a ~37 eseménytípus mind a ~40
+  broadcast hívási helyének duplikálása, retention job, kliensoldali replay. Ezen felül két,
+  örökre szinkronban tartandó kódút: amit broadcastolunk, és amit naplózunk.
+
+Mindkettő önálló projekt. Ha valaha szükségessé válik, a replay a jobb irány lehet, és a sorszámhoz
+újrahasznosítható a `CounterService` mintája (`ProjectCounter` + Serializable izoláció +
+exponenciális backoff), de erre már nincs elegendő idő.
+
+**Megoldás - signalRService.ts:**
+- Két életciklus hook: `onReconnected(cb)` és `onClosed(cb)`. A `HubConnection`
+  `onreconnected` / `onclose` eseménye ezeket hívja meg, ha van regisztrált callback,
+  különben marad a korábbi toast.
+- `isConnected()` getter a banner megjelenítéséhez.
+- `intentionalDisconnect` flag: kijelentkezéskor és kézi újracsatlakozáskor a `stop()` is
+  kiváltja az `onclose`-t, de ilyenkor nem szabad kapcsolatvesztést jelezni. Ez mellékesen
+  megszüntette azt a régi apró hibát is, hogy kijelentkezéskor felvillant a
+  "A kapcsolat megszakadt!" üzenet.
+
+**Megoldás - AppLayout.svelte:**
+- A `projectStore.subscribe`-ban lévő hat kérésből álló initial load kikerült egy
+  `loadProjectData(projectId)` függvénybe. Viselkedésbeli változás nincs, csak egy helyre került,
+  hogy a resync is ugyanazt futtathassa.
+- Új `resyncAfterReconnectAsync()`: visszalépés a csoportba -> `loadProjects()` ->
+  `loadProjectData()`. A `loadProjects()` azért kell, mert az initial load nem tartalmazza:
+  ha a szakadás alatt törölték a projektet vagy kikerült belőle a felhasználó, csak ez deríti ki.
+  Ilyenkor a resync `setActiveProject(null)`-lal old fel a helyzetet, hogy a felhasználó ne
+  ragadjon egy nem létező projekten.
+- `isResyncing` flag az átfedés ellen: kapcsolat-flapping esetén egy futó resync alatt érkező
+  újabb `onreconnected` nem indít második teljes újratöltést.
+- A "Kapcsolat helyreállt" üzenet a resync befejezése után jön ki, nem előtte.
+- `establishRealtimeAsync(token)`: a `connect()` + `registerSignalREvents()` + hook-bekötés
+  lépéssor egy helyen, így a kezdeti csatlakozás és a kézi újracsatlakozás nem térhet el egymástól.
+
+**Végleges kapcsolatvesztés - kézi újracsatlakozás:**
+Ha a négy automatikus próbálkozás is elfogy, a kapcsolat véglegesen zárul. A `notificationStore`
+csak szöveget kezel, gombot nem, ezért a meglévő `totp-banner` / `email-banner` mintájára egy
+`connection-banner` került be "Újracsatlakozás" gombbal. A gomb a teljes lépéssort újrafuttatja:
+`disconnect()` -> `establishRealtimeAsync()` -> `resyncAfterReconnectAsync()`.
+
+Ugyanez a banner jelenik meg akkor is, ha a **kezdeti** csatlakozás nem sikerül (pl. a backend
+éppen nem elérhető) - korábban erre csak egy toast figyelmeztetett, újrapróbálkozási lehetőség
+nélkül.
+
+**Fontos részlet a handlerekről:**
+A `connection.on(...)` handlerek a `HubConnection` példányon élnek. Automatikus
+újracsatlakozásnál a példány megmarad, tehát nem kell újraregisztrálni őket. Kézi
+újracsatlakozásnál viszont új példány épül, ezért ott a `registerSignalREvents()` is újra fut -
+ezt kezeli az `establishRealtimeAsync`.
+
+**Amit nem érintett:**
+Backend nem változott, migráció nincs, új csomag nincs. A javítás két frontend fájlt érint.
+
+**Hátravan:**
+- A `registerSignalREvents()` / `unregisterSignalREvents()` eseménylistája ma kézzel duplikált
+  (37-37 sor). Elgépelésre hajlamos, de független ettől a feladattól.
+
+### Hibaüzenetek: a technikai szöveg kivezetése a felületről
+
+**Probléma:**
+A kapcsolatvesztés tesztelése közben derült ki, hogy elérhetetlen szerver esetén a felhasználó
+a könyvtárak nyers technikai szövegét kapta:
+
+- `Failed to complete negotiation with the server: TypeError: Failed to fetch`
+  (a SignalR `start()` hibája, amikor a backend nem él)
+- `Network Error` (az axios üzenete, amikor a kérés el sem jutott a szerverig)
+
+Mindkettő az adott hívó `e.message` fallbackjén keresztül került a toastba. A hívók egységesen
+az `e.response?.data ?? e.message ?? 'fallback'` mintát használják, tehát ha nincs válasz,
+az axios belső szövege jelenik meg.
+
+**Megoldás - client.ts:**
+A response interceptorba került egy `friendlyMessageFor(error)`, amely egy helyen fordítja le
+a technikai eseteket, így az összes hívó egyszerre javult:
+
+- nincs válasz (a kérés el sem jutott a szerverig) -> "Nem sikerült elérni a szervert!..."
+- `ECONNABORTED` / `ETIMEDOUT` -> "A szerver nem válaszolt időben..."
+- 502 / 503 / 504 -> "A szerver éppen nem elérhető..."
+- `ERR_CANCELED` -> nincs üzenet, a megszakított kérés nem hiba
+
+Ezen felül: ha a válasz törzse HTML-lel kezdődik, akkor nem a mi API-nktól jött (jellemzően a
+reverse proxy hibaoldala), ezért ez sem kerülhet nyersen a felületre.
+
+A technikai részlet minden esetben megmarad a konzolban (`console.error`), csak a felhasználó
+felé cserélődik.
+
+**Megoldás - signalRService.ts:**
+A `connect()` catch ága a könyvtár üzenete helyett saját szöveget ad, az eredeti kivétel pedig
+a konzolba kerül. Ez a kézi újracsatlakozás gombnál a leggyakoribb eset: ha a szerver még nem
+él, a felhasználó most már értelmezhető visszajelzést kap.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
