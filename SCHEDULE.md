@@ -3991,6 +3991,63 @@ A `connect()` catch ága a könyvtár üzenete helyett saját szöveget ad, az e
 a konzolba kerül. Ez a kézi újracsatlakozás gombnál a leggyakoribb eset: ha a szerver még nem
 él, a felhasználó most már értelmezhető visszajelzést kap.
 
+### Tesztlefedettség 1. etap: middleware, biztonsági segédosztályok, validátorok
+
+**Probléma:**
+A `backend/tests/ProjectManager.Tests` projektben 68 teszt volt 4 fájlban, és az utolsó
+tesztcommit 257 committal ezelőtt született. Azóta 187 backend fájl változott: a teljes
+biztonsági refaktor - az IDOR project-scoping, a tipizált kivételek, a jogosultsági réteg
+fail-closed javítása - **nulla teszttel** ment ki.
+
+Ennél rosszabb volt, hogy a meglévő fedettség egy része már nem azt mérte, amit állított:
+a `CreateSprintDtoValidator` időközben `State` szabályt kapott, a `Name` felső határa pedig
+120-ról 80-ra csökkent. A teszt 121 karakterrel próbálkozott, tehát zöld volt anélkül, hogy
+a valódi határt megnézte volna, és a `State` szabályra egyáltalán nem volt teszt.
+
+**Megoldás:**
+Az etap szándékosan nem igényel infrastruktúrát: nincs benne Docker, adatbázis és hálózat,
+így a CI-ban minden pusholásnál lefut. A készlet 68-ról **554 tesztre** nőtt, a futásidő ~0,2 mp.
+
+- `GlobalExceptionHandlerMiddleware` - a hibaüzenet-szivárgás utolsó védvonala. Az `AppException`
+  leszármazottak a saját státuszkódjukkal és üzenetükkel mennek ki, minden más 500-at és
+  általános szöveget kap. Külön állítás arra, hogy az eredeti `ex.Message` és a stack trace
+  **nem jelenik meg** a válasz törzsében. Lefedve a `Response.HasStarted` -> `Abort()` ág is,
+  saját `IHttpResponseFeature`-rel (a `DefaultHttpContext` beépített feature-je mindig hamisat ad).
+- `ProjectRoles` - a jogosultsági réteg alapja. `RankOf(null)` és ismeretlen szerepkör -1-et ad,
+  az írásmód számít, és az ismeretlen rang a legalacsonyabb ismert szerepkör alatt marad.
+  Ez zárja a `-1 >= -1` típusú lyukat. Plusz: az `Owner` nincs a kiosztható szerepkörök között.
+- `Common/Exceptions` - a státuszkód-szerződés (400/403/404/409/429) rögzítése. Egy reflexiós
+  teszt elbukik, ha új `AppException` leszármazott kerül be státuszkód-teszt nélkül.
+- `EncryptionService` - AES-GCM oda-vissza, `enc:v1:` prefix, prefix nélküli (legacy) érték
+  visszafejtése, 500 titkosítás egyike sem ismétlődik (nonce), hamisított nonce/ciphertext/tag
+  és rossz kulcs elutasítása, hibás kulcshossz a konstruktorban.
+- `SecureTokenGenerator` - URL-biztos ábécé 200 futáson át, dekódolt bájthossz, egyediség.
+- Mind a **33 validátor**, határértékekkel (a korábbi 3 helyett). A `CreateSprintDtoValidator`
+  elavult tesztjei javítva: 80/81 határeset, `MinimumLength(3)`, és a hiányzó `State` szabály.
+- `ValidatorCoverageTests` - névkonvenció alapján ellenőrzi, hogy minden validátorhoz tartozik
+  tesztosztály. Egy újonnan felvett validátor így nem maradhat észrevétlenül lefedetlen.
+
+**Amit a tesztek írása kimért:**
+
+A `MoveTaskDtoValidator.ColumnId` mezője `Guid?` típusú, és `NotEmpty()` szabály van rajta.
+A FluentValidation a `default(TProperty)`-hoz hasonlít, ami `Guid?` esetén **null**, nem
+`Guid.Empty` - a csupa nullás azonosító tehát átmegy a validáción. (A `ColumnOrderDto.Id` nem
+nullozható `Guid`, ott ugyanez a szabály helyesen fog.) A gyakorlati következmény kicsi: az
+ilyen kérés nem 400-zal, hanem a szolgáltatás 404-esével áll meg. A teszt a **tényleges**
+viselkedést rögzíti, magyarázó megjegyzéssel - a javítás éles kódot érintene, ezért külön döntés.
+
+**Csomaghigiénia:**
+A `FluentValidation` eddig csak tranzitívan, az API projekten át érkezett, pedig a tesztek
+közvetlenül használják - most explicit. A middleware-teszt `HttpContext`-et épít, ezért a
+projekt `FrameworkReference`-ként deklarálja a `Microsoft.AspNetCore.App`-ot ahelyett, hogy a
+web-projekten átfolyó hivatkozásra támaszkodna.
+
+A `Microsoft.EntityFrameworkCore.Relational` "felesleges" hivatkozásnak indult, de a törlése
+MSB3277 verzióütközést hozott elő, ezért indoklással a helyén maradt: az API projekt a
+Relational 10.0.3-at az `EntityFrameworkCore.Design`-on át kapja, ami `PrivateAssets="all"`,
+tehát a teszt-projektbe nem folyik át - ott a Npgsql 10.0.0-s Relationalja jönne, a
+`ProjectManager.API.dll` viszont 10.0.3-ra hivatkozik.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
