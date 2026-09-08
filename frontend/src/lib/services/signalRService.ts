@@ -32,7 +32,17 @@ const KEEPALIVE_MS = keepaliveSeconds * 1000;
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
 
+    //Az újracsatlakozás új connectionId-t ad, amivel a szerveroldali csoport-tagság elveszne.
+    //A hívó (AppLayout) ezeken a hookokon keresztül tud visszalépni a projekt csoportjába és újraszinkronizálni az állapotot.
+    private reconnectedCallback: (() => void) | null = null;
+    private closedCallback: (() => void) | null = null;
+
+    //A szándékos bontásra (kijelentkezés, kézi újracsatlakozás) nem kell kapcsolatvesztés-jelzést adni
+    private intentionalDisconnect = false;
+
     async connect(token: string) {
+        this.intentionalDisconnect = false;
+
         const builder = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
                 //skipNegotiation: true,
@@ -49,15 +59,47 @@ class SignalRService {
         this.connection = builder.build();
 
         this.connection.onreconnecting(() => notify.warning('Kapcsolat megszakadt, újracsatlakozás...'));
-        this.connection.onreconnected(() => notify.success('Kapcsolat helyreállt!'));
-        this.connection.onclose(() => notify.error('A kapcsolat megszakadt!'));
+
+        this.connection.onreconnected(() => {
+            //A sikerjelzés a resync után jön, különben azt sugallná, hogy már minden friss
+            if (this.reconnectedCallback) {
+                this.reconnectedCallback();
+            } else {
+                notify.success('Kapcsolat helyreállt!');
+            }
+        });
+
+        this.connection.onclose(() => {
+            if (this.intentionalDisconnect) return;
+
+            if (this.closedCallback) {
+                this.closedCallback();
+            } else {
+                notify.error('A kapcsolat megszakadt!');
+            }
+        });
 
         try {
             await this.connection.start();
             console.log('SignalR connected!');
         } catch (e: any) {
-            notify.error(e.message ?? 'Nem sikerült csatlakozni a szerverhez!');
+            //A könyvtár technikai szövege ("Failed to complete negotiation with the server:
+            //TypeError: Failed to fetch") a konzolban marad, a felhasználó olvasható üzenetet kap
+            console.error('SignalR kapcsolódási hiba:', e);
+            notify.error('Nem sikerült csatlakozni a szerverhez! Ellenőrizd az internetkapcsolatod, vagy próbáld újra pár másodperc múlva.');
         }
+    }
+
+    onReconnected(callback: () => void) {
+        this.reconnectedCallback = callback;
+    }
+
+    onClosed(callback: () => void) {
+        this.closedCallback = callback;
+    }
+
+    isConnected() {
+        return this.connection?.state === signalR.HubConnectionState.Connected;
     }
 
     async joinProject(projectId: string) {
@@ -77,6 +119,7 @@ class SignalRService {
     }
 
     async disconnect() {
+        this.intentionalDisconnect = true;
         await this.connection?.stop();
         this.connection = null;
     }

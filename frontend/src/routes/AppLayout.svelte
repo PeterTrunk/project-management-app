@@ -46,7 +46,7 @@
         LayoutDashboard, Kanban, Timer, Users, ChartNoAxesColumn, 
         FolderOpen, GitBranch, Settings, LogOut, ChevronLeft, 
         ChevronRight, Plus, FileText, User, Archive, ShieldAlert,
-        X, Sun, Moon, Mail 
+        X, Sun, Moon, Mail, WifiOff
     } from 'lucide-svelte';
 
     //Ideiglenes Theme Váltó Toggle
@@ -88,11 +88,55 @@
     
     let signalRConnected = false;
 
+    //Kapcsolatvesztés banner állapota
+    let connectionLost = false;
+    let isReconnecting = false;
+    let isResyncing = false;
+
+    //A kapcsolat felépítése és az életciklus hookok bekötése egy helyen,
+    //hogy a kezdeti csatlakozás és a kézi újracsatlakozás ne térhessen el egymástól
+    async function establishRealtimeAsync(token: string) {
+        await signalRService.connect(token);
+        registerSignalREvents();
+        signalRService.onReconnected(handleReconnected);
+        signalRService.onClosed(handleConnectionClosed);
+
+        //A connect() nem dob, csak jelez - ha nem jött létre a kapcsolat,
+        //a banner adja meg az újrapróbálkozás lehetőségét
+        connectionLost = !signalRService.isConnected();
+    }
+
+    function handleReconnected() {
+        connectionLost = false;
+        //Az új connectionId miatt a csoport-tagság elveszett, 
+        //vissza kell lépni és a szakadás alatt kimaradt változásokat is pótolni kell
+        resyncAfterReconnectAsync();
+    }
+
+    function handleConnectionClosed() {
+        connectionLost = true;
+    }
+
+    async function handleManualReconnect() {
+        if (isReconnecting) return;
+        isReconnecting = true;
+
+        try {
+            await signalRService.disconnect();
+            await establishRealtimeAsync(tokenStore.get() ?? $authStore.token ?? '');
+
+            if (!signalRService.isConnected()) return;
+
+            await resyncAfterReconnectAsync();
+        } finally {
+            isReconnecting = false;
+        }
+    }
+
     authStore.subscribe(async (state) => {
         if (state.token && !signalRConnected) {
             signalRConnected = true;
-            await signalRService.connect(state.token);
-            registerSignalREvents();
+            await establishRealtimeAsync(state.token);
         }
 
         //TOTP banner dismissed állapot frissítése user váltáskor
@@ -101,7 +145,7 @@
                 `totpBannerDismissed_${state.user.userId}`
             ) === 'true';
         }
-
+        
         //Emailverify dismissed banner dismissed állapot frissítése user váltáskor
         if (state.user?.userId) {
             totpBannerDismissed = localStorage.getItem(`totpBannerDismissed_${state.user.userId}`) === 'true';
@@ -170,6 +214,7 @@
         unregisterSignalREvents();
         await signalRService.disconnect();
         signalRConnected = false;
+        connectionLost = false;
         cancelTokenRefresh();
         logout();
         await logoutAsync();
@@ -188,6 +233,72 @@
     let activeProject: ProjectResponse | null = null;
     let currentProjectId = '';
 
+    // Párhuzamos initial load - projektváltáskor és újracsatlakozás utáni resync során is ez fut
+    async function loadProjectData(projectId: string) {
+        try {
+            await Promise.all([
+                getTasksAsync(projectId, undefined, undefined, 'initial')
+                    .then(tasks => setTasks(tasks)),
+                getSprintsAsync(projectId, 'initial')
+                    .then(sprints => setSprints(sprints)),
+                getBoardsAsync(projectId, 'initial')
+                    .then(boards => {
+                        setBoards(boards);
+                        //Oszlopok kinyerése a board response-ból,
+                        //initial-load miatt már máshogy kezeljük az oszlopokat (már a getBoards adja az oszlopokat)
+                        const columns = boards.flatMap(b => b.columns ?? []);
+                        setColumns(columns);
+                    }),
+                getLabelsAsync(projectId)
+                    .then(labels => setLabels(labels)),
+                getMembersAsync(projectId)
+                    .then(members => setMembers(members)),
+                getIntegrationsAsync(projectId)
+                    .then(integrations => setIntegrations(integrations))
+            ]);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!');
+        }
+    }
+
+    //Újracsatlakozás után a szerveroldali csoport-tagság elveszett, és a szakadás
+    //alatt érkezett események is kimaradtak - ezért visszalépünk a csoportba,
+    //majd a projekt teljes állapotát újratöltjük
+    async function resyncAfterReconnectAsync() {
+        if (isResyncing) return;
+        isResyncing = true;
+
+        const projectId = currentProjectId;
+
+        try {
+            if (projectId) {
+                try {
+                    await signalRService.joinProject(projectId);
+                } catch {
+                    //Ha a hub elutasít (pl. közben kikerültünk a projektből),
+                    //a projektlista frissítése deríti ki a pontos okot
+                }
+            }
+
+            await loadProjects();
+
+            if (projectId) {
+                if (!projects.some(p => p.id === projectId)) {
+                    setActiveProject(null);
+                    currentProjectId = '';
+                    notify.warning('A projekt közben megszűnt, vagy kikerültél belőle!');
+                    return;
+                }
+
+                await loadProjectData(projectId);
+            }
+
+            notify.success('Kapcsolat helyreállt, az adatok frissültek!');
+        } finally {
+            isResyncing = false;
+        }
+    }
+
     // projectStore figyelése
     projectStore.subscribe(state => {
         projects = state.projects;
@@ -196,31 +307,11 @@
         if (state.activeProject?.id && state.activeProject.id !== currentProjectId) {
             currentProjectId = state.activeProject.id;
             activeView = 'overview';
-            
+
             signalRService.joinProject(state.activeProject.id)
                 .catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekthez csatlakozáskor!'));
 
-            // Párhuzamos initial load
-            Promise.all([
-                getTasksAsync(state.activeProject.id, undefined, undefined, 'initial')
-                    .then(tasks => setTasks(tasks)),
-                getSprintsAsync(state.activeProject.id, 'initial')
-                    .then(sprints => setSprints(sprints)),
-                getBoardsAsync(state.activeProject.id, 'initial')
-                    .then(boards => {
-                        setBoards(boards);
-                        //Oszlopok kinyerése a board response-ból, 
-                        //initial-load miatt már máshogy kezeljük az oszlopokat (már a getBoards adja az oszlopokat)
-                        const columns = boards.flatMap(b => b.columns ?? []);
-                        setColumns(columns);
-                    }),
-                getLabelsAsync(state.activeProject.id)
-                    .then(labels => setLabels(labels)),
-                getMembersAsync(state.activeProject.id)
-                    .then(members => setMembers(members)),
-                getIntegrationsAsync(state.activeProject.id)
-                    .then(integrations => setIntegrations(integrations))
-            ]).catch((e: any) => notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!'));
+            loadProjectData(state.activeProject.id);
         }
     });
 
@@ -369,6 +460,19 @@
         </nav>
 
          <!-- Bannerek -->
+        {#if connectionLost}
+            <div class="connection-banner">
+                <WifiOff size={16} />
+                <span>Megszakadt a kapcsolat a szerverrel, a valós idejű frissítések nem működnek!</span>
+                <button
+                    class="connection-banner-retry"
+                    on:click={handleManualReconnect}
+                    disabled={isReconnecting}>
+                    {isReconnecting ? 'Csatlakozás...' : 'Újracsatlakozás'}
+                </button>
+            </div>
+        {/if}
+
         {#if activeProject?.isArchived}
             <div class="archived-banner">
                 <Archive size={16} />
@@ -765,6 +869,39 @@
     
     .nav-label.hidden {
         display: none;
+    }
+
+    .connection-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: var(--accent-red-bg);
+        color: var(--accent-red);
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--accent-red);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .connection-banner-retry {
+        margin-left: 0.5rem;
+        background: transparent;
+        border: 1px solid var(--accent-red);
+        color: var(--accent-red);
+        border-radius: 4px;
+        padding: 0.1rem 0.5rem;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .connection-banner-retry:hover:not(:disabled) {
+        opacity: 0.8;
+    }
+
+    .connection-banner-retry:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .archived-banner {
