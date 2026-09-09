@@ -61,9 +61,19 @@ Figyelem: a MinIO volume a felhasználók által feltöltött fájlokat tartalma
 mentés legkiszámíthatatlanabb tartalmú része. Bármi lehet benne, amit egy felhasználó egy
 taskhoz csatolt.
 
-- Ütemezés (milyen gyakran fut): `[KITÖLTENDŐ]`
-- A 7 napos rotáció hol van beállítva: `[KITÖLTENDŐ]`
+- Ütemezés: **naponta**, a Dokploy backup ütemezője szerint
+- A 7 napos rotáció a Dokploy backup beállításánál van megadva
 - Utolsó sikeres próba-visszaállítás dátuma: `[KITÖLTENDŐ]`
+
+### A régi mentések nem évülnek el a séma változásától
+
+Kézenfekvő félelem, hogy egy régebbi mentés a migrációk miatt "használhatatlan". **Nem az:**
+az API induláskor `MigrateAsync()`-et futtat, ami a visszaállított adatbázist felviszi az
+aktuális sémaverzióra. A mentés a `__EFMigrationsHistory` táblát is tartalmazza, tehát a
+rendszer pontosan tudja, honnan kell folytatnia.
+
+A fordított irány a veszélyes: egy olyan mentés, amely **újabb**, mint a futó kód. Ilyen a
+normál üzemben nem fordul elő, csak ha valaki visszaállít egy korábbi alkalmazásverziót.
 
 > Egy mentés, amit soha nem állítottak vissza, nem mentés, hanem remény. Érdemes évente
 > legalább egyszer kipróbálni, és a dátumot ide beírni.
@@ -124,10 +134,15 @@ kit kell újra anonimizálni — és egy visszaállítás némán feltámasztana
 | Mentés megőrzése | 7 nap |
 | Seq megőrzése | **legalább 30 nap** (a Seq alapértelmezése is ennyi, de explicit beállítandó) |
 
-A retenció **a Seq saját beállítása**, nem a Dokployé és nem a `docker-compose.prod.yml`-é:
-a Seq webes felületén, a *Settings -> Retention* alatt állítható. Az alapértelmezés jó, de
-explicitté kell tenni, mert egy alapértelmezés csendben megváltozhat egy image-frissítéssel.
-Beállított érték: `[KITÖLTENDŐ]`.
+A retenció **a Seq saját beállítása**, nem a Dokployé és nem a `docker-compose.prod.yml`-é.
+A Seq webes felületén: **Data -> Storage -> Retention Policies -> Add Policy**. (Nem a
+*Settings* alatt van, ahogy több forrás állítja.)
+
+Az alapértelmezés valóban 30 nap, de explicitté kell tenni, mert egy alapértelmezés csendben
+megváltozhat egy image-frissítéssel.
+
+- Lokális példány: **beállítva, 30 nap**
+- Éles példány: `[KITÖLTENDŐ - a PR-rel együtt beállítandó]`
 
 ### A Seq-et NE vedd bele a mentésbe
 
@@ -197,19 +212,25 @@ is jogszabályi kötelezettség.
 A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pillanatában
 **igaznak kell lenniük**. Ez a lista gyűjti össze, mi van még nyitva.
 
-- [ ] **A `[KITÖLTENDŐ]` helyőrzők kitöltve** a tájékoztatóban és a feltételekben: adatkezelő
-      neve, levelezési címe, kapcsolattartási e-mail cím, tárhelyszolgáltató neve és címe.
-      Keresés: `grep -rn "KITÖLTENDŐ" frontend/src`
-- [ ] **A NAIH elérhetőségei ellenőrizve** a naih.hu-n (emlékezetből kerültek be)
-- [ ] **A Backblaze adatfeldolgozói szerződése (DPA) elfogadva.** A tájékoztató 4. pontja
-      **tényként állítja**, hogy érvényben van. Néhány kattintás a Backblaze fiókban, de amíg
-      nincs meg, az állítás valótlan
-- [ ] **A Seq megőrzési ideje beállítva és rögzítve** (*Settings -> Retention*), meghaladva a
-      mentésekét. A beállított érték beírva ebbe a dokumentumba
-- [ ] **A mentés ütemezése és a 7 napos rotáció helye rögzítve** az 1. fejezetben
+- [ ] **A négy `VITE_LEGAL_*` környezeti változó beállítva az ÉLES környezetben**: adatkezelő
+      neve, levelezési címe, kapcsolattartási e-mail címe, tárhelyszolgáltató neve és címe.
+      Ha üresen maradnak, a dokumentumokban feltűnő `[KITÖLTENDŐ: ...]` helyőrző látszik.
+      A változók leírása a `.env.example`-ben
+- [x] ~~**A NAIH elérhetőségei ellenőrizve.**~~ Egyeznek a naih.hu-val: 1055 Budapest,
+      Falk Miksa utca 9-11.; postacím 1363 Budapest, Pf.: 9.; ugyfelszolgalat@naih.hu
+- [x] ~~**A Backblaze adatfeldolgozói szerződése (DPA).**~~ Nincs teendő: a Backblaze a DPA-t
+      kifejezetten **beépíti a szerződési feltételeibe**, amiket a fiók létrehozásakor
+      elfogadtunk. Külön aláírni nem kell; az EGT-re vonatkozó szöveg a
+      `backblaze.com/company/policy/dpa-for-eea-eu-residents` címen olvasható
+- [ ] **A Seq megőrzési ideje beállítva az ÉLES példányon** (*Data → Storage → Retention
+      Policies → Add Policy*), meghaladva a mentésekét. Lokálisan már beállítva, 30 nap
+- [x] ~~**A mentés ütemezése rögzítve.**~~ Napi mentés a Dokploy ütemezőjével, 7 napos rotációval
 - [x] ~~**Az activity-leírások sablonosítása kész.**~~ Elkészült: a leírások sablont tárolnak,
       a neveket a kiolvasás helyettesíti be, így az anonimizálás magától érvényesül
-- [ ] **Próba-visszaállítás elvégezve**, a 2. fejezet ellenőrzőlistájával együtt
+- [ ] **Próba-visszaállítás elvégezve**, a 2. fejezet ellenőrzőlistájával együtt. Az utolsó a
+      kezdeti beállításkor történt; azóta sok migráció jött, ezért érdemes megismételni -
+      nem azért, mert a régi mentés érvénytelen lenne (a migráció felviszi az aktuális
+      sémára), hanem mert egy soha nem gyakorolt eljárás nem eljárás
 
 > A dokumentumokat jogász nem nézte át. Valódi felhasználókkal induló szolgáltatásnál ez megéri.
 > A szakdolgozatban ezt a fenntartást is érdemes jelezni.

@@ -1,5 +1,6 @@
 <script lang="ts">
     import LegalDocument from '../lib/components/LegalDocument.svelte';
+    import { LEGAL_CONTROLLER_NAME, LEGAL_CONTACT_EMAIL, isPlaceholder } from '../lib/legal';
 </script>
 
 <LegalDocument
@@ -15,8 +16,10 @@
     </p>
 
     <p>
-        A szolgáltató: <span class="todo">[KITÖLTENDŐ: szolgáltató neve]</span><br />
-        Kapcsolattartási e-mail cím: <span class="todo">[KITÖLTENDŐ: e-mail cím]</span>
+        A szolgáltató:
+        <span class:todo={isPlaceholder(LEGAL_CONTROLLER_NAME)}>{LEGAL_CONTROLLER_NAME}</span><br />
+        Kapcsolattartási e-mail cím:
+        <span class:todo={isPlaceholder(LEGAL_CONTACT_EMAIL)}>{LEGAL_CONTACT_EMAIL}</span>
     </p>
 
     <p>

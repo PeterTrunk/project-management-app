@@ -4518,6 +4518,52 @@ viselkedést rögzítette, mert éles kódot nem akartunk tesztcommitban módos�
 `Guid`-on lévő `NotEmpty` - a `ColumnOrderDto.Id` nem nullozható, ott a szabály önmagában is
 helyesen fog.
 
+### Az adatkezelő adatai környezeti változóba, a verzió viszont marad a kódban
+
+**Probléma:**
+A jogi dokumentumok az adatkezelő nevét, címét és e-mail címét jelenítik meg. Ezek beégetve
+azt jelentenék, hogy a repóba - és visszamenőleg a git történetbe - bekerül egy magánszemély
+neve és lakcíme. Egy szakdolgozathoz tartozó repó könnyen nyilvánossá válik, a történetből
+pedig utólag nem törölhető.
+
+**Megoldás:**
+Négy `VITE_LEGAL_*` környezeti változó, a `.env.example`-ben dokumentálva. A helyőrző maradt a
+**tartalék értéknek**: ha egy változó üres, a dokumentumban továbbra is a feltűnő
+`[KITÖLTENDŐ: ...]` látszik. Egy láthatóan hiányos dokumentum jobb, mint egy csendben üres mező.
+
+Fontos rögzíteni, hogy ezek **nem titkok**: a `VITE_*` változók build időben beépülnek a
+bundle-be, és az adatkezelő azonosíthatósága jogszabályi követelmény (13. cikk) - a közzétett
+oldalon látszaniuk KELL. A cél kizárólag a repó tisztán tartása.
+
+**Ami NEM került környezeti változóba - és miért:**
+Felmerült, hogy akkor a dokumentumverzió (`LEGAL_VERSION`, illetve a backend oldali
+`LegalDocuments.CurrentVersion`) is mehetne env-be, a két konstans duplikációját megszüntetve.
+Ez **elvi hiba** lenne, mert a két adat kategóriája különbözik:
+
+- az azonosító adatok **telepítés-specifikusak** (ki üzemelteti ezt a példányt), ezért helyes,
+  hogy példányonként eltérnek;
+- a verzió **tartalom-specifikus**: azt mondja meg, melyik SZÖVEGET fogadta el a felhasználó -
+  a szöveg pedig a repóban van.
+
+Három következmény szólt ellene. A veszélyes irány nem a verzióemelés (azt a startup seed
+kezelné), hanem a fordítottja: **a szöveg átírása a verzió emelése nélkül** - ekkor a változás
+láthatatlan marad, és senkit nem kérdezünk újra. Ma a verzió a dokumentumok mellett él, tehát
+a szerkesztő szeme elé kerül. Emellett a környezetek elcsúszhatnának (ugyanaz a kód, más
+verzió), és elveszne a git-alapú audit nyom, ami miatt a `TermsVersion` tábla egyáltalán készült.
+
+**A valódi aggodalomra viszont volt teendő.** A backend és a frontend verziója eddig kézi
+egyeztetésen múlt, és az elcsúszás következménye csúnya: a kliens a saját verzióját küldi, a
+szerver csak a hatályosat fogadja el, tehát **minden regisztráció elbukna**. Egysoros
+figyelmetlenségből teljes regisztrációs leállás.
+
+Ezért új `LegalVersionTests`: a teszt beolvassa a frontend `legal.ts`-ét (a fájl útvonalát
+`[CallerFilePath]` adja, ami fordításkor oldódik fel, tehát a CI checkout-jában is helyes), és
+összeveti a backend konstansával. Emellett ellenőrzi, hogy a dátum alapú verzió és a
+`CurrentVersionEffectiveFrom` ugyanazt a napot jelenti, és hogy az utóbbi UTC.
+
+A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két teszt bukik el**.
+Így az eltérés fordításkor derül ki, nem élesben.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

@@ -1,5 +1,12 @@
 <script lang="ts">
     import LegalDocument from '../lib/components/LegalDocument.svelte';
+    import {
+        LEGAL_CONTROLLER_NAME,
+        LEGAL_CONTROLLER_ADDRESS,
+        LEGAL_CONTACT_EMAIL,
+        LEGAL_HOSTING_PROVIDER,
+        isPlaceholder
+    } from '../lib/legal';
 </script>
 
 <LegalDocument
@@ -9,9 +16,12 @@
     <h2>1. Az adatkezelő</h2>
 
     <p>
-        Az adatkezelő neve: <span class="todo">[KITÖLTENDŐ: adatkezelő neve]</span><br />
-        Levelezési cím: <span class="todo">[KITÖLTENDŐ: cím]</span><br />
-        Kapcsolattartási e-mail cím: <span class="todo">[KITÖLTENDŐ: e-mail cím]</span>
+        Az adatkezelő neve:
+        <span class:todo={isPlaceholder(LEGAL_CONTROLLER_NAME)}>{LEGAL_CONTROLLER_NAME}</span><br />
+        Levelezési cím:
+        <span class:todo={isPlaceholder(LEGAL_CONTROLLER_ADDRESS)}>{LEGAL_CONTROLLER_ADDRESS}</span><br />
+        Kapcsolattartási e-mail cím:
+        <span class:todo={isPlaceholder(LEGAL_CONTACT_EMAIL)}>{LEGAL_CONTACT_EMAIL}</span>
     </p>
 
     <p>
@@ -167,7 +177,9 @@
         </thead>
         <tbody>
             <tr>
-                <td><span class="todo">[KITÖLTENDŐ: tárhelyszolgáltató neve és címe]</span></td>
+                <td>
+                    <span class:todo={isPlaceholder(LEGAL_HOSTING_PROVIDER)}>{LEGAL_HOSTING_PROVIDER}</span>
+                </td>
                 <td>A szolgáltatás és az adatbázis üzemeltetése</td>
                 <td>Németország</td>
             </tr>
