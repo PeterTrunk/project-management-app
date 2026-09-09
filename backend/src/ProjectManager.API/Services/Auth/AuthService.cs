@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OtpNet;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Common.Security;
@@ -379,6 +380,117 @@ namespace ProjectManager.API.Services.Auth
 
             _logger.LogInformation(
                 "Jelszó sikeresen megváltoztatva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}", userId, revokedCount);
+        }
+        
+        public async Task DeleteAccountAsync(DeleteAccountDto dto)
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new NotFoundException("Felhasználó nem található!");
+
+            //Ismételt hitelesítés: egy ellopott access token önmagában ne tudjon fiókot törölni
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Sikertelen fióktörlés - hibás jelszó | UserId: {UserId}", userId);
+                throw new ForbiddenException("Hibás jelszó!");
+            }
+
+            //Ha a fiókon él a második faktor, a törlés sem kerülheti meg
+            if (user.IsTotpEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(dto.TotpToken))
+                    throw new ValidationException("A fiók törléséhez add meg a kétfaktoros kódot is!");
+
+                if (string.IsNullOrEmpty(user.TotpSecret))
+                    throw new ValidationException("TOTP nincs beállítva!");
+
+                var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
+                if (!totp.VerifyTotp(dto.TotpToken, out _, VerificationWindow.RfcSpecifiedNetworkDelay))
+                {
+                    _logger.LogWarning("Sikertelen fióktörlés - érvénytelen TOTP | UserId: {UserId}", userId);
+                    throw new ForbiddenException("Érvénytelen kétfaktoros kód!");
+                }
+            }
+
+            //Jelenleg nincs tulajdonos jogosultság átadás / felhatalmazás, és minden projektnek pontosan egy Ownere van.
+            //Ha van projektje akkor megtagadjuk a törlést, elöbb törölje önszántából a projektjeit.
+            var ownedProjects = await _context.Projects
+                .Where(p => p.OwnerId == userId)
+                .Select(p => p.Name)
+                .OrderBy(name => name)
+                .ToListAsync();
+
+            if (ownedProjects.Count > 0)
+            {
+                throw new ConflictException(
+                    "A fiók törlése előtt töröld az általad tulajdonolt projekteket: " +
+                    string.Join(", ", ownedProjects));
+            }
+
+            //A régi nevet az activity-leírásokhoz még használnunk kell, ezért az átírás ELŐTT mentjük
+            var oldDisplayName = user.DisplayName;
+
+            //Egy tranzakció: félbeszakadva nem maradhat félig anonimizált fiók
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            user.Email = UserAnonymization.EmailFor(user.Id);
+            user.DisplayName = UserAnonymization.DisplayName;
+            //Friss véletlen hash: az üres érték bejelentkezési ágakon okozhatna meglepetést
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+                SecureTokenGenerator.Generate(), BcryptWorkFactor);
+            user.TotpSecret = null;
+            user.IsTotpEnabled = false;
+            user.EmailVerificationToken = null;
+            user.IsEmailVerified = false;
+            user.IsActive = false;
+            user.DeletedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            //Valódi törlés, az felhasználóhoz kötődő elemeknek nincs értelme törlés után.
+            var refreshDeleted = await _context.RefreshTokens
+                .Where(rt => rt.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            var resetDeleted = await _context.PasswordResetTokens
+                .Where(t => t.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            var activitiesUpdated = await ScrubDisplayNameFromActivitiesAsync(userId, oldDisplayName);
+
+            await transaction.CommitAsync();
+            
+            _logger.LogInformation(
+                "UserErasure | UserId: {UserId} | ErasedAt: {ErasedAt} | Törölt refresh tokenek: {RefreshCount} | "
+                + "Törölt jelszó-tokenek: {ResetCount} | Átírt activity sorok: {ActivityCount}",
+                userId, user.DeletedAt, refreshDeleted, resetDeleted, activitiesUpdated);
+        }
+
+        /// <summary>
+        /// A régi DisplayName-et lecseréli az activity-leírásokban.
+        /// Sajnos ez nem a legjobb védelem mivel csak a jelenlegi Usernevet nézi, ha régebben lett felvéve amikor
+        /// a Usernek más neve volt akkor az bentmarad.
+        /// </summary>
+        private async Task<int> ScrubDisplayNameFromActivitiesAsync(Guid userId, string oldDisplayName)
+        {
+            if (string.IsNullOrWhiteSpace(oldDisplayName))
+                return 0;
+
+            var projectIds = await _context.ProjectMembers
+                .Where(pm => pm.UserId == userId)
+                .Select(pm => pm.ProjectId)
+                .ToListAsync();
+
+            if (projectIds.Count == 0)
+                return 0;
+
+            return await _context.Activities
+                .Where(a => projectIds.Contains(a.ProjectId) && a.Description.Contains(oldDisplayName))
+                .ExecuteUpdateAsync(s => s.SetProperty(
+                    a => a.Description,
+                    a => a.Description.Replace(oldDisplayName, UserAnonymization.DisplayName)));
         }
 
         //Egy felhasználó összes nem revoked refresh tokenjének revoke-olja.

@@ -4273,6 +4273,86 @@ A megmaradó valós eset egy soha meg nem erősített fiók, amelynél a token �
 megerősítő linkjét, anélkül hogy bármi jelezné neki. A helyes megoldás egy lejárati mező és
 egy "kérek új linket" folyamat - az viszont funkció, nem takarítás, ezért külön döntés.
 
+### Jogi megfelelés 5. etap: fióktörlés anonimizálással
+
+**Probléma:**
+A GDPR 17. cikke szerinti törlési jogot nem lehetett gyakorolni: a `DeleteAccount` keresés
+nulla találatot adott, egy törlési kérést csak kézi SQL-lel lehetett volna teljesíteni, 30 napos
+határidővel. Az 1. etapban közzétett tájékoztató ráadásul **konkrétan leírja**, mi történik
+törléskor - enélkül olyat állítottunk volna, ami nem működik.
+
+**Megoldás - anonimizálás, nem sortörlés:**
+A `UserId` sok táblában idegen kulcs, és más felhasználók projekt-előzményeit nem írhatjuk át:
+azok a projekt többi tagjának munkájához is hozzátartoznak. A GDPR (26) preambulumbekezdése
+szerint az anonim adat kikerül a rendelet hatálya alól, feltéve hogy az anonimizálás
+**visszafordíthatatlan**.
+
+| Mező | Új érték |
+|---|---|
+| `Email` | `deleted-{Id}@invalid.local` - az `.invalid` fenntartott TLD (RFC 2606), sosem kézbesíthető; az `Id` őrzi az egyedi indexet, hogy a második törlés se ütközzön |
+| `DisplayName` | `<Törölt felhasználó>` |
+| `PasswordHash` | friss véletlen BCrypt hash |
+| `TotpSecret`, `EmailVerificationToken` | `null` |
+| `IsTotpEnabled`, `IsEmailVerified`, `IsActive` | `false` |
+| új `DeletedAt` | időbélyeg |
+
+A szögletes zárójel a névben szándékos: a `DisplayName` validátor tiltja a `<` és `>`
+karaktereket (XSS elleni mélységi védelem), ezért ezt a nevet **élő felhasználó nem tudja
+felvenni** - senki nem adhatja ki magát törölt fióknak. Ellenőrizve, hogy a projektben
+**nincs `{@html}` használat**, tehát a név mindenhol escape-elve jelenik meg.
+
+**Valódi törlés:** a `RefreshToken` és a `PasswordResetToken` sorok - ezeknek nincs értelmük
+anonim fiók mellett. A `UserTermsAcceptance` viszont **marad**: az elfogadás jogi tény, és
+anonimizált felhasználóra mutatva már nem személyes adat.
+
+**Megoldás - a tulajdonolt projektek:**
+Nincs tulajdonos-átadás, és minden projektnek pontosan egy Ownere van (a szerep csak
+létrehozáskor kerül kiosztásra, a `ProjectRoles.ValidRoles` nem tartalmazza). Ha a felhasználó
+bármelyik projekt tulajdonosa, a törlés gazdátlan projekteket hagyna maga után, amikhez a többi
+tag hozzáférése bizonytalanná válna. Ezért `409 Conflict`, az érintett projektek nevével -
+a felhasználónak előbb a meglévő projekt-törléssel kell rendeznie őket (az a MinIO-fájlokat is
+elviszi). Ez egyben egy hasznos gondolkodási szünet.
+
+**Megoldás - az activity-leírások:**
+Ez a kellemetlen rész. A `DisplayName` 40 helyen, 10 szolgáltatásban be van égetve a
+`Description` szabad szövegébe. Az `ActorName` rendben van, mert join-nal képződik és magától
+követi az anonimizálást - **csak a `Description` a probléma**.
+
+Az `ActorId` szerinti szűkítés **nem elég**: a név olyan sorokban is szerepel, ahol a
+felhasználó nem a cselekvő, hanem az elszenvedő ("X eltávolította Y-t a projektből"). Ezért a
+hatókör azok a projektek, ahol a felhasználó tag volt, és a csere `ExecuteUpdateAsync`-kel,
+egyetlen `UPDATE`-ben fut.
+
+**Vállalt korlát:** ez szubsztring-csere, tehát egy rövid név más szöveg belsejébe is
+beleeshet. A `DisplayName` legalább 3 karakter, és a minta `{név} ige` alakú, ezért a
+gyakorlatban működik - a végleges megoldás a leírások sablonosítása lenne, ami külön feladat.
+
+**Megoldás - hitelesítés és tranzakció:**
+A végpont a jelenlegi jelszót kéri, és ha a fiókon él a második faktor, a TOTP kódot is - egy
+ellopott access token önmagában ne tudjon fiókot törölni. Ez a `totp/disable` mintáját követi.
+Az anonimizálás, a token-törlés és az activity-csere **egy tranzakcióban** fut: félbeszakadva
+nem maradhat félig anonimizált fiók.
+
+A művelet strukturált `UserErasure` naplóbejegyzést ír. Ez a 6. etap visszaállítási eljárásának
+alapja: egy régebbi mentésből visszatérne a törölt felhasználó adata, ezért visszatöltés után
+az itt rögzített törléseket újra kell alkalmazni - és ezért kell a napló megőrzési idejének
+meghaladnia a mentésekét.
+
+**Eltérés a tervtől - `POST` és nem `DELETE`:**
+A terv `DELETE /api/auth/me`-t írt, de a végpont `POST /api/auth/me/delete` lett. Két ok: a
+kódbázis már így oldja meg az ismételt hitelesítést igénylő műveleteket (`totp/disable`,
+`changepassword`), és a `DELETE` metódus törzsét egyes köztes rétegek eldobják - ami itt némán
+elrontaná a jelszó-ellenőrzést.
+
+**Felület:** külön nézet a felhasználói beállításokban, piros figyelmeztető dobozzal, ami
+kimondja, hogy a művelet végleges. A megerősítéshez a jelszó és a TOTP kód mellett be kell
+gépelni a **TÖRLÉS** szót: a jelszó begyakorlott mozdulat lehet, egy kiírandó szó nem. Siker
+után a meglévő `sessionInvalidated` eseményen keresztül zárul a munkamenet.
+
+**Tesztek:** új `DeleteAccountDtoValidatorTests`, és a `ValidatorCoverageTests` várt
+validátorszáma 33-ról 34-re nőtt - a lefedettségi háló pontosan úgy működött, ahogy kellett:
+az új validátor teszt nélkül elbuktatta volna a készletet. Összesen 576 teszt.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

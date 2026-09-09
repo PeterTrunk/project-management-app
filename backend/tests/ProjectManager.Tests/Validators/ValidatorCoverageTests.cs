@@ -38,7 +38,7 @@ namespace ProjectManager.Tests.Validators
         [Fact]
         public void ValidatorCount_MatchesTheKnownSet()
         {
-            Assert.Equal(33, DeclaredValidators().Count());
+            Assert.Equal(34, DeclaredValidators().Count());
         }
     }
 }
