@@ -4478,6 +4478,46 @@ ketté a hosszabbat; és a kiemelés továbbra is **`{@html}` nélkül** működ
 bontással - a Svelte interpolációja escape-el, ami a `<Törölt felhasználó>` név miatt sem
 mindegy.
 
+### Jogi megfelelés 8. etap: megerősítő token lejárata és egy validátor-lyuk
+
+Két apró, korábbi etapokban felderített hiányosság lezárása.
+
+**Probléma 1 - a megerősítő token sosem járt le.**
+A 4. etap (token-takarítás) során derült ki, hogy a `User.EmailVerificationToken` egy sima
+sztring a felhasználó során, lejárat nélkül. A `VerifyEmailAsync` nullázza megerősítéskor,
+tehát megerősített fióknál nincs mit takarítani - de egy **soha meg nem erősített** fióknál a
+token örökre él. Ez egy álló hitelesítő adat az adatbázisban, amit a takarító job sem tudott
+kezelni, mert nem volt mihez mérnie.
+
+**Megoldás:** új `User.EmailVerificationTokenExpiresAt` mező migrációval, **1 órás**
+élettartammal - ugyanannyi, mint a jelszó-visszaállító tokené, tehát a két hitelesítési út
+következetes. A `RegisterAsync` és a `ResendVerificationEmailAsync` tölti ki, a
+`VerifyEmailAsync` ellenőrzi, a `TokenCleanupJob` pedig a lejárt tokeneket nullázza.
+
+A nullázás senkit nem zár ki: az "új link kérése" út már korábban is megvolt
+(`ResendVerificationEmailAsync`), csak eddig nem volt mihez képest újat kérni.
+
+Két döntés, ami nem magától értetődő:
+
+- **A null lejárat NEM számít lejártnak.** A mező bevezetése előtt kiküldött linkek így nem
+  törnek el, és a takarítás sem nyúl hozzájuk. A C# nullozható összehasonlítása amúgy is
+  hamisat ad ilyenkor, de ezt szándékként rögzíteni kell, különben mulasztásnak látszik.
+- **A lejárt esetet megkülönböztetjük az érvénytelentől.** A token nagy entrópiájú titok: aki
+  birtokolja, az a levélből kapta, tehát nincs mit kiszivárogtatni. Cserébe a felhasználó
+  használható üzenetet kap ("A megerősítő link lejárt. Jelentkezz be, és kérj új linket!")
+  a "valami nem jó" helyett.
+
+**Probléma 2 - a `MoveTaskDtoValidator.ColumnId`.**
+Az 1. etapban egy teszt kimutatta, hogy a `NotEmpty` a `default(TProperty)`-hoz hasonlít, ami
+`Guid?` esetén **null**, nem `Guid.Empty`. A csupa nullás azonosító tehát átment a validáción,
+és csak a szolgáltatás 404-ese állította meg - 400 helyett. Akkor a teszt a tényleges
+viselkedést rögzítette, mert éles kódot nem akartunk tesztcommitban módosítani.
+
+**Megoldás:** egy `.NotEqual(Guid.Empty)` szabály a `NotEmpty` mellé, és a teszt visszaírása
+"elutasítja" állításra. Ellenőrizve, hogy a kódbázisban ez volt az **egyetlen** nullozható
+`Guid`-on lévő `NotEmpty` - a `ColumnOrderDto.Id` nem nullozható, ott a szabály önmagában is
+helyesen fog.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

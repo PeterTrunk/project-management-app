@@ -34,6 +34,10 @@ namespace ProjectManager.API.Services.Auth
         //A Verify a hash-ből olvassa ki a faktort, ezért a korábban mentett jelszavak továbbra is érvényesek maradnak.
         private const int BcryptWorkFactor = 12;
 
+        //Ugyanannyi, mint a jelszó-visszaállító tokené: elég idő a levél megnyitására, 
+        //de a token nem marad korlátlanul érvényes. Lejárat után új link kérhető.
+        private static readonly TimeSpan EmailVerificationTokenLifetime = TimeSpan.FromHours(1);
+
         //A nem létező email ágán is le kell futnia egy BCrypt ellenőrzésnek,
         //különben a válaszidő elárulja, létezik-e a fiók. Egyszer számoljuk ki, induláskor.
         private static readonly string DummyPasswordHash =
@@ -246,6 +250,7 @@ namespace ProjectManager.API.Services.Auth
 
             var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
+            user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.Add(EmailVerificationTokenLifetime);
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
@@ -443,6 +448,7 @@ namespace ProjectManager.API.Services.Auth
             user.TotpSecret = null;
             user.IsTotpEnabled = false;
             user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiresAt = null;
             user.IsEmailVerified = false;
             user.IsActive = false;
             user.DeletedAt = DateTime.UtcNow;
@@ -719,8 +725,22 @@ namespace ProjectManager.API.Services.Auth
             if (user == null)
                 throw new ValidationException("Érvénytelen vagy lejárt token!");
 
+            //A lejárt esetet szándékosan megkülönböztetjük: a token nagy entrópiájú titok,
+            //aki birtokolja, az a levélből kapta, így nincs mit kiszivárogtatni. 
+            //Cserébe a felhasználó megtudja, mit tegyen a "valami nem jó" helyett.
+            //
+            //A null lejárat NEM számít lejártnak: a mező bevezetése előtt kiküldött linkek így nem törnek el.
+            //Ezekből a takarítás sem csinál semmit, mert nincs mihez mérnie.
+            if (user.EmailVerificationTokenExpiresAt < DateTime.UtcNow)
+            {
+                _logger.LogInformation("Lejárt megerősítő token használata | UserId: {UserId}", user.Id);
+                throw new ValidationException(
+                    "A megerősítő link lejárt. Jelentkezz be, és kérj új linket!");
+            }
+
             user.IsEmailVerified = true;
             user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiresAt = null;
             await _context.SaveChangesAsync();
         }
 
@@ -745,6 +765,7 @@ namespace ProjectManager.API.Services.Auth
 
             var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
+            user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.Add(EmailVerificationTokenLifetime);
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);

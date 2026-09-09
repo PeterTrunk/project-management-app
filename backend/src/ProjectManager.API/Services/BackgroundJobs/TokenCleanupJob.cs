@@ -85,12 +85,26 @@ namespace ProjectManager.API.Services.BackgroundJobs
                 .Where(p => p.Confirmed && p.CreatedAt < uploadLogCutoff)
                 .ExecuteDeleteAsync(cancellationToken);
 
-            if (refreshDeleted + resetDeleted + uploadLogsDeleted == 0)
+            //A lejárt megerősítő token álló hitelesítő adat egy soha meg nem erősített fióknál.
+            //A nullázás nem zár ki senkit: új link a bejelentkezés utáni sávból kérhető.
+            //A null lejáratú (a mező bevezetése előtti) sorokhoz nem nyúlunk - azokat a
+            //VerifyEmail sem tekinti lejártnak.
+            var verificationTokensCleared = await context.Users
+                .Where(u => u.EmailVerificationToken != null
+                            && u.EmailVerificationTokenExpiresAt != null
+                            && u.EmailVerificationTokenExpiresAt < now)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.EmailVerificationToken, (string?)null)
+                    .SetProperty(u => u.EmailVerificationTokenExpiresAt, (DateTime?)null),
+                    cancellationToken);
+
+            if (refreshDeleted + resetDeleted + uploadLogsDeleted + verificationTokensCleared == 0)
                 return;
 
             _logger.LogInformation(
-                "Token cleanup | RefreshToken: {RefreshCount} | PasswordResetToken: {ResetCount} | PresignedUrlLog: {UploadLogCount}",
-                refreshDeleted, resetDeleted, uploadLogsDeleted);
+                "Token cleanup | RefreshToken: {RefreshCount} | PasswordResetToken: {ResetCount} | "
+                + "PresignedUrlLog: {UploadLogCount} | Megerősítő token: {VerificationCount}",
+                refreshDeleted, resetDeleted, uploadLogsDeleted, verificationTokensCleared);
         }
     }
 }

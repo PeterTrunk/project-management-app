@@ -19,16 +19,16 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.ColumnId);
         }
 
-        //A ColumnId típusa Guid?, ezért a NotEmpty a default(Guid?)-hoz, vagyis a nullhoz
-        //hasonlít - a csupa nullás Guid átmegy rajta. (A ColumnOrderDto.Id nem nullozható
-        //Guid, ott ugyanez a szabály helyesen fogja meg az üres azonosítót.)
-        //Következmény: az ilyen kérés nem 400-zal, hanem a szolgáltatás 404-esével áll meg.
+        //A ColumnId típusa Guid?, ezért a NotEmpty a default(Guid?)-hoz, vagyis a NULLhoz
+        //hasonlít - a csupa nullás Guid magától átmenne rajta. Ezt egy külön NotEqual szabály
+        //zárja ki, különben az ilyen kérés nem 400-zal, hanem a szolgáltatás 404-esével állna meg.
+        //(A ColumnOrderDto.Id nem nullozható Guid, ott a NotEmpty önmagában is helyesen fog.)
         [Fact]
-        public void ColumnId_EmptyGuid_PassesValidation()
+        public void ColumnId_EmptyGuid_ShouldHaveError()
         {
             var dto = Valid();
             dto.ColumnId = Guid.Empty;
-            _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.ColumnId);
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.ColumnId);
         }
 
         [Fact]

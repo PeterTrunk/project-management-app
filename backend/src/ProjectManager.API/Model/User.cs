@@ -13,6 +13,7 @@ namespace ProjectManager.API.Model
         public bool IsTotpEnabled { get; set; } = false;
         public bool IsEmailVerified { get; set; } = false;
         public string? EmailVerificationToken { get; set; }
+        public DateTime? EmailVerificationTokenExpiresAt { get; set; }
         public DateTime? DeletedAt { get; set; }
 
         // Egy usernek sok UserRole-ja lehet
