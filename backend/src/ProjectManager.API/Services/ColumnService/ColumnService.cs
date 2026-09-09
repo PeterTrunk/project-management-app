@@ -83,7 +83,7 @@ namespace ProjectManager.API.Services.ColumnService
                     "Column",
                     column.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} létrehozta a {column.Name} oszlopot"
+                    $"{{actor}} létrehozta a {column.Name} oszlopot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -151,7 +151,7 @@ namespace ProjectManager.API.Services.ColumnService
                     "Column",
                     column.Id,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölte a {column.Name} oszlopot"
+                    $"{{actor}} törölte a {column.Name} oszlopot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -377,7 +377,7 @@ namespace ProjectManager.API.Services.ColumnService
                     "Column",
                     column.Id,
                     "Updated",
-                    $"{_currentUserService.DisplayName} módosította a {column.Name} oszlopot"
+                    $"{{actor}} módosította a {column.Name} oszlopot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

@@ -104,7 +104,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} hozzáadta a {integration.Provider} integrációt: {integration.RepoFullName}"
+                    $"{{actor}} hozzáadta a {integration.Provider} integrációt: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -150,7 +150,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölte a {integration.Provider} integrációt: {integration.RepoFullName}"
+                    $"{{actor}} törölte a {integration.Provider} integrációt: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -196,7 +196,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     integration.IsEnabled ? "Enabled" : "Disabled",
-                    $"{_currentUserService.DisplayName} {(integration.IsEnabled ? "engedélyezte" : "letiltotta")} a {integration.Provider} integrációt: {integration.RepoFullName}"
+                    $"{{actor}} {(integration.IsEnabled ? "engedélyezte" : "letiltotta")} a {integration.Provider} integrációt: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -260,7 +260,7 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     "TokenRegenerated",
-                    $"{_currentUserService.DisplayName} regenerálta a webhook tokent: {integration.RepoFullName}"
+                    $"{{actor}} regenerálta a webhook tokent: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

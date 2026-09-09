@@ -84,7 +84,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     attachment.TaskId.HasValue ? "Task" : "Project",
                     attachment.TaskId ?? attachment.ProjectId,
                     "AttachmentDeleted",
-                    $"{_currentUserService.DisplayName} törölte a {attachment.FileName} fájlt"
+                    $"{{actor}} törölte a {attachment.FileName} fájlt"
                 );
                 await _hubContext.Clients
                     .Group($"project-{attachment.ProjectId}")
@@ -161,7 +161,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     "Project",
                     projectId,
                     "AttachmentUploaded",
-                    $"{_currentUserService.DisplayName} feltöltötte a {fileName} fájlt a projekt dokumentumok közé"
+                    $"{{actor}} feltöltötte a {fileName} fájlt a projekt dokumentumok közé"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -207,7 +207,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     "Task",
                     taskId,
                     "AttachmentUploaded",
-                    $"{_currentUserService.DisplayName} feltöltötte a {fileName} fájlt"
+                    $"{{actor}} feltöltötte a {fileName} fájlt"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -420,7 +420,7 @@ namespace ProjectManager.API.Services.AttachmentService
                     taskId.HasValue ? "Task" : "Project",
                     taskId ?? projectId,
                     "AttachmentUploaded",
-                    $"{_currentUserService.DisplayName} feltöltötte a {log.FileName} fájlt"
+                    $"{{actor}} feltöltötte a {log.FileName} fájlt"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

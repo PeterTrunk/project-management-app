@@ -168,7 +168,8 @@ namespace ProjectManager.API.Services.TeamService
                     "Member",
                     callerId,
                     "Joined",
-                    $"{user?.DisplayName} csatlakozott a projekthez"
+                    //A csatlakozó maga a cselekvő, ezért {actor} és nem {target}
+                    "{actor} csatlakozott a projekthez"
                 );
                 await _hubContext.Clients
                     .Group($"project-{invite.ProjectId}")
@@ -227,13 +228,13 @@ namespace ProjectManager.API.Services.TeamService
 
             try
             {
-                var removedUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
                 var activity = await _activityService.LogActivityAsync(
                     projectId,
                     "Member",
                     userId,
                     "Removed",
-                    $"{_currentUserService.DisplayName} eltávolította {removedUser?.DisplayName}-t a projektből"
+                    "{actor} eltávolította {target}-t a projektből",
+                    targetUserId: userId
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -287,7 +288,8 @@ namespace ProjectManager.API.Services.TeamService
                     "Member",
                     userId,
                     "RoleUpdated",
-                    $"{_currentUserService.DisplayName} módosította {member.User.DisplayName} szerepkörét {dto.ProjectRole}-re"
+                    $"{{actor}} módosította {{target}} szerepkörét {dto.ProjectRole}-re",
+                    targetUserId: userId
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

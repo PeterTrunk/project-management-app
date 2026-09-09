@@ -207,9 +207,8 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
 - [ ] **A Seq megőrzési ideje beállítva és rögzítve** (*Settings -> Retention*), meghaladva a
       mentésekét. A beállított érték beírva ebbe a dokumentumba
 - [ ] **A mentés ütemezése és a 7 napos rotáció helye rögzítve** az 1. fejezetben
-- [ ] **Az activity-leírások sablonosítása kész** (a terv 7. etapja). Enélkül egy átnevezett
-      felhasználó régi neve a törlés után is bent marad a leírásokban, miközben a tájékoztató
-      5. pontja teljes cserét ígér
+- [x] ~~**Az activity-leírások sablonosítása kész.**~~ Elkészült: a leírások sablont tárolnak,
+      a neveket a kiolvasás helyettesíti be, így az anonimizálás magától érvényesül
 - [ ] **Próba-visszaállítás elvégezve**, a 2. fejezet ellenőrzőlistájával együtt
 
 > A dokumentumokat jogász nem nézte át. Valódi felhasználókkal induló szolgáltatásnál ez megéri.

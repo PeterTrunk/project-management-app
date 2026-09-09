@@ -642,6 +642,13 @@ public class AppDbContext : DbContext
             entity.Property(a => a.CreatedAt)
                   .IsRequired();
 
+            //A célszemély törlése ne vigye magával a projekt előzményeit: a sor megmarad,
+            //a név pedig a User anonimizálásából következően "Törölt felhasználó" lesz.
+            entity.HasOne(a => a.TargetUser)
+                  .WithMany()
+                  .HasForeignKey(a => a.TargetUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
             //Indexes
             entity.HasIndex(a => new { a.ProjectId, a.CreatedAt });
             entity.HasIndex(a => new { a.EntityType, a.EntityId });

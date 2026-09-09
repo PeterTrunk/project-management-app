@@ -4417,6 +4417,67 @@ sablonosítását** (7. etap) és a **Backblaze DPA** elfogadását.
 funkciója végzi. A pontos ütemezés és a rotáció beállításának helye helyőrzőként szerepel -
 ezeket az üzemeltetőnek kell rögzítenie, hogy egy visszaállítás ne találgatásból álljon.
 
+### Jogi megfelelés 7. etap: az activity-leírások sablonosítása
+
+**Probléma:**
+Az 5. etap (fióktörlés) után derült ki, hogy a `DisplayName` **bármikor átírható**, az
+activity-leírások viszont az akkori nevet fagyasztották be. Ebből két baj következett:
+
+1. **A törlés hiányos volt.** A szubsztring-csere csak az utolsó nevet ismeri, tehát aki
+   korábban átnevezte magát, annál a régi néven keletkezett sorok érintetlenek maradtak -
+   miközben a tájékoztató 5. pontja teljes cserét ígér.
+2. **Egy ma is látható hiba.** Az `ActivityFeed.svelte` a join-ból jövő AKTUÁLIS `actorName`-et
+   kereste a befagyasztott szövegben, hogy kiemelje:
+   `const index = actorName ? description.indexOf(actorName) : -1;`
+   Átnevezés után ez `-1`, tehát a kiemelés némán megszűnt, és a feed a **régi nevet** mutatta a
+   szövegben, miközben ugyanannak a sornak a fejléce már az újat.
+
+A második pont a lényeg: ez **nem csak megfelelési kérdés volt**, hanem egy hétköznapi
+felhasználói hiba. Ez döntötte el, hogy javítjuk, nem pedig elfogadjuk.
+
+**Megoldás:**
+A `Description` mostantól **sablont** tárol, a személyneveket a `{actor}` és `{target}`
+jelölők képviselik, amiket az `ActivityService` olvasáskor cserél ki a hivatkozott
+felhasználók aktuális nevére - pontosan úgy, ahogy az `ActorName` már korábban is működött.
+
+- Új `Activity.TargetUserId` (nullable) + `TargetUser` navigáció, migrációval. `Restrict`
+  törléssel: a célszemély sora nem viheti magával a projekt előzményeit
+- 39 hívási hely mechanikusan átírva 10 szolgáltatásban, 5 pedig kézzel: négy kapott
+  `{target}` jelölőt és `targetUserId` paramétert (tag eltávolítása, szerepkör módosítása,
+  task hozzárendelés és leszedés), egy pedig - a "csatlakozott a projekthez" - `{actor}`-t,
+  mert ott a csatlakozó maga a cselekvő
+- Az `IActivityService` szerződése kimondja: **ne interpolálj DisplayName-t a leírásba**
+
+**Csak a személynevek kaptak jelölőt.** A board- és tasknevek beégetve maradnak: azok nem
+személyes adatok, és egy naplóban helyes rögzíteni, minek hívták a dolgot az esemény idején.
+
+**Az örökölt sorok:** a sablonok bevezetése előtt keletkezett sorok kész szöveget
+tartalmaznak. Azokban nincs mit cserélni, ezért változatlanul jelennek meg - a `Replace`
+egyszerűen nem talál jelölőt. Az 5. etap szubsztring-cseréje **megmarad** rájuk biztonsági
+hálóként, a metódus dokumentációja pedig már ennek megfelelően fogalmaz.
+
+**Amit ez megold:**
+
+| | Előtte | Utána |
+|---|---|---|
+| Átnevezés után a feed | a régi nevet mutatta, kiemelés nélkül | az aktuális nevet mutatja, kiemeléssel |
+| Fióktörlés | csak az utolsó nevet takarította | minden sorra automatikusan érvényesül |
+| Karbantartás | szubsztring-csere törékenységével kellett élni | új sorokra nincs rá szükség |
+
+A `ActivityFeed` kiemelése azért működik újra, mert a név ugyanabból a join-ból származik,
+mint a szöveg - a kettő nem tud elcsúszni egymástól.
+
+**A célszemély neve is kiemelve.** Mivel a leírásból magától nem derül ki, melyik rész
+személynév, a felület nem tudta kiemelni a másodikat sem. Ezért az `ActivityResponseDto`
+kapott egy `TargetName` mezőt, a `splitDescription` pedig **több névre** általánosodott: a
+szöveget a nevek előfordulásai mentén vágja szét, ciklusban.
+
+Két apró, de fontos részlet a megvalósításban: a nevek **hosszabb-először** sorrendben
+keresődnek, hogy ha az egyik név a másik része ("Anna" és "Anna Kiss"), a rövidebb ne hasítsa
+ketté a hosszabbat; és a kiemelés továbbra is **`{@html}` nélkül** működik, szövegdarabokra
+bontással - a Svelte interpolációja escape-el, ami a `<Törölt felhasználó>` név miatt sem
+mindegy.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

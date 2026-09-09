@@ -86,7 +86,7 @@ namespace ProjectManager.API.Services.CommentService
                     "Comment",
                     comment.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} kommentelt a {task.TaskKey} taskon"
+                    $"{{actor}} kommentelt a {task.TaskKey} taskon"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -159,7 +159,7 @@ namespace ProjectManager.API.Services.CommentService
                     "Comment",
                     commentId,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölt egy kommentet a {task.TaskKey} taskon"
+                    $"{{actor}} törölt egy kommentet a {task.TaskKey} taskon"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

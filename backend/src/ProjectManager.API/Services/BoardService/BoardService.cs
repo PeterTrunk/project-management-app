@@ -118,7 +118,7 @@ namespace ProjectManager.API.Services.BoardService
                     "Board",
                     board.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} létrehozta a {board.Name} boardot"
+                    $"{{actor}} létrehozta a {board.Name} boardot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -183,7 +183,7 @@ namespace ProjectManager.API.Services.BoardService
                     "Board",
                     board.Id,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölte a {board.Name} boardot"
+                    $"{{actor}} törölte a {board.Name} boardot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -307,7 +307,7 @@ namespace ProjectManager.API.Services.BoardService
                     "Board",
                     board.Id,
                     "Updated",
-                    $"{_currentUserService.DisplayName} módosította a {board.Name} boardot"
+                    $"{{actor}} módosította a {board.Name} boardot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

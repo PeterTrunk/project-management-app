@@ -1,5 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Activity;
 using ProjectManager.API.Model;
@@ -12,19 +11,46 @@ namespace ProjectManager.API.Services.ActivityService
         private readonly AppDbContext _context;
         private readonly ICurrentUserService _currentUserService;
 
+        //A leírások sablonként tárolódnak, a személyneveket ezek a jelölők helyettesítik.
+        //Csak a neveket: a board és tasknevek beégetve maradnak, mert nem személyes adatok.
+        public const string ActorPlaceholder = "{actor}";
+        public const string TargetPlaceholder = "{target}";
+
+        private const string UnknownName = "Ismeretlen";
+        private const string SystemName = "System";
+
         public ActivityService(AppDbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
             _currentUserService = currentUserService;
         }
 
-        public async Task<ActivityResponseDto> LogActivityAsync(Guid projectId, string entityType, Guid entityId, string action, string description, string? payload = null)
+        /// <summary>
+        /// A sablonban lévő jelölőket kicseréli a hivatkozott felhasználók AKTUÁLIS nevére.
+        ///
+        /// A jelölők bevezetése előtt keletkezett sorok kész szöveget tartalmaznak: azokban
+        /// nincs mit cserélni, ezért változatlanul mennek tovább.
+        /// </summary>
+        private static string Render(string template, string? actorName, string? targetName) =>
+            template
+                .Replace(ActorPlaceholder, actorName ?? UnknownName)
+                .Replace(TargetPlaceholder, targetName ?? UnknownName);
+
+        public async Task<ActivityResponseDto> LogActivityAsync(
+            Guid projectId,
+            string entityType,
+            Guid entityId,
+            string action,
+            string description,
+            string? payload = null,
+            Guid? targetUserId = null)
         {
             var activity = new Activity
             {
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
                 ActorId = _currentUserService.UserId,
+                TargetUserId = targetUserId,
                 EntityType = entityType,
                 EntityId = entityId,
                 Action = action,
@@ -39,22 +65,28 @@ namespace ProjectManager.API.Services.ActivityService
             var actor = await _context.Users
                 .FirstOrDefaultAsync(u => u.Id == activity.ActorId);
 
+            //Csak akkor kérdezünk le, ha van kire: a leírások többsége nem irányul senkire
+            var target = targetUserId.HasValue
+                ? await _context.Users.FirstOrDefaultAsync(u => u.Id == targetUserId.Value)
+                : null;
+
             return new ActivityResponseDto
             {
                 Id = activity.Id,
-                ActorName = actor?.DisplayName ?? "Ismeretlen",
+                ActorName = actor?.DisplayName ?? UnknownName,
+                TargetName = target?.DisplayName,
                 EntityType = activity.EntityType,
                 EntityId = activity.EntityId,
                 Action = activity.Action,
-                Description = activity.Description,
+                Description = Render(activity.Description, actor?.DisplayName, target?.DisplayName),
                 Payload = activity.Payload,
                 CreatedAt = activity.CreatedAt
             };
         }
 
         public async Task<List<ActivityResponseDto>> GetActivitiesAsync(
-            Guid projectId, 
-            int page = 1, 
+            Guid projectId,
+            int page = 1,
             int pageSize = 20,
             string? entityType = null,
             string? actorName = null,
@@ -64,6 +96,7 @@ namespace ProjectManager.API.Services.ActivityService
             var query = _context.Activities
                 .Where(a => a.ProjectId == projectId)
                 .Include(a => a.Actor)
+                .Include(a => a.TargetUser)
                 .AsQueryable();
 
             // EntityType szűrés
@@ -89,18 +122,24 @@ namespace ProjectManager.API.Services.ActivityService
                 .Take(pageSize)
                 .ToListAsync();
 
-            return activities.Select(a => new ActivityResponseDto
+            return activities.Select(a =>
             {
-                Id = a.Id,
-                ActorName = a.ActorId.HasValue
-                    ? (a.Actor?.DisplayName ?? "Ismeretlen") //Ha nem találjuk a usert akkor "Ismeretlen"
-                    : "System", //null ActorId esetén "System", 
-                EntityType = a.EntityType,
-                EntityId = a.EntityId,
-                Action = a.Action,
-                Description = a.Description,
-                Payload = a.Payload,
-                CreatedAt = a.CreatedAt
+                var resolvedActorName = a.ActorId.HasValue
+                    ? (a.Actor?.DisplayName ?? UnknownName) //Ha nem találjuk a usert akkor "Ismeretlen"
+                    : SystemName;                           //null ActorId esetén "System"
+
+                return new ActivityResponseDto
+                {
+                    Id = a.Id,
+                    ActorName = resolvedActorName,
+                    TargetName = a.TargetUser?.DisplayName,
+                    EntityType = a.EntityType,
+                    EntityId = a.EntityId,
+                    Action = a.Action,
+                    Description = Render(a.Description, resolvedActorName, a.TargetUser?.DisplayName),
+                    Payload = a.Payload,
+                    CreatedAt = a.CreatedAt
+                };
             }).ToList();
         }
 
@@ -125,11 +164,12 @@ namespace ProjectManager.API.Services.ActivityService
             return new ActivityResponseDto
             {
                 Id = activity.Id,
-                ActorName = "System",
+                ActorName = SystemName,
                 EntityType = activity.EntityType,
                 EntityId = activity.EntityId,
                 Action = activity.Action,
-                Description = activity.Description,
+                //A rendszeresemények ma nem használnak jelölőt, de a futtatása így is helyes
+                Description = Render(activity.Description, SystemName, null),
                 Payload = activity.Payload,
                 CreatedAt = activity.CreatedAt
             };

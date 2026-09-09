@@ -469,9 +469,22 @@ namespace ProjectManager.API.Services.Auth
         }
 
         /// <summary>
-        /// A régi DisplayName-et lecseréli az activity-leírásokban.
-        /// Sajnos ez nem a legjobb védelem mivel csak a jelenlegi Usernevet nézi, ha régebben lett felvéve amikor
-        /// a Usernek más neve volt akkor az bentmarad.
+        /// A régi DisplayName-et lecseréli az ÖRÖKÖLT activity-leírásokban.
+        ///
+        /// Ez mostmár csak biztonsági háló. 
+        /// Az activity-leírások sablont tárolnak, a neveket a kiolvasás helyettesíti be a hivatkozott felhasználó aktuális nevéből,
+        /// így az anonimizálás magától érvényesül, és az átnevezés sem hagy hátra régi nevet.
+        ///
+        /// A sablonok bevezetése ELŐTT keletkezett sorok viszont kész szöveget tartalmaznak beégetett névvel.
+        /// Azokat ez a csere próbálja eltakarítani.
+        ///
+        /// KORLÁT (csak az örökölt sorokra): substring-csere, tehát egy rövid név más szöveg
+        /// belsejébe is beleeshet, és csak az UTOLSÓ nevet ismeri - ha a felhasználó korábban
+        /// átnevezte magát, a régebbi néven keletkezett örökölt sorok érintetlenek maradnak.
+        ///
+        /// A hatókör azok a projektek, ahol a felhasználó tag volt, nem csak ahol ő az ActorId:
+        /// az örökölt szövegekben a név elszenvedőként is szerepelhet
+        /// ("X eltávolította Y-t a projektből").
         /// </summary>
         private async Task<int> ScrubDisplayNameFromActivitiesAsync(Guid userId, string oldDisplayName)
         {

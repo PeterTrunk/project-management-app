@@ -168,7 +168,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     "Task",
                     task.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} létrehozta a {task.TaskKey} taskot"
+                    $"{{actor}} létrehozta a {task.TaskKey} taskot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -235,7 +235,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     "Task",
                     task.Id,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölte a {task.TaskKey} taskot"
+                    $"{{actor}} törölte a {task.TaskKey} taskot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{task.ProjectId}")
@@ -547,7 +547,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         "Task",
                         task.Id,
                         "Completed",
-                        $"{_currentUserService.DisplayName} befejezte a {task.TaskKey} taskot"
+                        $"{{actor}} befejezte a {task.TaskKey} taskot"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
@@ -649,7 +649,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     "Task",
                     task.Id,
                     "Updated",
-                    $"{_currentUserService.DisplayName} módosította a {task.TaskKey} taskot"
+                    $"{{actor}} módosította a {task.TaskKey} taskot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{task.ProjectId}")
@@ -855,7 +855,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         "Task",
                         task.Id,
                         "BoardAssigned",
-                        $"{_currentUserService.DisplayName} boardhoz rendelte a {task.TaskKey} taskot"
+                        $"{{actor}} boardhoz rendelte a {task.TaskKey} taskot"
                     );
                     await _hubContext.Clients
                         .Group($"project-{task.ProjectId}")
@@ -1005,7 +1005,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     "Task",
                     taskId,
                     "AssigneeAdded",
-                    $"{_currentUserService.DisplayName} hozzárendelte {user.DisplayName}-t a {task.TaskKey} taskhoz"
+                    $"{{actor}} hozzárendelte {{target}}-t a {task.TaskKey} taskhoz",
+                    targetUserId: user.Id
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -1059,7 +1060,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     "Task",
                     taskId,
                     "AssigneeRemoved",
-                    $"{_currentUserService.DisplayName} eltávolította {user.DisplayName}-t a {task.TaskKey} taskból"
+                    $"{{actor}} eltávolította {{target}}-t a {task.TaskKey} taskból",
+                    targetUserId: user.Id
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

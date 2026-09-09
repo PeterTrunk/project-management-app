@@ -3,6 +3,12 @@ import apiClient from './client';
 export interface ActivityResponse {
     id: string;
     actorName: string;
+    /**
+     * Annak a neve, akivel a művelet történt (pl. akit eltávolítottak), vagy null.
+     * A leírásban lévő nevek kiemeléséhez kell: a szövegből magától nem derülne ki,
+     * melyik rész a személynév.
+     */
+    targetName: string | null;
     entityType: string;
     entityId: string;
     action: string;
