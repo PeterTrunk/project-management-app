@@ -39,7 +39,8 @@ export interface CommitLinkResponse {
     commitUrl: string | null;
     message: string;
     authorName: string;
-    authorEmail: string;
+    //A szerző e-mail címét a backend szándékosan nem küldi ki: harmadik személy adata,
+    //amire ma nem épül funkció. Az adatbázisban továbbra is megvan.
     committedAt: string;
 }
 

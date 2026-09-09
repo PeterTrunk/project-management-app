@@ -1008,7 +1008,6 @@ namespace ProjectManager.API.Services.SprintService
                         CommitUrl = cl.CommitUrl,
                         Message = cl.Message,
                         AuthorName = cl.AuthorName,
-                        AuthorEmail = cl.AuthorEmail,
                         CommittedAt = cl.CommittedAt
                     })
                     .ToList(),

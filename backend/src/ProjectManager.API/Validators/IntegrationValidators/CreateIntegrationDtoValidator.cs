@@ -28,6 +28,12 @@ namespace ProjectManager.API.Validators.IntegrationValidators
                 .WithMessage("Webhook secret megadása kötelező!")
                 .MinimumLength(16)
                 .WithMessage("A webhook secret legalább 16 karakter kell legyen!");
+
+            //A felület letiltja a gombot pipa nélkül, de az API nyilvános:
+            //a kikényszerítés csak itt, a szerveren valósul meg.
+            RuleFor(x => x.AuthorityConfirmed)
+                .Equal(true)
+                .WithMessage("A repository csatlakoztatásához nyilatkoznod kell a jogosultságodról!");
         }
     }
 }

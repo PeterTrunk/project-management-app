@@ -129,5 +129,50 @@ namespace ProjectManager.Tests.Validators
             var result = _validator.TestValidate(dto);
             result.ShouldNotHaveValidationErrorFor(x => x.WebhookSecret);
         }
+
+        //AuthorityConfirmed
+
+        private static CreateIntegrationDto Valid() => new()
+        {
+            Provider = "GitHub",
+            RepoFullName = "owner/repo",
+            WebhookSecret = "mysecret12345678",
+            AuthorityConfirmed = true
+        };
+
+        //A felület letiltja a gombot pipa nélkül, de az API nyilvános: egy közvetlen kérés
+        //megkerülné a jelölőnégyzetet, ezért a szerveroldali kikényszerítés a lényegi védelem.
+        [Fact]
+        public void AuthorityConfirmed_False_ShouldHaveError()
+        {
+            var dto = Valid();
+            dto.AuthorityConfirmed = false;
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AuthorityConfirmed);
+        }
+
+        [Fact]
+        public void AuthorityConfirmed_Missing_ShouldHaveError()
+        {
+            //A bool alapértéke false: a mezőt kihagyó kérés is elutasításra kerül
+            var dto = new CreateIntegrationDto
+            {
+                Provider = "GitHub",
+                RepoFullName = "owner/repo",
+                WebhookSecret = "mysecret12345678"
+            };
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AuthorityConfirmed);
+        }
+
+        [Fact]
+        public void AuthorityConfirmed_True_ShouldNotHaveError()
+        {
+            _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.AuthorityConfirmed);
+        }
+
+        [Fact]
+        public void ValidDto_ShouldNotHaveAnyErrors()
+        {
+            _validator.TestValidate(Valid()).ShouldNotHaveAnyValidationErrors();
+        }
     }
 }

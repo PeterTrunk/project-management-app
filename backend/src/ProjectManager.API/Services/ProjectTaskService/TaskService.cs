@@ -1103,7 +1103,6 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         CommitUrl = cl.CommitUrl,
                         Message = cl.Message,
                         AuthorName = cl.AuthorName,
-                        AuthorEmail = cl.AuthorEmail,
                         CommittedAt = cl.CommittedAt
                     })
                     .ToList(),

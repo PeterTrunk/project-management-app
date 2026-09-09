@@ -4174,6 +4174,57 @@ is hívható.
 **Tesztek:** a `RegisterDtoValidatorTests` hat új esettel bővült, köztük a hiányzó mező
 (a bool alapértéke `false`) elutasításával. A készlet 554-ről 560 tesztre nőtt.
 
+### Jogi megfelelés 3. etap: a git integráció harmadik felekre vonatkozó adatkezelése
+
+**Probléma:**
+Két, egymáshoz tartozó hiány. Egyrészt a `CommitCard.svelte` kiírta a commit szerzőjének
+e-mail címét, pedig semmi nem épült rá - harmadik személy személyes adata jelent meg a
+felületen cél nélkül, ami az adattakarékosság elvébe (GDPR 5. cikk (1) c) ütközik. Másrészt a
+repository csatlakoztatásakor semmi nem jelezte, hogy a rendszer ettől kezdve eltárolja a
+beérkező commitok szerzőinek nevét és e-mail címét.
+
+A két tétel eredetileg külön etap volt, de ugyanannak a történetnek a két fele - mit teszünk a
+commit szerzők adataival, és milyen nyilatkozat mellett gyűjtjük őket egyáltalán -, ezért
+összevonva készült el.
+
+**Megoldás - a szerző e-mail címének kivezetése a felületről:**
+Az **adatbázis-oszlop marad**: a cél a commit-task attribúció, és az e-mail a git világában a
+szerző kanonikus azonosítója, amivel a tervezett felhasználó-összekapcsolás elvégezhető. Amíg
+az a funkció nincs kész, a böngészőbe kiküldeni fölösleges. A célt a `CommitLink.AuthorEmail`
+XML-kommentje rögzíti, hogy a döntés a kód mellett maradjon.
+
+A felderítés egy pontatlanságot javított a terven: **nem egy, hanem három** helyen képződik le
+a DTO-ra - `GitService.cs`, `TaskService.cs` és `SprintService.cs`. Csak az elsőt javítva a
+task- és sprint-részletek válaszaiban bent maradt volna.
+
+A SignalR események **nem voltak érintettek**: a `PrLinked` és az `ActivityCreated` payload
+csak `authorName`-et hordoz. Ez ellenőrzött tény, nem feltételezés.
+
+**Megoldás - jogosultsági nyilatkozat:**
+A `CreateIntegrationModal` űrlapjára alapból kipipálatlan jelölőnégyzet került, amely kimondja,
+hogy a felvevő jogosult a csatlakoztatásra, és tudomásul veszi a szerzői adatok tárolását.
+A `CreateIntegrationDto.AuthorityConfirmed` mezőt a validátor `.Equal(true)` szabálya
+kényszeríti ki - a gomb letiltása csak kényelmi jelzés, mert az API közvetlenül is hívható.
+
+Az `Integration.AuthorityConfirmedAt` a nyilatkozat **időpontját** tárolja, nem egy elhajított
+boolt. Nullozható, mert a mező bevezetése előtt felvett integrációkra visszamenőleg nem
+állítható elő nyilatkozat.
+
+**Ez nem hozzájárulás.** A repository kezelője nem nyilatkozhat a commit szerzők nevében - a
+jogalap változatlanul a jogos érdek (6. cikk (1) f): a szerzőség feltüntetése a verziókövetés
+rendeltetése, és az adat a szerző saját közreműködése folytán már a repositoryban van. A
+jelölőnégyzet szavatosság és átláthatóság. Egy "hozzájárulás" címke rosszabb lenne a
+hiányánál, mert olyan jogalapot állítana, amit az érintett nem tud visszavonni.
+
+Az adatkezelési tájékoztató 3. pontja már erre a szövegre épült, és arra is, hogy integrációt
+csak tulajdonos vagy adminisztrátor vehet fel: ezt az `IntegrationController`
+`PolicyNames.ProjectAdmin` házirendje ténylegesen kikényszeríti, tehát a tájékoztató állítása
+ellenőrzötten pontos.
+
+**Tesztek:** a `CreateIntegrationDtoValidatorTests` négy új esettel bővült. A készlet 560-ról
+564 tesztre nőtt. A meglévő esetek nem törtek el, mert tulajdonságra szűkített állításokat
+használnak.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

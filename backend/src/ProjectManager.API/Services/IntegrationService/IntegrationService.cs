@@ -67,6 +67,7 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookSecret = _encryptionService.Encrypt(dto.WebhookSecret),
                 WebhookToken = Guid.NewGuid().ToString("N"),
                 IsEnabled = true,
+                AuthorityConfirmedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

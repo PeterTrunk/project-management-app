@@ -11,6 +11,18 @@
         public string WebhookToken { get; set; } = string.Empty;
         public bool IsEnabled { get; set; } = true;
         public bool IsVerified { get; set; } = false;
+
+        /// <summary>
+        /// Mikor nyilatkozott a felvevő arról, hogy jogosult a repository csatlakoztatására,
+        /// és tudomásul vette a commit szerzők adatainak tárolását.
+        ///
+        /// Nullozható: a mező bevezetése előtt felvett integrációkra visszamenőleg nem
+        /// állítható elő nyilatkozat. Ez nem hozzájárulás a GDPR értelmében, 
+        /// a repository kezelője nem nyilatkozhat a commit szerzők nevében, 
+        /// hanem szavatosság és a jogos érdeken alapuló adatkezelés átláthatóvá tétele.
+        /// </summary>
+        public DateTime? AuthorityConfirmedAt { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 

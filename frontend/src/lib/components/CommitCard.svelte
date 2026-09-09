@@ -33,8 +33,6 @@
             <div class="commit-meta">
                 <span>{commit.authorName}</span>
                 <span>·</span>
-                <span>{commit.authorEmail}</span>
-                <span>·</span>
                 <span>{formatDate(commit.committedAt)}</span>
             </div>
         </div>
