@@ -88,6 +88,14 @@ try
     var orphanCleanupIntervalHours = int.Parse(
         Environment.GetEnvironmentVariable("ORPHAN_CLEANUP_INTERVAL_HOURS") ?? "24");
 
+    //TokenCleanupJob
+    var tokenCleanupIntervalHours = int.Parse(
+        Environment.GetEnvironmentVariable("TOKEN_CLEANUP_INTERVAL_HOURS") ?? "6");
+    var refreshTokenRetentionDays = int.Parse(
+        Environment.GetEnvironmentVariable("REFRESH_TOKEN_RETENTION_DAYS") ?? "30");
+    var confirmedUploadLogRetentionDays = int.Parse(
+        Environment.GetEnvironmentVariable("CONFIRMED_UPLOAD_LOG_RETENTION_DAYS") ?? "90");
+
     // Options regisztrálás
 
     //JWT
@@ -155,10 +163,13 @@ try
         options.MaxUploadSizeMb = maxUploadSizeMb;
     });
 
-    //OrphanCleanupJob
+    //Takarító háttérfeladatok
     builder.Services.Configure<CleanupOptions>(options =>
     {
         options.OrphanCleanupIntervalHours = orphanCleanupIntervalHours;
+        options.TokenCleanupIntervalHours = tokenCleanupIntervalHours;
+        options.RefreshTokenRetentionDays = refreshTokenRetentionDays;
+        options.ConfirmedUploadLogRetentionDays = confirmedUploadLogRetentionDays;
     });
 
     // Service Registration (DI Container)

@@ -4225,6 +4225,54 @@ ellenőrzötten pontos.
 564 tesztre nőtt. A meglévő esetek nem törtek el, mert tulajdonságra szűkített állításokat
 használnak.
 
+### Jogi megfelelés 4. etap: lejárt tokenek és elévült naplósorok takarítása
+
+**Probléma:**
+A `CleanupOptions` egyetlen dolgot takarított: az árva (meg nem erősített) feltöltéseket. Minden
+más örökre bent maradt - a lejárt és visszavont frissítő tokenek, a felhasznált
+jelszó-visszaállító tokenek, és a megerősített feltöltés-naplósorok. Az első kettő **titok**
+(a `Token` mező önmagában hitelesítő adat), a harmadik pedig fájlneveket köt felhasználókhoz.
+
+A GDPR nem ad konkrét határidőt, de a korlátlan megőrzés nem védhető álláspont - és az 1. etapban
+közzétett adatkezelési tájékoztató konkrét megőrzési időket **vállal**. Enélkül olyat állítanánk,
+ami nem igaz.
+
+**Megoldás:**
+Új `TokenCleanupJob` az `OrphanCleanupJob` mintájára: `PeriodicTimer`, induláskori azonnali
+futás (a `PeriodicTimer` az első tickig végigvárná a teljes intervallumot), ciklusonkénti
+scope, és `RunCleanupSafelyAsync` try/catch. Ez utóbbi azért kell, mert a
+`BackgroundServiceExceptionBehavior` alapértelmezése `StopHost`: egy átmeneti PostgreSQL-hiba
+különben a teljes API-replikát leállítaná.
+
+| Adat | Szabály | Miért |
+|---|---|---|
+| `RefreshToken` | lejárat után 30 nappal, a visszavontak is | Visszaélés-vizsgálathoz még hasznos; a visszavonás ténye is adat, amíg a token elvileg élhetne |
+| `PasswordResetToken` | felhasznált vagy lejárt → haladék nélkül | Nincs másodlagos értéke, a `Token` viszont titok |
+| `PresignedUrlLog` (megerősített) | 90 nap | A meg nem erősítetteket az `OrphanCleanupJob` viszi a MinIO-fájllal együtt |
+
+A törlések `ExecuteDeleteAsync`-kel, halmazműveletként futnak: nincs értelme betölteni a
+sorokat, hogy aztán egyesével töröljük. A megerősített naplósorok törlése biztonságos -
+ellenőrizve, hogy az `Attachment` nem hivatkozik rájuk idegen kulccsal, és a
+`ConfirmUploadAsync` után egyetlen kód sem olvas megerősített naplósort.
+
+Négy új környezeti változó, mind alapértékkel (a meglévő `ORPHAN_CLEANUP_INTERVAL_HOURS`
+mintájára ezek sincsenek a `.env.example`-ben): `TOKEN_CLEANUP_INTERVAL_HOURS` (6),
+`REFRESH_TOKEN_RETENTION_DAYS` (30), `CONFIRMED_UPLOAD_LOG_RETENTION_DAYS` (90).
+
+**Eltérés a tervtől - az e-mail megerősítő token:**
+A terv negyedik sora az lett volna, hogy a `User.EmailVerificationToken` lejárt vagy már
+megerősített fióknál nullázódjon. Ez **így nem valósítható meg**, két okból:
+
+- a `VerifyEmailAsync` (`AuthService.cs:598`) **már ma nullázza** a tokent a megerősítéskor,
+  tehát megerősített fióknál nincs mit takarítani;
+- a mezőnek **nincs lejárata** - a `User`-en egyetlen sztring, semmi több. A "lejárt" eset
+  tehát nem eldönthető.
+
+A megmaradó valós eset egy soha meg nem erősített fiók, amelynél a token örökre él. Ez egy
+álló hitelesítő adat, de a nullázása **némán elrontaná** a felhasználó kiküldött
+megerősítő linkjét, anélkül hogy bármi jelezné neki. A helyes megoldás egy lejárati mező és
+egy "kérek új linket" folyamat - az viszont funkció, nem takarítás, ezért külön döntés.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

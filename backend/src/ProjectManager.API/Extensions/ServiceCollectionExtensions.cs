@@ -215,6 +215,9 @@ namespace ProjectManager.API.Extensions
             //OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
             services.AddHostedService<OrphanCleanupJob>();
 
+            //TokenCleanupJob - lejárt hitelesítési tokenek és elévült feltöltés-naplósorok
+            services.AddHostedService<TokenCleanupJob>();
+
             //FluentValidation Validators
             services.AddValidatorsFromAssemblyContaining<Program>();
             services.AddFluentValidationAutoValidation();
