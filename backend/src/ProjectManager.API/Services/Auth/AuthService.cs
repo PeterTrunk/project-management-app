@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OtpNet;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Common.Security;
@@ -32,6 +33,10 @@ namespace ProjectManager.API.Services.Auth
         //Explicit work factor: enélkül a könyvtár alapértelmezettjét használnánk, amely egy csomagfrissítéssel csendben megváltozhat.
         //A Verify a hash-ből olvassa ki a faktort, ezért a korábban mentett jelszavak továbbra is érvényesek maradnak.
         private const int BcryptWorkFactor = 12;
+
+        //Ugyanannyi, mint a jelszó-visszaállító tokené: elég idő a levél megnyitására, 
+        //de a token nem marad korlátlanul érvényes. Lejárat után új link kérhető.
+        private static readonly TimeSpan EmailVerificationTokenLifetime = TimeSpan.FromHours(1);
 
         //A nem létező email ágán is le kell futnia egy BCrypt ellenőrzésnek,
         //különben a válaszidő elárulja, létezik-e a fiók. Egyszer számoljuk ki, induláskor.
@@ -180,6 +185,31 @@ namespace ProjectManager.API.Services.Auth
                 throw new RateLimitException($"Túl sok regisztrációs kísérlet. Próbáld újra {retryAfter} másodperc múlva!");
             }
 
+            //A hatályos verzió a legkésőbbi, már hatályba lépett sor,
+            //Ygy nincs külön "aktív" jelző, ami elavulhatna, és egy jövőbeli verzió előre felvehető.
+            var currentTermsVersion = await _context.TermsVersions
+                .Where(tv => tv.EffectiveFrom <= DateTime.UtcNow)
+                .OrderByDescending(tv => tv.EffectiveFrom)
+                .FirstOrDefaultAsync();
+
+            if (currentTermsVersion == null)
+            {
+                //Konfigurációs hiba: a startup seednek ezt létre kellett volna hoznia.
+                //Inkább nem engedjünk regisztrálni, mint hogy elfogadás nélküli fiók jöjjön létre.
+                _logger.LogError("Nincs hatályos dokumentumverzió az adatbázisban, a regisztráció elutasítva!");
+                throw new ValidationException("A regisztráció átmenetileg nem érhető el. Próbáld újra később!");
+            }
+
+            if (dto.AcceptedTermsVersion != currentTermsVersion.Version)
+            {
+                //Jellemzően régóta nyitva hagyott, gyorsítótárazott felület
+                _logger.LogWarning(
+                    "Nem a hatályos dokumentumverzió elfogadása | Kapott: {Received} | Hatályos: {Current}",
+                    dto.AcceptedTermsVersion, currentTermsVersion.Version);
+                throw new ValidationException(
+                    "A felhasználási feltételek időközben módosultak. Töltsd újra az oldalt, és fogadd el a friss változatot!");
+            }
+
             if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
             {
                 _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | EmailRef: {EmailRef}", EmailRef(dto.Email));
@@ -191,6 +221,15 @@ namespace ProjectManager.API.Services.Auth
             user.Email = dto.Email;
             user.DisplayName = dto.DisplayName;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password, BcryptWorkFactor);
+
+            //Az elfogadás a felhasználóval EGY mentésben, tehát egy tranzakcióban keletkezik:
+            //elfogadás nélküli fiók még részleges hiba esetén sem jöhet létre.
+            //A navigációs gyűjteményen át vesszük fel, így a UserId-t az EF köti be.
+            user.TermsAcceptances.Add(new UserTermsAcceptance
+            {
+                TermsVersionId = currentTermsVersion.Id,
+                AcceptedAt = DateTime.UtcNow
+            });
 
             //A felvétel DB-be + mentés
             await _context.AddAsync(user);
@@ -211,6 +250,7 @@ namespace ProjectManager.API.Services.Auth
 
             var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
+            user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.Add(EmailVerificationTokenLifetime);
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);
@@ -345,6 +385,131 @@ namespace ProjectManager.API.Services.Auth
 
             _logger.LogInformation(
                 "Jelszó sikeresen megváltoztatva | UserId: {UserId} | Visszavont refresh tokenek: {RevokedCount}", userId, revokedCount);
+        }
+        
+        public async Task DeleteAccountAsync(DeleteAccountDto dto)
+        {
+            var userId = _currentUserService.UserId;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new NotFoundException("Felhasználó nem található!");
+
+            //Ismételt hitelesítés: egy ellopott access token önmagában ne tudjon fiókot törölni
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Sikertelen fióktörlés - hibás jelszó | UserId: {UserId}", userId);
+                throw new ForbiddenException("Hibás jelszó!");
+            }
+
+            //Ha a fiókon él a második faktor, a törlés sem kerülheti meg
+            if (user.IsTotpEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(dto.TotpToken))
+                    throw new ValidationException("A fiók törléséhez add meg a kétfaktoros kódot is!");
+
+                if (string.IsNullOrEmpty(user.TotpSecret))
+                    throw new ValidationException("TOTP nincs beállítva!");
+
+                var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
+                if (!totp.VerifyTotp(dto.TotpToken, out _, VerificationWindow.RfcSpecifiedNetworkDelay))
+                {
+                    _logger.LogWarning("Sikertelen fióktörlés - érvénytelen TOTP | UserId: {UserId}", userId);
+                    throw new ForbiddenException("Érvénytelen kétfaktoros kód!");
+                }
+            }
+
+            //Jelenleg nincs tulajdonos jogosultság átadás / felhatalmazás, és minden projektnek pontosan egy Ownere van.
+            //Ha van projektje akkor megtagadjuk a törlést, elöbb törölje önszántából a projektjeit.
+            var ownedProjects = await _context.Projects
+                .Where(p => p.OwnerId == userId)
+                .Select(p => p.Name)
+                .OrderBy(name => name)
+                .ToListAsync();
+
+            if (ownedProjects.Count > 0)
+            {
+                throw new ConflictException(
+                    "A fiók törlése előtt töröld az általad tulajdonolt projekteket: " +
+                    string.Join(", ", ownedProjects));
+            }
+
+            //A régi nevet az activity-leírásokhoz még használnunk kell, ezért az átírás ELŐTT mentjük
+            var oldDisplayName = user.DisplayName;
+
+            //Egy tranzakció: félbeszakadva nem maradhat félig anonimizált fiók
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            user.Email = UserAnonymization.EmailFor(user.Id);
+            user.DisplayName = UserAnonymization.DisplayName;
+            //Friss véletlen hash: az üres érték bejelentkezési ágakon okozhatna meglepetést
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+                SecureTokenGenerator.Generate(), BcryptWorkFactor);
+            user.TotpSecret = null;
+            user.IsTotpEnabled = false;
+            user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiresAt = null;
+            user.IsEmailVerified = false;
+            user.IsActive = false;
+            user.DeletedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            //Valódi törlés, az felhasználóhoz kötődő elemeknek nincs értelme törlés után.
+            var refreshDeleted = await _context.RefreshTokens
+                .Where(rt => rt.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            var resetDeleted = await _context.PasswordResetTokens
+                .Where(t => t.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            var activitiesUpdated = await ScrubDisplayNameFromActivitiesAsync(userId, oldDisplayName);
+
+            await transaction.CommitAsync();
+            
+            _logger.LogInformation(
+                "UserErasure | UserId: {UserId} | ErasedAt: {ErasedAt} | Törölt refresh tokenek: {RefreshCount} | "
+                + "Törölt jelszó-tokenek: {ResetCount} | Átírt activity sorok: {ActivityCount}",
+                userId, user.DeletedAt, refreshDeleted, resetDeleted, activitiesUpdated);
+        }
+
+        /// <summary>
+        /// A régi DisplayName-et lecseréli az ÖRÖKÖLT activity-leírásokban.
+        ///
+        /// Ez mostmár csak biztonsági háló. 
+        /// Az activity-leírások sablont tárolnak, a neveket a kiolvasás helyettesíti be a hivatkozott felhasználó aktuális nevéből,
+        /// így az anonimizálás magától érvényesül, és az átnevezés sem hagy hátra régi nevet.
+        ///
+        /// A sablonok bevezetése ELŐTT keletkezett sorok viszont kész szöveget tartalmaznak beégetett névvel.
+        /// Azokat ez a csere próbálja eltakarítani.
+        ///
+        /// KORLÁT (csak az örökölt sorokra): substring-csere, tehát egy rövid név más szöveg
+        /// belsejébe is beleeshet, és csak az UTOLSÓ nevet ismeri - ha a felhasználó korábban
+        /// átnevezte magát, a régebbi néven keletkezett örökölt sorok érintetlenek maradnak.
+        ///
+        /// A hatókör azok a projektek, ahol a felhasználó tag volt, nem csak ahol ő az ActorId:
+        /// az örökölt szövegekben a név elszenvedőként is szerepelhet
+        /// ("X eltávolította Y-t a projektből").
+        /// </summary>
+        private async Task<int> ScrubDisplayNameFromActivitiesAsync(Guid userId, string oldDisplayName)
+        {
+            if (string.IsNullOrWhiteSpace(oldDisplayName))
+                return 0;
+
+            var projectIds = await _context.ProjectMembers
+                .Where(pm => pm.UserId == userId)
+                .Select(pm => pm.ProjectId)
+                .ToListAsync();
+
+            if (projectIds.Count == 0)
+                return 0;
+
+            return await _context.Activities
+                .Where(a => projectIds.Contains(a.ProjectId) && a.Description.Contains(oldDisplayName))
+                .ExecuteUpdateAsync(s => s.SetProperty(
+                    a => a.Description,
+                    a => a.Description.Replace(oldDisplayName, UserAnonymization.DisplayName)));
         }
 
         //Egy felhasználó összes nem revoked refresh tokenjének revoke-olja.
@@ -560,8 +725,22 @@ namespace ProjectManager.API.Services.Auth
             if (user == null)
                 throw new ValidationException("Érvénytelen vagy lejárt token!");
 
+            //A lejárt esetet szándékosan megkülönböztetjük: a token nagy entrópiájú titok,
+            //aki birtokolja, az a levélből kapta, így nincs mit kiszivárogtatni. 
+            //Cserébe a felhasználó megtudja, mit tegyen a "valami nem jó" helyett.
+            //
+            //A null lejárat NEM számít lejártnak: a mező bevezetése előtt kiküldött linkek így nem törnek el.
+            //Ezekből a takarítás sem csinál semmit, mert nincs mihez mérnie.
+            if (user.EmailVerificationTokenExpiresAt < DateTime.UtcNow)
+            {
+                _logger.LogInformation("Lejárt megerősítő token használata | UserId: {UserId}", user.Id);
+                throw new ValidationException(
+                    "A megerősítő link lejárt. Jelentkezz be, és kérj új linket!");
+            }
+
             user.IsEmailVerified = true;
             user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiresAt = null;
             await _context.SaveChangesAsync();
         }
 
@@ -586,6 +765,7 @@ namespace ProjectManager.API.Services.Auth
 
             var verificationToken = SecureTokenGenerator.Generate();
             user.EmailVerificationToken = verificationToken;
+            user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.Add(EmailVerificationTokenLifetime);
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailVerificationAsync(user.Email, user.DisplayName, verificationToken);

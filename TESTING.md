@@ -1,11 +1,30 @@
 # Manual Test Results
 
-## Unit Tesztek (xUnit - csak a fontosabb részekre)
-1. xUnit (`dotnet test` a projekt rootban (Ahol az `.sln.` file van))
-- LexorankService (28 teszt)
-- CreateProjectDtoValidator
-- CreateIntegrationDtoValidator
-- CreateSprintDtoValidator
+## Unit Tesztek (xUnit)
+
+1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
+
+Összesen **554 teszt**, futásidő ~0,2 másodperc. A projekt szándékosan függőségmentes:
+nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
+
+**Tiszta logika**
+- `LexorankService` (26 teszt) — rendezőkulcs generálás és felezés
+- `ProjectRoles` — szerepkör-hierarchia, `RankOf` fail-closed viselkedése ismeretlen szerepkörre
+- `Common/Exceptions` — az `AppException` leszármazottak státuszkód-szerződése (400/403/404/409/429)
+
+**Biztonsági segédosztályok**
+- `EncryptionService` — AES-GCM oda-vissza, `enc:v1:` prefix, prefix nélküli (legacy) visszafejtés,
+  nonce-ismétlés hiánya, hamisított tag és rossz kulcs elutasítása
+- `SecureTokenGenerator` — URL-biztos kimenet, hossz, egyediség
+
+**Middleware**
+- `GlobalExceptionHandlerMiddleware` — az `AppException` üzenete kimegy a saját státuszkódjával,
+  minden más 500-at és általános szöveget kap (a belső üzenet és a stack trace nem szivárog),
+  továbbá a már elindult válasz `Abort()`-ot kap kiírás helyett
+
+**Validátorok**
+- Mind a 33 FluentValidation validátor, határértékekkel
+- `ValidatorCoverageTests` — egy új validátor tesztek nélkül nem maradhat észrevétlen
 
 ## E2E integration tesztelés (MVP szinten)
 2. Manuális Integration Tesztek

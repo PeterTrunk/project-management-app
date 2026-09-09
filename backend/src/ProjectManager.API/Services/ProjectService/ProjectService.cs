@@ -115,7 +115,7 @@ namespace ProjectManager.API.Services.ProjectService
                     "Project",
                     projectId,
                     "Archived",
-                    $"{_currentUserService.DisplayName} archivált a projektet"
+                    $"{{actor}} archivált a projektet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -154,7 +154,7 @@ namespace ProjectManager.API.Services.ProjectService
                     "Project",
                     projectId,
                     "Unarchived",
-                    $"{_currentUserService.DisplayName} dearchivált a projektet"
+                    $"{{actor}} dearchivált a projektet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -256,7 +256,7 @@ namespace ProjectManager.API.Services.ProjectService
                     "Project",
                     project.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} létrehozta a {project.Name} projektet"
+                    $"{{actor}} létrehozta a {project.Name} projektet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{project.Id}")
@@ -368,7 +368,7 @@ namespace ProjectManager.API.Services.ProjectService
                     "Project",
                     projectId,
                     "Updated",
-                    $"{_currentUserService.DisplayName} módosította a projektet"
+                    $"{{actor}} módosította a projektet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

@@ -49,6 +49,7 @@ project-management-app/
     docker-compose.yml
     SCHEDULE.md         # Fejlesztési ütemterv és haladásnapló
     TESTING.md          # Tesztelési dokumentáció
+    OPERATIONS.md       # Mentés, visszaállítás, incidenskezelés, indulási ellenőrzőlista
 ```
 
 ---

@@ -151,28 +151,54 @@
         }
     }
 
-    type DescriptionPart = { text: string; isActor: boolean };
+    type DescriptionPart = { text: string; isName: boolean };
 
-    // A leírást az aktor nevének első előfordulásánál vágjuk szét, hogy a kiemelés
+    // A leírást a benne szereplő személynevek mentén vágjuk szét, hogy a kiemelés
     // {@html} nélkül megoldható legyen - a Svelte szöveg-interpoláció escape-el.
+    //
+    // Két név jöhet szóba: a cselekvő és - ha a művelet valakire irányult - a célszemély.
+    // Mindkettőt a szerver adja, a hivatkozott felhasználó AKTUÁLIS nevével, ugyanabból a
+    // forrásból, amiből a leírás szövege készül. Ezért a két érték nem tud elcsúszni egymástól.
     function splitDescription(activity: ActivityResponse): DescriptionPart[] {
         const description = activity.description ?? '';
-        const actorName = activity.actorName ?? '';
 
-        const index = actorName ? description.indexOf(actorName) : -1;
-        if (index === -1)
-            return [{ text: description, isActor: false }];
+        // Hosszabb név előre: ha az egyik név a másik része (pl. "Anna" és "Anna Kiss"),
+        // a rövidebb ne hasítsa ketté a hosszabbat.
+        const names = [activity.actorName, activity.targetName]
+            .filter((name): name is string => !!name)
+            .sort((a, b) => b.length - a.length);
+
+        if (names.length === 0)
+            return [{ text: description, isName: false }];
 
         const parts: DescriptionPart[] = [];
+        let cursor = 0;
 
-        if (index > 0)
-            parts.push({ text: description.slice(0, index), isActor: false });
+        while (cursor < description.length) {
+            // A soron következő találat a legkorábbi név-előfordulás a kurzor után
+            let matchIndex = -1;
+            let matchName = '';
 
-        parts.push({ text: actorName, isActor: true });
+            for (const name of names) {
+                const index = description.indexOf(name, cursor);
+                if (index !== -1 && (matchIndex === -1 || index < matchIndex)) {
+                    matchIndex = index;
+                    matchName = name;
+                }
+            }
 
-        const rest = description.slice(index + actorName.length);
-        if (rest)
-            parts.push({ text: rest, isActor: false });
+            if (matchIndex === -1) break;
+
+            if (matchIndex > cursor)
+                parts.push({ text: description.slice(cursor, matchIndex), isName: false });
+
+            parts.push({ text: matchName, isName: true });
+            cursor = matchIndex + matchName.length;
+        }
+
+        // A maradék, illetve a régi sorok esetén a teljes szöveg, amiben nincs találat
+        if (cursor < description.length)
+            parts.push({ text: description.slice(cursor), isName: false });
 
         return parts;
     }
@@ -245,7 +271,7 @@
                     <div class="activity-content">
                         <div class="activity-row stack-480">
                             <p class="activity-description">
-                                {#each splitDescription(activity) as part}{#if part.isActor}<span class="actor-name">{part.text}</span>{:else}{part.text}{/if}{/each}
+                                {#each splitDescription(activity) as part}{#if part.isName}<span class="actor-name">{part.text}</span>{:else}{part.text}{/if}{/each}
                             </p>
                             <span class="activity-time">{formatDate(activity.createdAt)}</span>
                         </div>

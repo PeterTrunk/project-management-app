@@ -6,8 +6,12 @@ namespace ProjectManager.API.DTOs.ProjectTask
     {
         public MoveTaskDtoValidator()
         {
+            //A NotEmpty a default(TProperty)-hoz hasonlít, ami Guid? esetén NULL, nem Guid.Empty.
+            //Enélkül a csupa nullás azonosító átmenne a validáción, és csak a szolgáltatás
+            //404-ese állítaná meg - 400 helyett.
             RuleFor(d => d.ColumnId)
-                .NotEmpty().WithMessage("A cél oszlop megadása kötelező!");
+                .NotEmpty().WithMessage("A cél oszlop megadása kötelező!")
+                .NotEqual(Guid.Empty).WithMessage("A cél oszlop megadása kötelező!");
 
             RuleFor(d => d.RowVersion)
                 .GreaterThan(0u).WithMessage("Érvénytelen RowVersion!");

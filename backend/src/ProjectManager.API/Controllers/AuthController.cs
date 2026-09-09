@@ -143,6 +143,19 @@ namespace ProjectManager.API.Controllers
             DeleteRefreshTokenCookie();
             return Ok("2FA sikeresen aktiválva!");
         }
+        
+        [HttpPost("me/delete")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult> DeleteAccount([FromBody] DeleteAccountDto dto)
+        {
+            await _authService.DeleteAccountAsync(dto);
+            DeleteRefreshTokenCookie();
+            return Ok("A fiókodat töröltük!");
+        }
 
         //TOTP kikapcsolás
         [HttpPost("totp/disable")]

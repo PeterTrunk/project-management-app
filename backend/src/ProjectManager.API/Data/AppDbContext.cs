@@ -67,6 +67,8 @@ public class AppDbContext : DbContext
     public DbSet<TaskStatusHistory> TaskStatusHistories => Set<TaskStatusHistory>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<PresignedUrlLog> PresignedUrlLogs => Set<PresignedUrlLog>();
+    public DbSet<TermsVersion> TermsVersions => Set<TermsVersion>();
+    public DbSet<UserTermsAcceptance> UserTermsAcceptances => Set<UserTermsAcceptance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,6 +99,56 @@ public class AppDbContext : DbContext
                   .IsRequired();
 
             entity.HasIndex(u => u.Email)
+                  .IsUnique();
+        });
+
+        modelBuilder.Entity<TermsVersion>(entity =>
+        {
+            //Constraints
+            entity.Property(tv => tv.Version)
+                  .HasMaxLength(32)
+                  .IsRequired();
+
+            entity.Property(tv => tv.EffectiveFrom)
+                  .IsRequired();
+
+            entity.Property(tv => tv.CreatedAt)
+                  .IsRequired();
+
+            //Indexes
+            entity.HasIndex(tv => tv.Version)
+                  .IsUnique();
+
+            //A hatályos verzió keresése mindig EffectiveFrom szerint rendez
+            entity.HasIndex(tv => tv.EffectiveFrom);
+        });
+
+        modelBuilder.Entity<UserTermsAcceptance>(entity =>
+        {
+            //Constraints
+            entity.Property(a => a.UserId)
+                  .IsRequired();
+
+            entity.Property(a => a.TermsVersionId)
+                  .IsRequired();
+
+            entity.Property(a => a.AcceptedAt)
+                  .IsRequired();
+
+            entity.HasOne(a => a.User)
+                  .WithMany(u => u.TermsAcceptances)
+                  .HasForeignKey(a => a.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            //A dokumentumverziót nem lehet törölni, amíg bárki elfogadta:
+            //az elfogadás önmagában értelmetlen lenne a hivatkozott szöveg nélkül.
+            entity.HasOne(a => a.TermsVersion)
+                  .WithMany(tv => tv.Acceptances)
+                  .HasForeignKey(a => a.TermsVersionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            //Indexes
+            entity.HasIndex(a => new { a.UserId, a.TermsVersionId })
                   .IsUnique();
         });
 
@@ -589,6 +641,13 @@ public class AppDbContext : DbContext
 
             entity.Property(a => a.CreatedAt)
                   .IsRequired();
+
+            //A célszemély törlése ne vigye magával a projekt előzményeit: a sor megmarad,
+            //a név pedig a User anonimizálásából következően "Törölt felhasználó" lesz.
+            entity.HasOne(a => a.TargetUser)
+                  .WithMany()
+                  .HasForeignKey(a => a.TargetUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
             //Indexes
             entity.HasIndex(a => new { a.ProjectId, a.CreatedAt });

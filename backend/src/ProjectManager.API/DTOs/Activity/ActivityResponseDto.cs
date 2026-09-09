@@ -4,6 +4,7 @@
     {
         public Guid Id { get; set; }
         public string ActorName { get; set; } = string.Empty;
+        public string? TargetName { get; set; }
         public string EntityType { get; set; } = string.Empty;
         public Guid EntityId { get; set; }
         public string Action { get; set; } = string.Empty;

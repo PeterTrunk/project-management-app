@@ -44,7 +44,6 @@ namespace ProjectManager.API.Services.GitService
                     CommitUrl = cl.CommitUrl,
                     Message = cl.Message,
                     AuthorName = cl.AuthorName,
-                    AuthorEmail = cl.AuthorEmail,
                     CommittedAt = cl.CommittedAt
                 })
                 .ToListAsync();
@@ -115,7 +114,7 @@ namespace ProjectManager.API.Services.GitService
                     "Commit",
                     taskId,
                     "Linked",
-                    $"{_currentUserService.DisplayName} manuálisan kapcsolta a {commit.CommitSha[..7]} commitot a taskhoz"
+                    $"{{actor}} manuálisan kapcsolta a {commit.CommitSha[..7]} commitot a taskhoz"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -173,7 +172,7 @@ namespace ProjectManager.API.Services.GitService
                     "PullRequest",
                     taskId,
                     "Linked",
-                    $"{_currentUserService.DisplayName} manuálisan kapcsolta a #{pr.PrNumber} PR-t a taskhoz"
+                    $"{{actor}} manuálisan kapcsolta a #{pr.PrNumber} PR-t a taskhoz"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

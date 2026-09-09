@@ -2,11 +2,11 @@
     import { createEventDispatcher } from 'svelte';
     import { authStore, login } from '../stores/authStore';
     import { changePasswordAsync, updateProfileAsync, resendVerificationAsync, meAsync } from '../api/authApi';
-    import { setupTotpAsync, verifyTotpAsync, disableTotpAsync } from '../api/authApi';
+    import { setupTotpAsync, verifyTotpAsync, disableTotpAsync, deleteAccountAsync } from '../api/authApi';
     import { tokenStore } from '../stores/tokenStore';
 
     import { themeStore, toggleTheme } from '../stores/themeStore';
-    import { X, User, KeyRound, Pencil, Sun, Moon, ShieldCheck, Copy, Check, ShieldAlert } from 'lucide-svelte';
+    import { X, User, KeyRound, Pencil, Sun, Moon, ShieldCheck, Copy, Check, ShieldAlert, Trash2, TriangleAlert } from 'lucide-svelte';
     import QRCode from 'qrcode';
 
     import { notify } from '../stores/notificationStore';
@@ -36,7 +36,21 @@
 
     let email = '';
 
-    let activeView = 'profile'; // 'profile' | 'password' | 'changeprofile' | 'totp'
+    let activeView = 'profile'; // 'profile' | 'password' | 'changeprofile' | 'totp' | 'delete'
+
+    //Fióktörlés. A begépelt megerősítés a véletlen kattintás ellen véd: a jelszó
+    //begyakorlott mozdulat lehet, egy kiírandó szó nem.
+    const DELETE_CONFIRM_WORD = 'TÖRLÉS';
+    let deletePassword = '';
+    let deleteTotpToken = '';
+    let deleteConfirmWord = '';
+    let deleting = false;
+
+    $: canDeleteAccount =
+        !deleting &&
+        deletePassword.length > 0 &&
+        deleteConfirmWord.trim() === DELETE_CONFIRM_WORD &&
+        (!isTotpEnabled || deleteTotpToken.length === 6);
 
     let isTotpEnabled = false;
     let isEmailVerified = false;
@@ -170,6 +184,29 @@
         }
     }
 
+    async function handleDeleteAccount() {
+        error = '';
+        success = '';
+        deleting = true;
+        try {
+            await deleteAccountAsync(deletePassword, isTotpEnabled ? deleteTotpToken : undefined);
+            deletePassword = '';
+            deleteTotpToken = '';
+            deleteConfirmWord = '';
+            //A fiók megszűnt, tehát a munkamenetnek is le kell zárulnia
+            dispatch('sessionInvalidated', {
+                reason: 'A fiókodat töröltük. Köszönjük, hogy használtad a szolgáltatást!'
+            });
+        } catch (e: any) {
+            //409 esetén az üzenet felsorolja a tulajdonolt projekteket, amiket előbb rendezni kell
+            const message = e.response?.data ?? e.message ?? 'Hiba történt a fiók törlésekor!';
+            error = message;
+            notify.error(message);
+        } finally {
+            deleting = false;
+        }
+    }
+
     async function handleResendVerification() {
         try {
             await resendVerificationAsync(email);
@@ -218,6 +255,12 @@
                 </button>
                 <button class:active={activeView === 'totp'} on:click={() => switchView('totp')}>
                     <ShieldCheck size={15} /> Biztonság
+                </button>
+                <button
+                    class="danger-nav"
+                    class:active={activeView === 'delete'}
+                    on:click={() => switchView('delete')}>
+                    <Trash2 size={15} /> Fiók törlése
                 </button>
                 <button class="icon-btn" on:click={toggleTheme} title="Téma váltás">
                     {#if currentTheme === 'dark'}
@@ -363,6 +406,73 @@
                             <p id="success">{success}</p>
                         {/if}
                     </div>
+                {:else if activeView === 'delete'}
+                    <h1>Fiók törlése</h1>
+
+                    <div class="danger-box">
+                        <p class="danger-title">
+                            <TriangleAlert size={16} /> Ez a művelet végleges
+                        </p>
+                        <p>
+                            A törléssel a neved, az e-mail címed, a jelszavad és a kétfaktoros
+                            hitelesítés kulcsa <strong>véglegesen megsemmisül</strong>. A fiókod
+                            nem állítható vissza, és nem tudsz vele többé belépni.
+                        </p>
+                        <p>
+                            A projektekben végzett munkád nyoma megmarad, de többé nem lesz
+                            hozzád köthető: mindenhol a &bdquo;Törölt felhasználó&rdquo;
+                            megjelölés lép a helyedbe. Erre azért van szükség, mert a projekt
+                            előzményei a többi tag munkájához is hozzátartoznak.
+                        </p>
+                        <p>
+                            Ha bármelyik projekt tulajdonosa vagy, előbb azokat kell törölnöd.
+                        </p>
+                    </div>
+
+                    <form on:submit|preventDefault={handleDeleteAccount}>
+                        <label for="delete-password">Jelenlegi jelszó</label>
+                        <input
+                            id="delete-password"
+                            type="password"
+                            autocomplete="current-password"
+                            bind:value={deletePassword}
+                        />
+
+                        {#if isTotpEnabled}
+                            <label for="delete-totp">Kétfaktoros kód</label>
+                            <input
+                                id="delete-totp"
+                                type="text"
+                                inputmode="numeric"
+                                maxlength="6"
+                                autocomplete="one-time-code"
+                                placeholder="6 jegyű kód"
+                                bind:value={deleteTotpToken}
+                            />
+                        {/if}
+
+                        <label for="delete-confirm">
+                            Írd be, hogy <strong>{DELETE_CONFIRM_WORD}</strong> a megerősítéshez
+                        </label>
+                        <input
+                            id="delete-confirm"
+                            type="text"
+                            autocomplete="off"
+                            bind:value={deleteConfirmWord}
+                        />
+
+                        <button type="submit" class="danger-btn" disabled={!canDeleteAccount}>
+                            {#if deleting}
+                                Törlés folyamatban...
+                            {:else}
+                                Fiókom végleges törlése
+                            {/if}
+                        </button>
+                    </form>
+
+                    {#if error}
+                        <p id="failed">{error}</p>
+                    {/if}
                 {/if}
             </div>
         </div>
@@ -608,4 +718,53 @@
     
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; }
+
+    /* Fióktörlés */
+
+    .danger-nav {
+        color: var(--accent-red);
+    }
+
+    .danger-box {
+        background: var(--accent-red-bg);
+        border: 1px solid var(--accent-red);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        margin-bottom: 1.25rem;
+        font-size: var(--font-size-sm);
+        line-height: 1.6;
+        color: var(--text-secondary);
+    }
+
+    .danger-box p { margin: 0 0 0.75rem; }
+    .danger-box p:last-child { margin-bottom: 0; }
+    .danger-box strong { color: var(--text-primary); }
+
+    .danger-title {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--accent-red);
+        font-weight: 600;
+    }
+
+    .danger-btn {
+        background: var(--accent-red);
+        border: 1px solid var(--accent-red);
+        color: #fff;
+        padding: 0.6rem 1rem;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-size: 0.9rem;
+        margin-top: 0.75rem;
+    }
+
+    .danger-btn:hover:not(:disabled) {
+        filter: brightness(1.1);
+    }
+
+    .danger-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
 </style>

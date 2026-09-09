@@ -57,9 +57,14 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TargetUserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ActorId");
+
+                    b.HasIndex("TargetUserId");
 
                     b.HasIndex("EntityType", "EntityId");
 
@@ -314,6 +319,9 @@ namespace ProjectManager.API.Migrations
 
                     b.Property<string>("AccessToken")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("AuthorityConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -922,6 +930,33 @@ namespace ProjectManager.API.Migrations
                     b.ToTable("TaskStatusHistories");
                 });
 
+            modelBuilder.Entity("ProjectManager.API.Model.TermsVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EffectiveFrom");
+
+                    b.HasIndex("Version")
+                        .IsUnique();
+
+                    b.ToTable("TermsVersions");
+                });
+
             modelBuilder.Entity("ProjectManager.API.Model.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -929,6 +964,9 @@ namespace ProjectManager.API.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DisplayName")
@@ -943,6 +981,9 @@ namespace ProjectManager.API.Migrations
 
                     b.Property<string>("EmailVerificationToken")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("EmailVerificationTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -991,6 +1032,31 @@ namespace ProjectManager.API.Migrations
                     b.ToTable("UserRoles");
                 });
 
+            modelBuilder.Entity("ProjectManager.API.Model.UserTermsAcceptance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TermsVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermsVersionId");
+
+                    b.HasIndex("UserId", "TermsVersionId")
+                        .IsUnique();
+
+                    b.ToTable("UserTermsAcceptances");
+                });
+
             modelBuilder.Entity("ProjectManager.API.Model.Activity", b =>
                 {
                     b.HasOne("ProjectManager.API.Model.User", "Actor")
@@ -1004,9 +1070,16 @@ namespace ProjectManager.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ProjectManager.API.Model.User", "TargetUser")
+                        .WithMany()
+                        .HasForeignKey("TargetUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Actor");
 
                     b.Navigation("Project");
+
+                    b.Navigation("TargetUser");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.Attachment", b =>
@@ -1361,6 +1434,25 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ProjectManager.API.Model.UserTermsAcceptance", b =>
+                {
+                    b.HasOne("ProjectManager.API.Model.TermsVersion", "TermsVersion")
+                        .WithMany("Acceptances")
+                        .HasForeignKey("TermsVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProjectManager.API.Model.User", "User")
+                        .WithMany("TermsAcceptances")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TermsVersion");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ProjectManager.API.Model.Board", b =>
                 {
                     b.Navigation("ColumnDefinitions");
@@ -1434,6 +1526,11 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("ProjectTasks");
                 });
 
+            modelBuilder.Entity("ProjectManager.API.Model.TermsVersion", b =>
+                {
+                    b.Navigation("Acceptances");
+                });
+
             modelBuilder.Entity("ProjectManager.API.Model.User", b =>
                 {
                     b.Navigation("Assignments");
@@ -1445,6 +1542,8 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("ProjectMemberships");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("TermsAcceptances");
 
                     b.Navigation("UploadedFiles");
 

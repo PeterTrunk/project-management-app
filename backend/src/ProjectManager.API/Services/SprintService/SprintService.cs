@@ -157,7 +157,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     "Activated",
-                    $"{_currentUserService.DisplayName} aktiválta a {sprint.Name} sprintet"
+                    $"{{actor}} aktiválta a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -364,7 +364,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     SprintStates.Completed,
-                    $"{_currentUserService.DisplayName} lezárta a {sprint.Name} sprintet"
+                    $"{{actor}} lezárta a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -425,7 +425,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     "Created",
-                    $"{_currentUserService.DisplayName} létrehozta a {sprint.Name} sprintet"
+                    $"{{actor}} létrehozta a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -485,7 +485,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     "Deleted",
-                    $"{_currentUserService.DisplayName} törölte a {sprint.Name} sprintet"
+                    $"{{actor}} törölte a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -680,7 +680,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     "Replanned",
-                    $"{_currentUserService.DisplayName} visszatervezte a {sprint.Name} sprintet"
+                    $"{{actor}} visszatervezte a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -749,7 +749,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Sprint",
                     sprint.Id,
                     "Updated",
-                    $"{_currentUserService.DisplayName} módosította a {sprint.Name} sprintet"
+                    $"{{actor}} módosította a {sprint.Name} sprintet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
@@ -845,7 +845,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Task",
                     task.Id,
                     "SprintAssigned",
-                    $"{_currentUserService.DisplayName} sprinthez rendelte a {task.TaskKey} taskot"
+                    $"{{actor}} sprinthez rendelte a {task.TaskKey} taskot"
                 );
                 await _hubContext.Clients
                     .Group($"project-{task.ProjectId}")
@@ -964,7 +964,7 @@ namespace ProjectManager.API.Services.SprintService
                     "Task",
                     task.Id,
                     "SprintAssigned",
-                    $"{_currentUserService.DisplayName} visszatette a {task.TaskKey} taskot a backlogba"
+                    $"{{actor}} visszatette a {task.TaskKey} taskot a backlogba"
                 );
                 await _hubContext.Clients
                     .Group($"project-{task.ProjectId}")
@@ -1008,7 +1008,6 @@ namespace ProjectManager.API.Services.SprintService
                         CommitUrl = cl.CommitUrl,
                         Message = cl.Message,
                         AuthorName = cl.AuthorName,
-                        AuthorEmail = cl.AuthorEmail,
                         CommittedAt = cl.CommittedAt
                     })
                     .ToList(),

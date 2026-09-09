@@ -3991,6 +3991,579 @@ A `connect()` catch ága a könyvtár üzenete helyett saját szöveget ad, az e
 a konzolba kerül. Ez a kézi újracsatlakozás gombnál a leggyakoribb eset: ha a szerver még nem
 él, a felhasználó most már értelmezhető visszajelzést kap.
 
+### Tesztlefedettség 1. etap: middleware, biztonsági segédosztályok, validátorok
+
+**Probléma:**
+A `backend/tests/ProjectManager.Tests` projektben 68 teszt volt 4 fájlban, és az utolsó
+tesztcommit 257 committal ezelőtt született. Azóta 187 backend fájl változott: a teljes
+biztonsági refaktor - az IDOR project-scoping, a tipizált kivételek, a jogosultsági réteg
+fail-closed javítása - **nulla teszttel** ment ki.
+
+Ennél rosszabb volt, hogy a meglévő fedettség egy része már nem azt mérte, amit állított:
+a `CreateSprintDtoValidator` időközben `State` szabályt kapott, a `Name` felső határa pedig
+120-ról 80-ra csökkent. A teszt 121 karakterrel próbálkozott, tehát zöld volt anélkül, hogy
+a valódi határt megnézte volna, és a `State` szabályra egyáltalán nem volt teszt.
+
+**Megoldás:**
+Az etap szándékosan nem igényel infrastruktúrát: nincs benne Docker, adatbázis és hálózat,
+így a CI-ban minden pusholásnál lefut. A készlet 68-ról **554 tesztre** nőtt, a futásidő ~0,2 mp.
+
+- `GlobalExceptionHandlerMiddleware` - a hibaüzenet-szivárgás utolsó védvonala. Az `AppException`
+  leszármazottak a saját státuszkódjukkal és üzenetükkel mennek ki, minden más 500-at és
+  általános szöveget kap. Külön állítás arra, hogy az eredeti `ex.Message` és a stack trace
+  **nem jelenik meg** a válasz törzsében. Lefedve a `Response.HasStarted` -> `Abort()` ág is,
+  saját `IHttpResponseFeature`-rel (a `DefaultHttpContext` beépített feature-je mindig hamisat ad).
+- `ProjectRoles` - a jogosultsági réteg alapja. `RankOf(null)` és ismeretlen szerepkör -1-et ad,
+  az írásmód számít, és az ismeretlen rang a legalacsonyabb ismert szerepkör alatt marad.
+  Ez zárja a `-1 >= -1` típusú lyukat. Plusz: az `Owner` nincs a kiosztható szerepkörök között.
+- `Common/Exceptions` - a státuszkód-szerződés (400/403/404/409/429) rögzítése. Egy reflexiós
+  teszt elbukik, ha új `AppException` leszármazott kerül be státuszkód-teszt nélkül.
+- `EncryptionService` - AES-GCM oda-vissza, `enc:v1:` prefix, prefix nélküli (legacy) érték
+  visszafejtése, 500 titkosítás egyike sem ismétlődik (nonce), hamisított nonce/ciphertext/tag
+  és rossz kulcs elutasítása, hibás kulcshossz a konstruktorban.
+- `SecureTokenGenerator` - URL-biztos ábécé 200 futáson át, dekódolt bájthossz, egyediség.
+- Mind a **33 validátor**, határértékekkel (a korábbi 3 helyett). A `CreateSprintDtoValidator`
+  elavult tesztjei javítva: 80/81 határeset, `MinimumLength(3)`, és a hiányzó `State` szabály.
+- `ValidatorCoverageTests` - névkonvenció alapján ellenőrzi, hogy minden validátorhoz tartozik
+  tesztosztály. Egy újonnan felvett validátor így nem maradhat észrevétlenül lefedetlen.
+
+**Amit a tesztek írása kimért:**
+
+A `MoveTaskDtoValidator.ColumnId` mezője `Guid?` típusú, és `NotEmpty()` szabály van rajta.
+A FluentValidation a `default(TProperty)`-hoz hasonlít, ami `Guid?` esetén **null**, nem
+`Guid.Empty` - a csupa nullás azonosító tehát átmegy a validáción. (A `ColumnOrderDto.Id` nem
+nullozható `Guid`, ott ugyanez a szabály helyesen fog.) A gyakorlati következmény kicsi: az
+ilyen kérés nem 400-zal, hanem a szolgáltatás 404-esével áll meg. A teszt a **tényleges**
+viselkedést rögzíti, magyarázó megjegyzéssel - a javítás éles kódot érintene, ezért külön döntés.
+
+**Csomaghigiénia:**
+A `FluentValidation` eddig csak tranzitívan, az API projekten át érkezett, pedig a tesztek
+közvetlenül használják - most explicit. A middleware-teszt `HttpContext`-et épít, ezért a
+projekt `FrameworkReference`-ként deklarálja a `Microsoft.AspNetCore.App`-ot ahelyett, hogy a
+web-projekten átfolyó hivatkozásra támaszkodna.
+
+A `Microsoft.EntityFrameworkCore.Relational` "felesleges" hivatkozásnak indult, de a törlése
+MSB3277 verzióütközést hozott elő, ezért indoklással a helyén maradt: az API projekt a
+Relational 10.0.3-at az `EntityFrameworkCore.Design`-on át kapja, ami `PrivateAssets="all"`,
+tehát a teszt-projektbe nem folyik át - ott a Npgsql 10.0.0-s Relationalja jönne, a
+`ProjectManager.API.dll` viszont 10.0.3-ra hivatkozik.
+
+### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
+
+**Probléma:**
+Egy külső szempár szóvá tette, hogy hiányoznak a felhasználási feltételek. A felderítés ennél
+többet talált: a jogilag **kötelező** dokumentum nem az ÁSZF, hanem az **adatkezelési
+tájékoztató** (GDPR 13. cikk) - és egyik sem volt meg, a `frontend/src`-ben nem volt semmilyen
+jogi oldal. Az ÁSZF a szolgáltatót védi (szerződéses), a tájékoztató hiánya viszont önmagában
+jogsértés egy nyilvánosan elérhető, regisztrációt kínáló szolgáltatásnál.
+
+**Megoldás:**
+Két új, bejelentkezés nélkül elérhető oldal (`/privacy`, `/terms`), egy közös
+`LegalDocument.svelte` elrendezésre építve. A közös komponens adja a fejlécet, a
+verzió-kijelzést és a dokumentumok tipográfiáját; a tartalom sloton át érkezik, ezért a
+tipográfiai szabályok `:global()` alakúak, a `.legal-content` osztályra szűkítve.
+
+A verziót és a hatálybalépés napját egyetlen hely tárolja (`lib/legal.ts`), mert a következő
+etap backend `TermsVersion` táblája ugyanerre az értékre hivatkozik. Ha a két hely elcsúszik,
+a felhasználók elfogadása egy olyan szövegre mutatna, amit már senki nem lát.
+
+A tartalom nem sablonból készült, hanem a kód tényleges adatköreiből:
+
+- **Adatkörök táblázata** jogalapokkal: fiókadat, munkamenet-adatok és projekttartalom
+  szerződés teljesítése (6(1)b); tevékenységnapló, git integráció és technikai naplózás
+  jogos érdek (6(1)f).
+- **IP cím**: a felderítés kimutatta, hogy az `AuthService` a kérésszám-korlátozáshoz és a
+  figyelmeztető naplóbejegyzésekhez ténylegesen kezel IP címet - ez bekerült a tájékoztatóba.
+- **Git integráció külön fejezetben**, a GDPR 14. cikke alapján. A commit szerzők nem
+  felhasználók, ezért a jogalap nem hozzájárulás, hanem jogos érdek: a szerzőség feltüntetése
+  a verziókövetés rendeltetése, az adat a szerző saját közreműködése folytán már a
+  repositoryban van. Az egyedi értesítés aránytalan erőfeszítés (14. cikk (5) b), ezért a
+  nyilvános tájékoztató szolgál értesítésként.
+- **Adatfeldolgozók**: csak a valóban külső szolgáltatók szerepelnek. A `docker-compose.prod.yml`
+  alapján a **MinIO és a Seq saját üzemeltetésű** ugyanazon a gépen, tehát nem adatfeldolgozók -
+  marad a német tárhelyszolgáltató, a Resend (Írország) és a Backblaze B2 (EU). Mindegyik EGT-n
+  belül, tehát harmadik országbeli adattovábbítás nincs.
+- **Sütik**: kimondottan rögzítve, hogy nincs analitikai vagy követő süti, ezért nem kérünk
+  süti-hozzájárulást. Csak a `HttpOnly` refresh token süti és a funkcionális `localStorage`
+  (téma, bezárt sávok, függőben lévő meghívó) van. Ezt jobb kimondani, mint később megvédeni.
+- **Adatbiztonság** (32. cikk): bcrypt, AES-GCM, TOTP, rate limiting, HTTPS, a hibaüzenetekből
+  kivezetett technikai részletek, projektszintű jogosultságkezelés. Ez már mind megvolt, csak
+  le kellett írni.
+
+Az ÁSZF rövid, mert a szolgáltatás ingyenes: nincs elállási jog, panaszkezelési rend vagy
+díjvisszatérítés. Kimondja, hogy a szolgáltatás **szakdolgozati, oktatási célból** készült és
+"ahogy van" állapotban, garancia nélkül érhető el - ez jelentősen erősíti a
+felelősségkorlátozást. A felhasználó tartalma a felhasználóé; a szolgáltató csak a működéshez
+szükséges technikai engedélyt kapja. Külön pont rögzíti, hogy a mentés az üzemeltetést
+szolgálja, nem a felhasználó adatmentését helyettesíti.
+
+**Kitöltendő helyek:** az adatkezelő neve, címe, kapcsolattartási e-mail címe és a
+tárhelyszolgáltató neve helyőrzőként szerepel, feltűnő sárga kiemeléssel (`.todo` osztály),
+hogy éles indulás előtt ne maradjon bent.
+
+**Egy CSS hiba javítva közben:** a `LegalDocument` eredetileg `width: 100vw`-t kapott a
+meglévő `.auth-container` mintájára. Az auth oldalak nem görgethetők, ezek viszont igen - a
+`100vw` a függőleges görgetősávot is beleszámítja, amitől fölösleges vízszintes csúszka jelent
+volna meg. `width: 100%`-ra cserélve.
+
+### Jogi megfelelés 2. etap: a feltételek elfogadásának rögzítése
+
+**Probléma:**
+A dokumentumok elkészültek, de senki nem fogadta el őket. A GDPR 7. cikk (1) bekezdése
+elszámoltathatóságot ír elő: **bizonyítani** kell tudni, hogy a felhasználó elfogadta a
+feltételeket. Ez a tény **visszamenőleg nem állítható elő** - a korábban regisztráltakról soha
+nem lesz bizonyíték, ezért volt ez a legsürgősebb etap.
+
+Fontos fogalmi elhatárolás: az ÁSZF elfogadása **nem GDPR-hozzájárulás**, hanem szerződéskötés
+(6. cikk (1) b), a tájékoztató pedig tájékoztatás, nem consent. Amit rögzítünk, az ez:
+*"a felhasználó T időpontban elfogadta az X verziót."*
+
+**Megoldás - séma:**
+Két új entitás. A `TermsVersion` egy közzétett dokumentumváltozat (`Version`, `EffectiveFrom`),
+a `UserTermsAcceptance` pedig egy konkrét elfogadás (`UserId`, `TermsVersionId`, `AcceptedAt`).
+
+Külön tábla és nem két oszlop a `User`-en, mert egy felhasználó idővel több verziót is
+elfogadhat, és az elszámoltathatósághoz a **történetre** van szükség, nem csak az utolsó
+állapotra. Így a későbbi újraelfogadtató folyamat séma-változtatás nélkül ráépül.
+
+Két döntés, ami eltér az eredeti tervtől:
+
+- **Nincs `DocumentType` oszlop.** A tájékoztató és az ÁSZF közös verziót kap, mert a felületen
+  egyetlen jelölőnégyzet vonatkozik mindkettőre - a külön verziózás olyan függetlenséget
+  sugallna, ami a felhasználói élményben nem létezik.
+- **Nincs "aktív" jelző.** A hatályos verzió mindig a legkésőbbi olyan sor, amelynek az
+  `EffectiveFrom` értéke már elmúlt. Egy flag elavulhatna; így az invariáns nem romolhat el, és
+  egy jövőbeli verzió előre felvehető.
+
+A `TermsVersion` törlését a `UserTermsAcceptance` felől `Restrict` tiltja: az elfogadás
+értelmetlen lenne a hivatkozott szöveg nélkül.
+
+**Megoldás - a kliens visszaküldi a verziót:**
+A `RegisterDto` nem csak egy `AcceptedTerms` boolt kapott, hanem az `AcceptedTermsVersion`
+mezőt is: a felület visszaküldi azt a verziót, amit **ténylegesen megjelenített**. A szerver
+csak akkor fogadja el, ha az a hatályos - különben "töltsd újra az oldalt" üzenettel utasítja
+el. Enélkül egy régóta nyitva hagyott, gyorsítótárazott felület olyan szövegre hivatkozó
+elfogadást rögzíthetne, amit a felhasználó nem is látott, és pont az a bizonyíték romlana el,
+amiért az egész funkció készült.
+
+**Megoldás - egy tranzakció:**
+Az elfogadás a `User` navigációs gyűjteményén át kerül felvételre, tehát egyetlen
+`SaveChangesAsync` hívásban, egy tranzakcióban keletkezik a felhasználóval. Elfogadás nélküli
+fiók még részleges hiba esetén sem jöhet létre.
+
+**Megoldás - seed:**
+A `SeedTermsVersionAsync` a `MigrateWebhookSecretsAsync` mintájára indításkor fut, és felveszi
+a kódban rögzített hatályos verziót, ha még nincs. Szándékosan nem migrációs `InsertData`: a
+verzió a kódhoz tartozik, így egy visszaállított vagy kézzel ürített adatbázisban is helyreáll.
+Több replika párhuzamos indulását a `Version` egyedi indexe rendezi - a vesztes ág nem hiba.
+
+Ha nincs hatályos verzió az adatbázisban, a regisztráció **elutasít**, nem pedig elfogadás
+nélküli fiókot hoz létre.
+
+**Verzió két helyen:**
+A `LegalDocuments.CurrentVersion` (backend) és a `LEGAL_VERSION` (`frontend/src/lib/legal.ts`)
+értékének meg kell egyeznie. Mindkét helyen kereszthivatkozó megjegyzés áll; a kliens által
+visszaküldött verzió ellenőrzése pedig azonnal kibuktatja, ha elcsúsznak.
+
+**Felület:**
+A regisztrációs űrlapon **alapból kipipálatlan** jelölőnégyzet, két linkkel a dokumentumokra
+(új fülre nyílnak, hogy a kitöltött űrlap ne vesszen el). A gomb letiltva pipa nélkül - de ez
+kényelmi jelzés, nem védelem: a kikényszerítés a szerveren történik, mert az API közvetlenül
+is hívható.
+
+**Tesztek:** a `RegisterDtoValidatorTests` hat új esettel bővült, köztük a hiányzó mező
+(a bool alapértéke `false`) elutasításával. A készlet 554-ről 560 tesztre nőtt.
+
+### Jogi megfelelés 3. etap: a git integráció harmadik felekre vonatkozó adatkezelése
+
+**Probléma:**
+Két, egymáshoz tartozó hiány. Egyrészt a `CommitCard.svelte` kiírta a commit szerzőjének
+e-mail címét, pedig semmi nem épült rá - harmadik személy személyes adata jelent meg a
+felületen cél nélkül, ami az adattakarékosság elvébe (GDPR 5. cikk (1) c) ütközik. Másrészt a
+repository csatlakoztatásakor semmi nem jelezte, hogy a rendszer ettől kezdve eltárolja a
+beérkező commitok szerzőinek nevét és e-mail címét.
+
+A két tétel eredetileg külön etap volt, de ugyanannak a történetnek a két fele - mit teszünk a
+commit szerzők adataival, és milyen nyilatkozat mellett gyűjtjük őket egyáltalán -, ezért
+összevonva készült el.
+
+**Megoldás - a szerző e-mail címének kivezetése a felületről:**
+Az **adatbázis-oszlop marad**: a cél a commit-task attribúció, és az e-mail a git világában a
+szerző kanonikus azonosítója, amivel a tervezett felhasználó-összekapcsolás elvégezhető. Amíg
+az a funkció nincs kész, a böngészőbe kiküldeni fölösleges. A célt a `CommitLink.AuthorEmail`
+XML-kommentje rögzíti, hogy a döntés a kód mellett maradjon.
+
+A felderítés egy pontatlanságot javított a terven: **nem egy, hanem három** helyen képződik le
+a DTO-ra - `GitService.cs`, `TaskService.cs` és `SprintService.cs`. Csak az elsőt javítva a
+task- és sprint-részletek válaszaiban bent maradt volna.
+
+A SignalR események **nem voltak érintettek**: a `PrLinked` és az `ActivityCreated` payload
+csak `authorName`-et hordoz. Ez ellenőrzött tény, nem feltételezés.
+
+**Megoldás - jogosultsági nyilatkozat:**
+A `CreateIntegrationModal` űrlapjára alapból kipipálatlan jelölőnégyzet került, amely kimondja,
+hogy a felvevő jogosult a csatlakoztatásra, és tudomásul veszi a szerzői adatok tárolását.
+A `CreateIntegrationDto.AuthorityConfirmed` mezőt a validátor `.Equal(true)` szabálya
+kényszeríti ki - a gomb letiltása csak kényelmi jelzés, mert az API közvetlenül is hívható.
+
+Az `Integration.AuthorityConfirmedAt` a nyilatkozat **időpontját** tárolja, nem egy elhajított
+boolt. Nullozható, mert a mező bevezetése előtt felvett integrációkra visszamenőleg nem
+állítható elő nyilatkozat.
+
+**Ez nem hozzájárulás.** A repository kezelője nem nyilatkozhat a commit szerzők nevében - a
+jogalap változatlanul a jogos érdek (6. cikk (1) f): a szerzőség feltüntetése a verziókövetés
+rendeltetése, és az adat a szerző saját közreműködése folytán már a repositoryban van. A
+jelölőnégyzet szavatosság és átláthatóság. Egy "hozzájárulás" címke rosszabb lenne a
+hiányánál, mert olyan jogalapot állítana, amit az érintett nem tud visszavonni.
+
+Az adatkezelési tájékoztató 3. pontja már erre a szövegre épült, és arra is, hogy integrációt
+csak tulajdonos vagy adminisztrátor vehet fel: ezt az `IntegrationController`
+`PolicyNames.ProjectAdmin` házirendje ténylegesen kikényszeríti, tehát a tájékoztató állítása
+ellenőrzötten pontos.
+
+**Tesztek:** a `CreateIntegrationDtoValidatorTests` négy új esettel bővült. A készlet 560-ról
+564 tesztre nőtt. A meglévő esetek nem törtek el, mert tulajdonságra szűkített állításokat
+használnak.
+
+### Jogi megfelelés 4. etap: lejárt tokenek és elévült naplósorok takarítása
+
+**Probléma:**
+A `CleanupOptions` egyetlen dolgot takarított: az árva (meg nem erősített) feltöltéseket. Minden
+más örökre bent maradt - a lejárt és visszavont frissítő tokenek, a felhasznált
+jelszó-visszaállító tokenek, és a megerősített feltöltés-naplósorok. Az első kettő **titok**
+(a `Token` mező önmagában hitelesítő adat), a harmadik pedig fájlneveket köt felhasználókhoz.
+
+A GDPR nem ad konkrét határidőt, de a korlátlan megőrzés nem védhető álláspont - és az 1. etapban
+közzétett adatkezelési tájékoztató konkrét megőrzési időket **vállal**. Enélkül olyat állítanánk,
+ami nem igaz.
+
+**Megoldás:**
+Új `TokenCleanupJob` az `OrphanCleanupJob` mintájára: `PeriodicTimer`, induláskori azonnali
+futás (a `PeriodicTimer` az első tickig végigvárná a teljes intervallumot), ciklusonkénti
+scope, és `RunCleanupSafelyAsync` try/catch. Ez utóbbi azért kell, mert a
+`BackgroundServiceExceptionBehavior` alapértelmezése `StopHost`: egy átmeneti PostgreSQL-hiba
+különben a teljes API-replikát leállítaná.
+
+| Adat | Szabály | Miért |
+|---|---|---|
+| `RefreshToken` | lejárat után 30 nappal, a visszavontak is | Visszaélés-vizsgálathoz még hasznos; a visszavonás ténye is adat, amíg a token elvileg élhetne |
+| `PasswordResetToken` | felhasznált vagy lejárt → haladék nélkül | Nincs másodlagos értéke, a `Token` viszont titok |
+| `PresignedUrlLog` (megerősített) | 90 nap | A meg nem erősítetteket az `OrphanCleanupJob` viszi a MinIO-fájllal együtt |
+
+A törlések `ExecuteDeleteAsync`-kel, halmazműveletként futnak: nincs értelme betölteni a
+sorokat, hogy aztán egyesével töröljük. A megerősített naplósorok törlése biztonságos -
+ellenőrizve, hogy az `Attachment` nem hivatkozik rájuk idegen kulccsal, és a
+`ConfirmUploadAsync` után egyetlen kód sem olvas megerősített naplósort.
+
+Négy új környezeti változó, mind alapértékkel (a meglévő `ORPHAN_CLEANUP_INTERVAL_HOURS`
+mintájára ezek sincsenek a `.env.example`-ben): `TOKEN_CLEANUP_INTERVAL_HOURS` (6),
+`REFRESH_TOKEN_RETENTION_DAYS` (30), `CONFIRMED_UPLOAD_LOG_RETENTION_DAYS` (90).
+
+**Eltérés a tervtől - az e-mail megerősítő token:**
+A terv negyedik sora az lett volna, hogy a `User.EmailVerificationToken` lejárt vagy már
+megerősített fióknál nullázódjon. Ez **így nem valósítható meg**, két okból:
+
+- a `VerifyEmailAsync` (`AuthService.cs:598`) **már ma nullázza** a tokent a megerősítéskor,
+  tehát megerősített fióknál nincs mit takarítani;
+- a mezőnek **nincs lejárata** - a `User`-en egyetlen sztring, semmi több. A "lejárt" eset
+  tehát nem eldönthető.
+
+A megmaradó valós eset egy soha meg nem erősített fiók, amelynél a token örökre él. Ez egy
+álló hitelesítő adat, de a nullázása **némán elrontaná** a felhasználó kiküldött
+megerősítő linkjét, anélkül hogy bármi jelezné neki. A helyes megoldás egy lejárati mező és
+egy "kérek új linket" folyamat - az viszont funkció, nem takarítás, ezért külön döntés.
+
+### Jogi megfelelés 5. etap: fióktörlés anonimizálással
+
+**Probléma:**
+A GDPR 17. cikke szerinti törlési jogot nem lehetett gyakorolni: a `DeleteAccount` keresés
+nulla találatot adott, egy törlési kérést csak kézi SQL-lel lehetett volna teljesíteni, 30 napos
+határidővel. Az 1. etapban közzétett tájékoztató ráadásul **konkrétan leírja**, mi történik
+törléskor - enélkül olyat állítottunk volna, ami nem működik.
+
+**Megoldás - anonimizálás, nem sortörlés:**
+A `UserId` sok táblában idegen kulcs, és más felhasználók projekt-előzményeit nem írhatjuk át:
+azok a projekt többi tagjának munkájához is hozzátartoznak. A GDPR (26) preambulumbekezdése
+szerint az anonim adat kikerül a rendelet hatálya alól, feltéve hogy az anonimizálás
+**visszafordíthatatlan**.
+
+| Mező | Új érték |
+|---|---|
+| `Email` | `deleted-{Id}@invalid.local` - az `.invalid` fenntartott TLD (RFC 2606), sosem kézbesíthető; az `Id` őrzi az egyedi indexet, hogy a második törlés se ütközzön |
+| `DisplayName` | `<Törölt felhasználó>` |
+| `PasswordHash` | friss véletlen BCrypt hash |
+| `TotpSecret`, `EmailVerificationToken` | `null` |
+| `IsTotpEnabled`, `IsEmailVerified`, `IsActive` | `false` |
+| új `DeletedAt` | időbélyeg |
+
+A szögletes zárójel a névben szándékos: a `DisplayName` validátor tiltja a `<` és `>`
+karaktereket (XSS elleni mélységi védelem), ezért ezt a nevet **élő felhasználó nem tudja
+felvenni** - senki nem adhatja ki magát törölt fióknak. Ellenőrizve, hogy a projektben
+**nincs `{@html}` használat**, tehát a név mindenhol escape-elve jelenik meg.
+
+**Valódi törlés:** a `RefreshToken` és a `PasswordResetToken` sorok - ezeknek nincs értelmük
+anonim fiók mellett. A `UserTermsAcceptance` viszont **marad**: az elfogadás jogi tény, és
+anonimizált felhasználóra mutatva már nem személyes adat.
+
+**Megoldás - a tulajdonolt projektek:**
+Nincs tulajdonos-átadás, és minden projektnek pontosan egy Ownere van (a szerep csak
+létrehozáskor kerül kiosztásra, a `ProjectRoles.ValidRoles` nem tartalmazza). Ha a felhasználó
+bármelyik projekt tulajdonosa, a törlés gazdátlan projekteket hagyna maga után, amikhez a többi
+tag hozzáférése bizonytalanná válna. Ezért `409 Conflict`, az érintett projektek nevével -
+a felhasználónak előbb a meglévő projekt-törléssel kell rendeznie őket (az a MinIO-fájlokat is
+elviszi). Ez egyben egy hasznos gondolkodási szünet.
+
+**Megoldás - az activity-leírások:**
+Ez a kellemetlen rész. A `DisplayName` 40 helyen, 10 szolgáltatásban be van égetve a
+`Description` szabad szövegébe. Az `ActorName` rendben van, mert join-nal képződik és magától
+követi az anonimizálást - **csak a `Description` a probléma**.
+
+Az `ActorId` szerinti szűkítés **nem elég**: a név olyan sorokban is szerepel, ahol a
+felhasználó nem a cselekvő, hanem az elszenvedő ("X eltávolította Y-t a projektből"). Ezért a
+hatókör azok a projektek, ahol a felhasználó tag volt, és a csere `ExecuteUpdateAsync`-kel,
+egyetlen `UPDATE`-ben fut.
+
+**Vállalt korlát:** ez szubsztring-csere, tehát egy rövid név más szöveg belsejébe is
+beleeshet. A `DisplayName` legalább 3 karakter, és a minta `{név} ige` alakú, ezért a
+gyakorlatban működik - a végleges megoldás a leírások sablonosítása lenne, ami külön feladat.
+
+**Megoldás - hitelesítés és tranzakció:**
+A végpont a jelenlegi jelszót kéri, és ha a fiókon él a második faktor, a TOTP kódot is - egy
+ellopott access token önmagában ne tudjon fiókot törölni. Ez a `totp/disable` mintáját követi.
+Az anonimizálás, a token-törlés és az activity-csere **egy tranzakcióban** fut: félbeszakadva
+nem maradhat félig anonimizált fiók.
+
+A művelet strukturált `UserErasure` naplóbejegyzést ír. Ez a 6. etap visszaállítási eljárásának
+alapja: egy régebbi mentésből visszatérne a törölt felhasználó adata, ezért visszatöltés után
+az itt rögzített törléseket újra kell alkalmazni - és ezért kell a napló megőrzési idejének
+meghaladnia a mentésekét.
+
+**Eltérés a tervtől - `POST` és nem `DELETE`:**
+A terv `DELETE /api/auth/me`-t írt, de a végpont `POST /api/auth/me/delete` lett. Két ok: a
+kódbázis már így oldja meg az ismételt hitelesítést igénylő műveleteket (`totp/disable`,
+`changepassword`), és a `DELETE` metódus törzsét egyes köztes rétegek eldobják - ami itt némán
+elrontaná a jelszó-ellenőrzést.
+
+**Felület:** külön nézet a felhasználói beállításokban, piros figyelmeztető dobozzal, ami
+kimondja, hogy a művelet végleges. A megerősítéshez a jelszó és a TOTP kód mellett be kell
+gépelni a **TÖRLÉS** szót: a jelszó begyakorlott mozdulat lehet, egy kiírandó szó nem. Siker
+után a meglévő `sessionInvalidated` eseményen keresztül zárul a munkamenet.
+
+**Tesztek:** új `DeleteAccountDtoValidatorTests`, és a `ValidatorCoverageTests` várt
+validátorszáma 33-ról 34-re nőtt - a lefedettségi háló pontosan úgy működött, ahogy kellett:
+az új validátor teszt nélkül elbuktatta volna a készletet. Összesen 576 teszt.
+
+**Utólag kiderült korlát:** a szubsztring-csere csak az UTOLSÓ nevet ismeri, a `DisplayName`
+viszont bármikor módosítható. Aki átnevezte magát, annál a korábbi néven keletkezett sorok
+érintetlenek maradnak.
+
+### Jogi megfelelés 6. etap: mentés, visszaállítás és incidenskezelés
+
+**Probléma:**
+Az adatkezelési tájékoztató konkrét üzemeltetési ígéreteket tesz - 7 napos mentési megőrzés,
+titkosított mentések, a törlés érvényesülése a mentésekben -, de ezeknek sem eljárása, sem
+dokumentációja nem volt. Ráadásul a fióktörlés anonimizálás: ha egy KORÁBBI mentésből
+állítunk vissza, a törölt felhasználó adata **visszatér**, mert a mentés még a törlés előtti
+állapotot őrzi. Erre nem volt semmilyen ellenintézkedés.
+
+**Megoldás:**
+Új `OPERATIONS.md` a repó gyökerében, a `TESTING.md` mintájára. Nem fejlesztői dokumentáció:
+akkor kell elővenni, amikor visszaállítás, incidens vagy törlési kérés történik.
+
+Tartalma négy fejezet: a mentési politika és indoklása; a visszaállítási eljárás a törlések
+újraalkalmazásával; az adatvédelmi incidens 72 órás menete; és egy éles indulás előtti
+ellenőrzőlista.
+
+**A dokumentum lényege a visszaállítási ellenőrzőlista.** Az 5. etap `UserErasure`
+naplóbejegyzése erre való: visszatöltés után a Seq-ből lekérdezhető, kiket töröltek a mentés
+időbélyege óta, és az anonimizálást újra kell alkalmazni rájuk. Enélkül egy visszaállítás
+**némán feltámasztana** egy törölt fiókot.
+
+Ebből következik egy kritikus csatolás, amit külön kiemel a dokumentum: **a Seq megőrzési
+idejének meg kell haladnia a mentésekét**. Ha a napló hamarabb évül el, elveszítjük a
+nyilvántartást arról, kit kell újra anonimizálni. A `docker-compose.prod.yml` ma nem
+konfigurál Seq-retenciót, tehát az alapértelmezés él - ezt ellenőrizni és rögzíteni kell.
+
+Tisztázás, ami a tervezés során is egy félreértés volt: **nem igaz**, hogy a mentés nem
+tartalmazhat személyes adatot. A 32. cikk (1) c) kifejezetten elvárja a helyreállíthatóságot.
+A valódi kérdés a törlés és a mentés viszonya - és mivel a 7 napos rotáció jóval a 30 napos
+teljesítési határidőn belül van, a törölt adat magától eltűnik a mentésekből is. Az
+archívumokat nem kell sebészileg átírni.
+
+**A titkosítás pontosítása - és egy javított állítás a tájékoztatóban:**
+A tervezéskor abból indultam ki, hogy a mentés a feltöltés ELŐTT titkosítódik, és ennek
+megfelelően került a tájékoztatóba, hogy "a tárhelyszolgáltató nem fér hozzá" a tartalomhoz.
+A tényleges beállítás utólag tisztázódott: a `PMA-Backups` bucketen a Backblaze webes
+felületén bekapcsolt titkosítás **SSE-B2**, ahol a kulcsokat **a Backblaze kezeli**. Az SSE-C
+(saját kulcs) bucket-szinten nem is állítható be, csak fájlonként feltöltéskor - amit a
+Dokploy beépített backup funkciója nem tesz meg.
+
+Ez a GDPR 32. cikk "titkosítás nyugalmi állapotban" elvárására **elegendő**, tehát a beállítás
+jó. De a "nem fér hozzá" állítás **valótlan volt**, ezért a tájékoztató szövege javítva:
+a mentés "titkosítva tárolódik, a tárhelyszolgáltató által kezelt kulcsokkal". A maradék
+kockázatot (amerikai anyavállalat) a szolgáltatóval kötött adatfeldolgozói szerződés rendezi,
+ami felkerült az indulási ellenőrzőlistára.
+
+Tanulság a szakdolgozathoz: egy jogi dokumentumba került technikai állítást **ellenőrizni kell
+a tényleges konfiguráción**, nem a tervezéskori feltételezésen. Itt a feltételezés és a
+valóság között pont az a különbség volt, ami a mondat igazságtartalmát eldöntötte.
+
+**Az indulási ellenőrzőlista** azért került bele, mert a jogi dokumentumok olyan állításokat
+tartalmaznak, amelyeknek az indulás pillanatában igaznak kell lenniük. A lista ezeket egy
+helyre gyűjti a kitöltendő helyőrzőkkel együtt - köztük az **activity-leírások
+sablonosítását** (7. etap) és a **Backblaze DPA** elfogadását.
+
+**Amit nem tudtunk kitölteni:** a mentés nem a repóból fut, hanem a Dokploy beépített backup
+funkciója végzi. A pontos ütemezés és a rotáció beállításának helye helyőrzőként szerepel -
+ezeket az üzemeltetőnek kell rögzítenie, hogy egy visszaállítás ne találgatásból álljon.
+
+### Jogi megfelelés 7. etap: az activity-leírások sablonosítása
+
+**Probléma:**
+Az 5. etap (fióktörlés) után derült ki, hogy a `DisplayName` **bármikor átírható**, az
+activity-leírások viszont az akkori nevet fagyasztották be. Ebből két baj következett:
+
+1. **A törlés hiányos volt.** A szubsztring-csere csak az utolsó nevet ismeri, tehát aki
+   korábban átnevezte magát, annál a régi néven keletkezett sorok érintetlenek maradtak -
+   miközben a tájékoztató 5. pontja teljes cserét ígér.
+2. **Egy ma is látható hiba.** Az `ActivityFeed.svelte` a join-ból jövő AKTUÁLIS `actorName`-et
+   kereste a befagyasztott szövegben, hogy kiemelje:
+   `const index = actorName ? description.indexOf(actorName) : -1;`
+   Átnevezés után ez `-1`, tehát a kiemelés némán megszűnt, és a feed a **régi nevet** mutatta a
+   szövegben, miközben ugyanannak a sornak a fejléce már az újat.
+
+A második pont a lényeg: ez **nem csak megfelelési kérdés volt**, hanem egy hétköznapi
+felhasználói hiba. Ez döntötte el, hogy javítjuk, nem pedig elfogadjuk.
+
+**Megoldás:**
+A `Description` mostantól **sablont** tárol, a személyneveket a `{actor}` és `{target}`
+jelölők képviselik, amiket az `ActivityService` olvasáskor cserél ki a hivatkozott
+felhasználók aktuális nevére - pontosan úgy, ahogy az `ActorName` már korábban is működött.
+
+- Új `Activity.TargetUserId` (nullable) + `TargetUser` navigáció, migrációval. `Restrict`
+  törléssel: a célszemély sora nem viheti magával a projekt előzményeit
+- 39 hívási hely mechanikusan átírva 10 szolgáltatásban, 5 pedig kézzel: négy kapott
+  `{target}` jelölőt és `targetUserId` paramétert (tag eltávolítása, szerepkör módosítása,
+  task hozzárendelés és leszedés), egy pedig - a "csatlakozott a projekthez" - `{actor}`-t,
+  mert ott a csatlakozó maga a cselekvő
+- Az `IActivityService` szerződése kimondja: **ne interpolálj DisplayName-t a leírásba**
+
+**Csak a személynevek kaptak jelölőt.** A board- és tasknevek beégetve maradnak: azok nem
+személyes adatok, és egy naplóban helyes rögzíteni, minek hívták a dolgot az esemény idején.
+
+**Az örökölt sorok:** a sablonok bevezetése előtt keletkezett sorok kész szöveget
+tartalmaznak. Azokban nincs mit cserélni, ezért változatlanul jelennek meg - a `Replace`
+egyszerűen nem talál jelölőt. Az 5. etap szubsztring-cseréje **megmarad** rájuk biztonsági
+hálóként, a metódus dokumentációja pedig már ennek megfelelően fogalmaz.
+
+**Amit ez megold:**
+
+| | Előtte | Utána |
+|---|---|---|
+| Átnevezés után a feed | a régi nevet mutatta, kiemelés nélkül | az aktuális nevet mutatja, kiemeléssel |
+| Fióktörlés | csak az utolsó nevet takarította | minden sorra automatikusan érvényesül |
+| Karbantartás | szubsztring-csere törékenységével kellett élni | új sorokra nincs rá szükség |
+
+A `ActivityFeed` kiemelése azért működik újra, mert a név ugyanabból a join-ból származik,
+mint a szöveg - a kettő nem tud elcsúszni egymástól.
+
+**A célszemély neve is kiemelve.** Mivel a leírásból magától nem derül ki, melyik rész
+személynév, a felület nem tudta kiemelni a másodikat sem. Ezért az `ActivityResponseDto`
+kapott egy `TargetName` mezőt, a `splitDescription` pedig **több névre** általánosodott: a
+szöveget a nevek előfordulásai mentén vágja szét, ciklusban.
+
+Két apró, de fontos részlet a megvalósításban: a nevek **hosszabb-először** sorrendben
+keresődnek, hogy ha az egyik név a másik része ("Anna" és "Anna Kiss"), a rövidebb ne hasítsa
+ketté a hosszabbat; és a kiemelés továbbra is **`{@html}` nélkül** működik, szövegdarabokra
+bontással - a Svelte interpolációja escape-el, ami a `<Törölt felhasználó>` név miatt sem
+mindegy.
+
+### Jogi megfelelés 8. etap: megerősítő token lejárata és egy validátor-lyuk
+
+Két apró, korábbi etapokban felderített hiányosság lezárása.
+
+**Probléma 1 - a megerősítő token sosem járt le.**
+A 4. etap (token-takarítás) során derült ki, hogy a `User.EmailVerificationToken` egy sima
+sztring a felhasználó során, lejárat nélkül. A `VerifyEmailAsync` nullázza megerősítéskor,
+tehát megerősített fióknál nincs mit takarítani - de egy **soha meg nem erősített** fióknál a
+token örökre él. Ez egy álló hitelesítő adat az adatbázisban, amit a takarító job sem tudott
+kezelni, mert nem volt mihez mérnie.
+
+**Megoldás:** új `User.EmailVerificationTokenExpiresAt` mező migrációval, **1 órás**
+élettartammal - ugyanannyi, mint a jelszó-visszaállító tokené, tehát a két hitelesítési út
+következetes. A `RegisterAsync` és a `ResendVerificationEmailAsync` tölti ki, a
+`VerifyEmailAsync` ellenőrzi, a `TokenCleanupJob` pedig a lejárt tokeneket nullázza.
+
+A nullázás senkit nem zár ki: az "új link kérése" út már korábban is megvolt
+(`ResendVerificationEmailAsync`), csak eddig nem volt mihez képest újat kérni.
+
+Két döntés, ami nem magától értetődő:
+
+- **A null lejárat NEM számít lejártnak.** A mező bevezetése előtt kiküldött linkek így nem
+  törnek el, és a takarítás sem nyúl hozzájuk. A C# nullozható összehasonlítása amúgy is
+  hamisat ad ilyenkor, de ezt szándékként rögzíteni kell, különben mulasztásnak látszik.
+- **A lejárt esetet megkülönböztetjük az érvénytelentől.** A token nagy entrópiájú titok: aki
+  birtokolja, az a levélből kapta, tehát nincs mit kiszivárogtatni. Cserébe a felhasználó
+  használható üzenetet kap ("A megerősítő link lejárt. Jelentkezz be, és kérj új linket!")
+  a "valami nem jó" helyett.
+
+**Probléma 2 - a `MoveTaskDtoValidator.ColumnId`.**
+Az 1. etapban egy teszt kimutatta, hogy a `NotEmpty` a `default(TProperty)`-hoz hasonlít, ami
+`Guid?` esetén **null**, nem `Guid.Empty`. A csupa nullás azonosító tehát átment a validáción,
+és csak a szolgáltatás 404-ese állította meg - 400 helyett. Akkor a teszt a tényleges
+viselkedést rögzítette, mert éles kódot nem akartunk tesztcommitban módosítani.
+
+**Megoldás:** egy `.NotEqual(Guid.Empty)` szabály a `NotEmpty` mellé, és a teszt visszaírása
+"elutasítja" állításra. Ellenőrizve, hogy a kódbázisban ez volt az **egyetlen** nullozható
+`Guid`-on lévő `NotEmpty` - a `ColumnOrderDto.Id` nem nullozható, ott a szabály önmagában is
+helyesen fog.
+
+### Az adatkezelő adatai környezeti változóba, a verzió viszont marad a kódban
+
+**Probléma:**
+A jogi dokumentumok az adatkezelő nevét, címét és e-mail címét jelenítik meg. Ezek beégetve
+azt jelentenék, hogy a repóba - és visszamenőleg a git történetbe - bekerül egy magánszemély
+neve és lakcíme. Egy szakdolgozathoz tartozó repó könnyen nyilvánossá válik, a történetből
+pedig utólag nem törölhető.
+
+**Megoldás:**
+Négy `VITE_LEGAL_*` környezeti változó, a `.env.example`-ben dokumentálva. A helyőrző maradt a
+**tartalék értéknek**: ha egy változó üres, a dokumentumban továbbra is a feltűnő
+`[KITÖLTENDŐ: ...]` látszik. Egy láthatóan hiányos dokumentum jobb, mint egy csendben üres mező.
+
+Fontos rögzíteni, hogy ezek **nem titkok**: a `VITE_*` változók build időben beépülnek a
+bundle-be, és az adatkezelő azonosíthatósága jogszabályi követelmény (13. cikk) - a közzétett
+oldalon látszaniuk KELL. A cél kizárólag a repó tisztán tartása.
+
+**Ami NEM került környezeti változóba - és miért:**
+Felmerült, hogy akkor a dokumentumverzió (`LEGAL_VERSION`, illetve a backend oldali
+`LegalDocuments.CurrentVersion`) is mehetne env-be, a két konstans duplikációját megszüntetve.
+Ez **elvi hiba** lenne, mert a két adat kategóriája különbözik:
+
+- az azonosító adatok **telepítés-specifikusak** (ki üzemelteti ezt a példányt), ezért helyes,
+  hogy példányonként eltérnek;
+- a verzió **tartalom-specifikus**: azt mondja meg, melyik SZÖVEGET fogadta el a felhasználó -
+  a szöveg pedig a repóban van.
+
+Három következmény szólt ellene. A veszélyes irány nem a verzióemelés (azt a startup seed
+kezelné), hanem a fordítottja: **a szöveg átírása a verzió emelése nélkül** - ekkor a változás
+láthatatlan marad, és senkit nem kérdezünk újra. Ma a verzió a dokumentumok mellett él, tehát
+a szerkesztő szeme elé kerül. Emellett a környezetek elcsúszhatnának (ugyanaz a kód, más
+verzió), és elveszne a git-alapú audit nyom, ami miatt a `TermsVersion` tábla egyáltalán készült.
+
+**A valódi aggodalomra viszont volt teendő.** A backend és a frontend verziója eddig kézi
+egyeztetésen múlt, és az elcsúszás következménye csúnya: a kliens a saját verzióját küldi, a
+szerver csak a hatályosat fogadja el, tehát **minden regisztráció elbukna**. Egysoros
+figyelmetlenségből teljes regisztrációs leállás.
+
+Ezért új `LegalVersionTests`: a teszt beolvassa a frontend `legal.ts`-ét (a fájl útvonalát
+`[CallerFilePath]` adja, ami fordításkor oldódik fel, tehát a CI checkout-jában is helyes), és
+összeveti a backend konstansával. Emellett ellenőrzi, hogy a dátum alapú verzió és a
+`CurrentVersionEffectiveFrom` ugyanazt a napot jelenti, és hogy az utóbbi UTC.
+
+A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két teszt bukik el**.
+Így az eltérés fordításkor derül ki, nem élesben.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

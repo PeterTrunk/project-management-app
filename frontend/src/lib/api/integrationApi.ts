@@ -19,6 +19,7 @@ export interface CreateIntegrationRequest {
     repoFullName: string;
     webhookSecret: string;
     accessToken?: string | null;
+    authorityConfirmed: boolean;
 }
 
 export async function getIntegrationsAsync(projectId: string): Promise<IntegrationResponse[]> {

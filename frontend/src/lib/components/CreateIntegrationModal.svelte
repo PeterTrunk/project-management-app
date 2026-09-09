@@ -17,6 +17,8 @@
     let repoFullName = '';
     let webhookSecret = '';
     let accessToken = '';
+    //Szándékosan alapból kipipálatlan: az előre bejelölt jelölőnégyzet nem érvényes nyilatkozat
+    let authorityConfirmed = false;
     let error = '';
     let loading = false;
 
@@ -31,6 +33,7 @@
         repoFullName = '';
         webhookSecret = '';
         accessToken = '';
+        authorityConfirmed = false;
         error = '';
         loading = false;
     }
@@ -43,7 +46,8 @@
                 provider,
                 repoFullName,
                 webhookSecret,
-                accessToken: accessToken || null
+                accessToken: accessToken || null,
+                authorityConfirmed
             });
             notify.success('Integráció létrehozva!');
             closeModal();
@@ -117,16 +121,27 @@
                 <span class="hint">Jövőbeli funkciókhoz szükséges</span>
             </div>
 
+            <label class="authority-check">
+                <input type="checkbox" bind:checked={authorityConfirmed} />
+                <span>
+                    Kijelentem, hogy jogosult vagyok a repository csatlakoztatására, és tudomásul
+                    veszem, hogy a rendszer a beérkező commitok szerzőjének nevét és e-mail címét
+                    tárolja.
+                </span>
+            </label>
+
             {#if error}
                 <p class="error">{error}</p>
             {/if}
 
             <div class="buttons">
                 <button type="button" on:click={closeModal}>Mégse</button>
+                <!-- A gomb letiltása kényelmi jelzés: a nyilatkozatot a szerver kényszeríti ki,
+                     mert az API közvetlenül is hívható. -->
                 <button
                     type="submit"
                     class="create-btn"
-                    disabled={loading || !repoFullName || !webhookSecret}>
+                    disabled={loading || !repoFullName || !webhookSecret || !authorityConfirmed}>
                     {#if loading}
                         Létrehozás...
                     {:else}
@@ -261,4 +276,29 @@
     .create-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .error { color: var(--accent-red); font-size: 0.85rem; }
+
+    .authority-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        font-size: var(--font-size-xs);
+        color: var(--text-secondary);
+        line-height: 1.45;
+        cursor: pointer;
+    }
+
+    .authority-check input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: var(--accent-blue);
+        margin: 0;
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-top: 0.15rem;
+    }
+
+    .create-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
 </style>
