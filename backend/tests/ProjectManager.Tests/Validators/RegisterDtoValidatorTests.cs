@@ -12,7 +12,9 @@ namespace ProjectManager.Tests.Validators
         {
             Email = "user@example.com",
             DisplayName = "Teszt Elek",
-            Password = "Titok123!"
+            Password = "Titok123!",
+            AcceptedTerms = true,
+            AcceptedTermsVersion = "2026-09-09"
         };
 
         //Email
@@ -186,6 +188,58 @@ namespace ProjectManager.Tests.Validators
             var dto = Valid();
             dto.Password = "Abcdefg1" + special;
             _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.Password);
+        }
+
+        //Feltételek elfogadása
+
+        //A felület letiltja a gombot pipa nélkül, de az API nyilvános: egy közvetlen kérés
+        //megkerülné a jelölőnégyzetet, ezért a szerveroldali kikényszerítés a lényegi védelem.
+        [Fact]
+        public void AcceptedTerms_False_ShouldHaveError()
+        {
+            var dto = Valid();
+            dto.AcceptedTerms = false;
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AcceptedTerms);
+        }
+
+        [Fact]
+        public void AcceptedTerms_Missing_ShouldHaveError()
+        {
+            //A bool alapértéke false: a mezőt kihagyó kérés is elutasításra kerül
+            var dto = new RegisterDto
+            {
+                Email = "user@example.com",
+                DisplayName = "Teszt Elek",
+                Password = "Titok123!",
+                AcceptedTermsVersion = "2026-09-09"
+            };
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AcceptedTerms);
+        }
+
+        [Fact]
+        public void AcceptedTerms_True_ShouldNotHaveError()
+        {
+            _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.AcceptedTerms);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void AcceptedTermsVersion_Empty_ShouldHaveError(string version)
+        {
+            var dto = Valid();
+            dto.AcceptedTermsVersion = version;
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AcceptedTermsVersion);
+        }
+
+        //A verzió egyezőségét szándékosan nem itt mérjük: ahhoz az adatbázisban tárolt
+        //hatályos verzió kell, ezért az az AuthService felelőssége.
+        [Fact]
+        public void AcceptedTermsVersion_AnyNonEmptyValue_ShouldNotHaveError()
+        {
+            var dto = Valid();
+            dto.AcceptedTermsVersion = "1999-01-01";
+            _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.AcceptedTermsVersion);
         }
 
         [Fact]

@@ -180,6 +180,31 @@ namespace ProjectManager.API.Services.Auth
                 throw new RateLimitException($"Túl sok regisztrációs kísérlet. Próbáld újra {retryAfter} másodperc múlva!");
             }
 
+            //A hatályos verzió a legkésőbbi, már hatályba lépett sor,
+            //Ygy nincs külön "aktív" jelző, ami elavulhatna, és egy jövőbeli verzió előre felvehető.
+            var currentTermsVersion = await _context.TermsVersions
+                .Where(tv => tv.EffectiveFrom <= DateTime.UtcNow)
+                .OrderByDescending(tv => tv.EffectiveFrom)
+                .FirstOrDefaultAsync();
+
+            if (currentTermsVersion == null)
+            {
+                //Konfigurációs hiba: a startup seednek ezt létre kellett volna hoznia.
+                //Inkább nem engedjünk regisztrálni, mint hogy elfogadás nélküli fiók jöjjön létre.
+                _logger.LogError("Nincs hatályos dokumentumverzió az adatbázisban, a regisztráció elutasítva!");
+                throw new ValidationException("A regisztráció átmenetileg nem érhető el. Próbáld újra később!");
+            }
+
+            if (dto.AcceptedTermsVersion != currentTermsVersion.Version)
+            {
+                //Jellemzően régóta nyitva hagyott, gyorsítótárazott felület
+                _logger.LogWarning(
+                    "Nem a hatályos dokumentumverzió elfogadása | Kapott: {Received} | Hatályos: {Current}",
+                    dto.AcceptedTermsVersion, currentTermsVersion.Version);
+                throw new ValidationException(
+                    "A felhasználási feltételek időközben módosultak. Töltsd újra az oldalt, és fogadd el a friss változatot!");
+            }
+
             if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
             {
                 _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | EmailRef: {EmailRef}", EmailRef(dto.Email));
@@ -191,6 +216,15 @@ namespace ProjectManager.API.Services.Auth
             user.Email = dto.Email;
             user.DisplayName = dto.DisplayName;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password, BcryptWorkFactor);
+
+            //Az elfogadás a felhasználóval EGY mentésben, tehát egy tranzakcióban keletkezik:
+            //elfogadás nélküli fiók még részleges hiba esetén sem jöhet létre.
+            //A navigációs gyűjteményen át vesszük fel, így a UserId-t az EF köti be.
+            user.TermsAcceptances.Add(new UserTermsAcceptance
+            {
+                TermsVersionId = currentTermsVersion.Id,
+                AcceptedAt = DateTime.UtcNow
+            });
 
             //A felvétel DB-be + mentés
             await _context.AddAsync(user);

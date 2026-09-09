@@ -4106,6 +4106,74 @@ meglévő `.auth-container` mintájára. Az auth oldalak nem görgethetők, ezek
 `100vw` a függőleges görgetősávot is beleszámítja, amitől fölösleges vízszintes csúszka jelent
 volna meg. `width: 100%`-ra cserélve.
 
+### Jogi megfelelés 2. etap: a feltételek elfogadásának rögzítése
+
+**Probléma:**
+A dokumentumok elkészültek, de senki nem fogadta el őket. A GDPR 7. cikk (1) bekezdése
+elszámoltathatóságot ír elő: **bizonyítani** kell tudni, hogy a felhasználó elfogadta a
+feltételeket. Ez a tény **visszamenőleg nem állítható elő** - a korábban regisztráltakról soha
+nem lesz bizonyíték, ezért volt ez a legsürgősebb etap.
+
+Fontos fogalmi elhatárolás: az ÁSZF elfogadása **nem GDPR-hozzájárulás**, hanem szerződéskötés
+(6. cikk (1) b), a tájékoztató pedig tájékoztatás, nem consent. Amit rögzítünk, az ez:
+*"a felhasználó T időpontban elfogadta az X verziót."*
+
+**Megoldás - séma:**
+Két új entitás. A `TermsVersion` egy közzétett dokumentumváltozat (`Version`, `EffectiveFrom`),
+a `UserTermsAcceptance` pedig egy konkrét elfogadás (`UserId`, `TermsVersionId`, `AcceptedAt`).
+
+Külön tábla és nem két oszlop a `User`-en, mert egy felhasználó idővel több verziót is
+elfogadhat, és az elszámoltathatósághoz a **történetre** van szükség, nem csak az utolsó
+állapotra. Így a későbbi újraelfogadtató folyamat séma-változtatás nélkül ráépül.
+
+Két döntés, ami eltér az eredeti tervtől:
+
+- **Nincs `DocumentType` oszlop.** A tájékoztató és az ÁSZF közös verziót kap, mert a felületen
+  egyetlen jelölőnégyzet vonatkozik mindkettőre - a külön verziózás olyan függetlenséget
+  sugallna, ami a felhasználói élményben nem létezik.
+- **Nincs "aktív" jelző.** A hatályos verzió mindig a legkésőbbi olyan sor, amelynek az
+  `EffectiveFrom` értéke már elmúlt. Egy flag elavulhatna; így az invariáns nem romolhat el, és
+  egy jövőbeli verzió előre felvehető.
+
+A `TermsVersion` törlését a `UserTermsAcceptance` felől `Restrict` tiltja: az elfogadás
+értelmetlen lenne a hivatkozott szöveg nélkül.
+
+**Megoldás - a kliens visszaküldi a verziót:**
+A `RegisterDto` nem csak egy `AcceptedTerms` boolt kapott, hanem az `AcceptedTermsVersion`
+mezőt is: a felület visszaküldi azt a verziót, amit **ténylegesen megjelenített**. A szerver
+csak akkor fogadja el, ha az a hatályos - különben "töltsd újra az oldalt" üzenettel utasítja
+el. Enélkül egy régóta nyitva hagyott, gyorsítótárazott felület olyan szövegre hivatkozó
+elfogadást rögzíthetne, amit a felhasználó nem is látott, és pont az a bizonyíték romlana el,
+amiért az egész funkció készült.
+
+**Megoldás - egy tranzakció:**
+Az elfogadás a `User` navigációs gyűjteményén át kerül felvételre, tehát egyetlen
+`SaveChangesAsync` hívásban, egy tranzakcióban keletkezik a felhasználóval. Elfogadás nélküli
+fiók még részleges hiba esetén sem jöhet létre.
+
+**Megoldás - seed:**
+A `SeedTermsVersionAsync` a `MigrateWebhookSecretsAsync` mintájára indításkor fut, és felveszi
+a kódban rögzített hatályos verziót, ha még nincs. Szándékosan nem migrációs `InsertData`: a
+verzió a kódhoz tartozik, így egy visszaállított vagy kézzel ürített adatbázisban is helyreáll.
+Több replika párhuzamos indulását a `Version` egyedi indexe rendezi - a vesztes ág nem hiba.
+
+Ha nincs hatályos verzió az adatbázisban, a regisztráció **elutasít**, nem pedig elfogadás
+nélküli fiókot hoz létre.
+
+**Verzió két helyen:**
+A `LegalDocuments.CurrentVersion` (backend) és a `LEGAL_VERSION` (`frontend/src/lib/legal.ts`)
+értékének meg kell egyeznie. Mindkét helyen kereszthivatkozó megjegyzés áll; a kliens által
+visszaküldött verzió ellenőrzése pedig azonnal kibuktatja, ha elcsúsznak.
+
+**Felület:**
+A regisztrációs űrlapon **alapból kipipálatlan** jelölőnégyzet, két linkkel a dokumentumokra
+(új fülre nyílnak, hogy a kitöltött űrlap ne vesszen el). A gomb letiltva pipa nélkül - de ez
+kényelmi jelzés, nem védelem: a kikényszerítés a szerveren történik, mert az API közvetlenül
+is hívható.
+
+**Tesztek:** a `RegisterDtoValidatorTests` hat új esettel bővült, köztük a hiányzó mező
+(a bool alapértéke `false`) elutasításával. A készlet 554-ről 560 tesztre nőtt.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

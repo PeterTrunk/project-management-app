@@ -3,6 +3,7 @@
     import { push } from 'svelte-spa-router';
     import { Copy, Check, ShieldCheck, Mail } from 'lucide-svelte';
     import { login } from '../lib/stores/authStore';
+    import { LEGAL_VERSION } from '../lib/legal';
     import QRCode from 'qrcode';
 
     let showTotpPrompt = false;
@@ -17,7 +18,8 @@
     let password = '';
     let passwordconfirm = '';
     let displayName = '';
-    
+    let acceptedTerms = false;
+
     let success = '';
     let error = '';
     let passwordConfirmError = '';
@@ -33,7 +35,13 @@
         }
 
         try {
-            const response = await registerAsync({ email, displayName, password });
+            const response = await registerAsync({
+                email,
+                displayName,
+                password,
+                acceptedTerms,
+                acceptedTermsVersion: LEGAL_VERSION
+            });
             // Store-ba mentjük a usert
             login(response.token, {
                 userId: response.userId,
@@ -95,13 +103,24 @@
                         <p class="field-error">{passwordConfirmError}</p>
                     {/if}
                 </div>
+                <label class="terms-check">
+                    <input type="checkbox" bind:checked={acceptedTerms} />
+                    <span>
+                        Elolvastam és elfogadom a
+                        <a href="#/terms" target="_blank" rel="noopener">felhasználási feltételeket</a>,
+                        és megismertem az
+                        <a href="#/privacy" target="_blank" rel="noopener">adatkezelési tájékoztatót</a>.
+                    </span>
+                </label>
                 {#if success}
                     <p id="success">{success}</p>
                 {/if}
                 {#if error}
                     <p id="failed">{error}</p>
                 {/if}
-                <button type="submit">Regisztráció</button>
+                <!-- A gomb letiltása csak kényelmi jelzés: a tényleges kikényszerítés a
+                     szerveren történik, mert az API közvetlenül is hívható. -->
+                <button type="submit" disabled={!acceptedTerms}>Regisztráció</button>
             </form>
             <div class="divider">
                 <span>vagy</span>
@@ -400,6 +419,39 @@
 
     #failed { color: var(--accent-red); white-space: pre-line; }
     #success { color: var(--accent-green); white-space: pre-line; }
+
+    .terms-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        font-size: var(--font-size-xs);
+        color: var(--text-secondary);
+        line-height: 1.45;
+        cursor: pointer;
+        margin-top: 0.25rem;
+    }
+
+    .terms-check input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: var(--accent-blue);
+        margin: 0;
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-top: 0.15rem;
+    }
+
+    .terms-check a {
+        color: var(--accent-blue);
+        text-decoration: none;
+    }
+
+    .terms-check a:hover { text-decoration: underline; }
+
+    button[type="submit"]:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
 
     .legal-links {
         display: flex;

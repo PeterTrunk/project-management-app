@@ -22,5 +22,6 @@ namespace ProjectManager.API.Model
         public ICollection<Comment> Comments { get; set; } = new List<Comment>();
         public ICollection<Attachment> UploadedFiles { get; set; } = new List<Attachment>();
         public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+        public ICollection<UserTermsAcceptance> TermsAcceptances { get; set; } = new List<UserTermsAcceptance>();
     }
 }

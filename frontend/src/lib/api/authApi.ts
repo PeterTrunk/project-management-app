@@ -18,6 +18,8 @@ interface RegisterRequest {
     email: string;
     displayName: string;
     password: string;
+    acceptedTerms: boolean;
+    acceptedTermsVersion: string;
 }
 
 interface ChangePasswordRequest {

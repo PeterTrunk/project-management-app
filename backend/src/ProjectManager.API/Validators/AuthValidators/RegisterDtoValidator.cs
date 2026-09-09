@@ -27,6 +27,16 @@ namespace ProjectManager.API.Validators.AuthValidators
                 .Matches("[A-Z]").WithMessage("A jelszónak tartalmaznia kell legalább egy nagybetűt!")
                 .Matches("[0-9]").WithMessage("A jelszónak tartalmaznia kell legalább egy számot!")
                 .Matches("[!@#$%^&*]").WithMessage("A jelszónak tartalmaznia kell legalább egy speciális karaktert (!@#$%^&*)!");
+
+            //A felület letiltja a gombot pipa nélkül, de az API nyilvános:
+            //a kikényszerítés csak itt, a szerveren valósul meg.
+            RuleFor(x => x.AcceptedTerms)
+                .Equal(true)
+                .WithMessage("A felhasználási feltételek és az adatkezelési tájékoztató elfogadása kötelező!");
+
+            //A verzió egyezőségét a szolgáltatás ellenőrzi, mert ahhoz az adatbázis kell.
+            RuleFor(x => x.AcceptedTermsVersion)
+                .NotEmpty().WithMessage("Az elfogadott dokumentumverzió megadása kötelező!");
         }
     }
 }

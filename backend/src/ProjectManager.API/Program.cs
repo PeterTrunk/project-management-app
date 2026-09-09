@@ -205,6 +205,9 @@ try
     await app.RunMigrationsAsync();
     await app.MigrateWebhookSecretsAsync();
 
+    //A regisztráció ehhez a sorhoz köti az elfogadást, ezért a migráció után azonnal fut
+    await app.SeedTermsVersionAsync();
+
     // Start
     Serilog.Log.Information("Alkalmazás indul!");
     app.Run();

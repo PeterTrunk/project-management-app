@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Middleware;
+using ProjectManager.API.Model;
 using ProjectManager.API.Services.EncryptionService;
 
 namespace ProjectManager.API.Extensions
@@ -52,6 +54,47 @@ namespace ProjectManager.API.Extensions
                     if (retries == 0) throw;
                     await Task.Delay(3000);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Gondoskodik arról, hogy a kódban rögzített hatályos dokumentumverzió szerepeljen az adatbázisban.
+        /// Enélkül a regisztráció elutasítana minden kérést, mert nem lenne mire hivatkoznia az elfogadásnak.
+        ///
+        /// Szándékosan nem migrációs InsertData: a verzió a kódhoz tartozik, és minden indulásnál ellenőrizhető
+        /// Így egy visszaállított vagy kézzel ürített adatbázisban is helyreáll.
+        /// </summary>
+        public static async Task SeedTermsVersionAsync(this WebApplication app)
+        {
+            using var scope = app.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var version = LegalDocuments.CurrentVersion;
+
+            if (await context.TermsVersions.AnyAsync(tv => tv.Version == version))
+            {
+                Serilog.Log.Information("Hatályos dokumentumverzió: {Version}", version);
+                return;
+            }
+
+            context.TermsVersions.Add(new TermsVersion
+            {
+                Version = version,
+                EffectiveFrom = LegalDocuments.CurrentVersionEffectiveFrom
+            });
+
+            try
+            {
+                await context.SaveChangesAsync();
+                Serilog.Log.Information("Új dokumentumverzió rögzítve: {Version}", version);
+            }
+            catch (DbUpdateException ex)
+            {
+                //Több replika egyszerre indulhat: a Version egyedi indexe dönti el, ki nyer.
+                //A vesztes ága nem hiba, a sor létezik - ez a lényeg.
+                Serilog.Log.Information(ex,
+                    "A dokumentumverziót közben egy másik példány rögzítette: {Version}", version);
+                context.ChangeTracker.Clear();
             }
         }
 
