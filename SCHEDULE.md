@@ -4048,6 +4048,64 @@ Relational 10.0.3-at az `EntityFrameworkCore.Design`-on át kapja, ami `PrivateA
 tehát a teszt-projektbe nem folyik át - ott a Npgsql 10.0.0-s Relationalja jönne, a
 `ProjectManager.API.dll` viszont 10.0.3-ra hivatkozik.
 
+### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
+
+**Probléma:**
+Egy külső szempár szóvá tette, hogy hiányoznak a felhasználási feltételek. A felderítés ennél
+többet talált: a jogilag **kötelező** dokumentum nem az ÁSZF, hanem az **adatkezelési
+tájékoztató** (GDPR 13. cikk) - és egyik sem volt meg, a `frontend/src`-ben nem volt semmilyen
+jogi oldal. Az ÁSZF a szolgáltatót védi (szerződéses), a tájékoztató hiánya viszont önmagában
+jogsértés egy nyilvánosan elérhető, regisztrációt kínáló szolgáltatásnál.
+
+**Megoldás:**
+Két új, bejelentkezés nélkül elérhető oldal (`/privacy`, `/terms`), egy közös
+`LegalDocument.svelte` elrendezésre építve. A közös komponens adja a fejlécet, a
+verzió-kijelzést és a dokumentumok tipográfiáját; a tartalom sloton át érkezik, ezért a
+tipográfiai szabályok `:global()` alakúak, a `.legal-content` osztályra szűkítve.
+
+A verziót és a hatálybalépés napját egyetlen hely tárolja (`lib/legal.ts`), mert a következő
+etap backend `TermsVersion` táblája ugyanerre az értékre hivatkozik. Ha a két hely elcsúszik,
+a felhasználók elfogadása egy olyan szövegre mutatna, amit már senki nem lát.
+
+A tartalom nem sablonból készült, hanem a kód tényleges adatköreiből:
+
+- **Adatkörök táblázata** jogalapokkal: fiókadat, munkamenet-adatok és projekttartalom
+  szerződés teljesítése (6(1)b); tevékenységnapló, git integráció és technikai naplózás
+  jogos érdek (6(1)f).
+- **IP cím**: a felderítés kimutatta, hogy az `AuthService` a kérésszám-korlátozáshoz és a
+  figyelmeztető naplóbejegyzésekhez ténylegesen kezel IP címet - ez bekerült a tájékoztatóba.
+- **Git integráció külön fejezetben**, a GDPR 14. cikke alapján. A commit szerzők nem
+  felhasználók, ezért a jogalap nem hozzájárulás, hanem jogos érdek: a szerzőség feltüntetése
+  a verziókövetés rendeltetése, az adat a szerző saját közreműködése folytán már a
+  repositoryban van. Az egyedi értesítés aránytalan erőfeszítés (14. cikk (5) b), ezért a
+  nyilvános tájékoztató szolgál értesítésként.
+- **Adatfeldolgozók**: csak a valóban külső szolgáltatók szerepelnek. A `docker-compose.prod.yml`
+  alapján a **MinIO és a Seq saját üzemeltetésű** ugyanazon a gépen, tehát nem adatfeldolgozók -
+  marad a német tárhelyszolgáltató, a Resend (Írország) és a Backblaze B2 (EU). Mindegyik EGT-n
+  belül, tehát harmadik országbeli adattovábbítás nincs.
+- **Sütik**: kimondottan rögzítve, hogy nincs analitikai vagy követő süti, ezért nem kérünk
+  süti-hozzájárulást. Csak a `HttpOnly` refresh token süti és a funkcionális `localStorage`
+  (téma, bezárt sávok, függőben lévő meghívó) van. Ezt jobb kimondani, mint később megvédeni.
+- **Adatbiztonság** (32. cikk): bcrypt, AES-GCM, TOTP, rate limiting, HTTPS, a hibaüzenetekből
+  kivezetett technikai részletek, projektszintű jogosultságkezelés. Ez már mind megvolt, csak
+  le kellett írni.
+
+Az ÁSZF rövid, mert a szolgáltatás ingyenes: nincs elállási jog, panaszkezelési rend vagy
+díjvisszatérítés. Kimondja, hogy a szolgáltatás **szakdolgozati, oktatási célból** készült és
+"ahogy van" állapotban, garancia nélkül érhető el - ez jelentősen erősíti a
+felelősségkorlátozást. A felhasználó tartalma a felhasználóé; a szolgáltató csak a működéshez
+szükséges technikai engedélyt kapja. Külön pont rögzíti, hogy a mentés az üzemeltetést
+szolgálja, nem a felhasználó adatmentését helyettesíti.
+
+**Kitöltendő helyek:** az adatkezelő neve, címe, kapcsolattartási e-mail címe és a
+tárhelyszolgáltató neve helyőrzőként szerepel, feltűnő sárga kiemeléssel (`.todo` osztály),
+hogy éles indulás előtt ne maradjon bent.
+
+**Egy CSS hiba javítva közben:** a `LegalDocument` eredetileg `width: 100vw`-t kapott a
+meglévő `.auth-container` mintájára. Az auth oldalak nem görgethetők, ezek viszont igen - a
+`100vw` a függőleges görgetősávot is beleszámítja, amitől fölösleges vízszintes csúszka jelent
+volna meg. `width: 100%`-ra cserélve.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

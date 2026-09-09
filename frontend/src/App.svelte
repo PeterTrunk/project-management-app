@@ -8,7 +8,9 @@
   import VerifyEmail from './routes/VerifyEmail.svelte';
   import ForgotPassword from './routes/ForgotPassword.svelte';
   import ResetPassword from './routes/ResetPassword.svelte';
-  
+  import PrivacyPolicy from './routes/PrivacyPolicy.svelte';
+  import Terms from './routes/Terms.svelte';
+
   const routes = {
     '/': Login,
     '/register': Register,
@@ -17,6 +19,8 @@
     '/verify-email': VerifyEmail,
     '/forgot-password': ForgotPassword,
     '/reset-password': ResetPassword,
+    '/privacy': PrivacyPolicy,
+    '/terms': Terms,
     '*': Login  // ismeretlen route: login
   };
 

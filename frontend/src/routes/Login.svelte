@@ -100,6 +100,12 @@
                 Vissza
             </button>
         {/if}
+
+        <div class="legal-links">
+            <a href="#/privacy">Adatkezelési tájékoztató</a>
+            <span>&middot;</span>
+            <a href="#/terms">Felhasználási feltételek</a>
+        </div>
     </div>
 </div>
 
@@ -244,4 +250,26 @@
     }
 
     #failed { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
+
+    .legal-links {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 0.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-subtle);
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+    }
+
+    .legal-links a {
+        color: var(--text-muted);
+        text-decoration: none;
+    }
+
+    .legal-links a:hover {
+        color: var(--text-secondary);
+        text-decoration: underline;
+    }
 </style>
