@@ -4353,6 +4353,70 @@ után a meglévő `sessionInvalidated` eseményen keresztül zárul a munkamenet
 validátorszáma 33-ról 34-re nőtt - a lefedettségi háló pontosan úgy működött, ahogy kellett:
 az új validátor teszt nélkül elbuktatta volna a készletet. Összesen 576 teszt.
 
+**Utólag kiderült korlát:** a szubsztring-csere csak az UTOLSÓ nevet ismeri, a `DisplayName`
+viszont bármikor módosítható. Aki átnevezte magát, annál a korábbi néven keletkezett sorok
+érintetlenek maradnak.
+
+### Jogi megfelelés 6. etap: mentés, visszaállítás és incidenskezelés
+
+**Probléma:**
+Az adatkezelési tájékoztató konkrét üzemeltetési ígéreteket tesz - 7 napos mentési megőrzés,
+titkosított mentések, a törlés érvényesülése a mentésekben -, de ezeknek sem eljárása, sem
+dokumentációja nem volt. Ráadásul a fióktörlés anonimizálás: ha egy KORÁBBI mentésből
+állítunk vissza, a törölt felhasználó adata **visszatér**, mert a mentés még a törlés előtti
+állapotot őrzi. Erre nem volt semmilyen ellenintézkedés.
+
+**Megoldás:**
+Új `OPERATIONS.md` a repó gyökerében, a `TESTING.md` mintájára. Nem fejlesztői dokumentáció:
+akkor kell elővenni, amikor visszaállítás, incidens vagy törlési kérés történik.
+
+Tartalma négy fejezet: a mentési politika és indoklása; a visszaállítási eljárás a törlések
+újraalkalmazásával; az adatvédelmi incidens 72 órás menete; és egy éles indulás előtti
+ellenőrzőlista.
+
+**A dokumentum lényege a visszaállítási ellenőrzőlista.** Az 5. etap `UserErasure`
+naplóbejegyzése erre való: visszatöltés után a Seq-ből lekérdezhető, kiket töröltek a mentés
+időbélyege óta, és az anonimizálást újra kell alkalmazni rájuk. Enélkül egy visszaállítás
+**némán feltámasztana** egy törölt fiókot.
+
+Ebből következik egy kritikus csatolás, amit külön kiemel a dokumentum: **a Seq megőrzési
+idejének meg kell haladnia a mentésekét**. Ha a napló hamarabb évül el, elveszítjük a
+nyilvántartást arról, kit kell újra anonimizálni. A `docker-compose.prod.yml` ma nem
+konfigurál Seq-retenciót, tehát az alapértelmezés él - ezt ellenőrizni és rögzíteni kell.
+
+Tisztázás, ami a tervezés során is egy félreértés volt: **nem igaz**, hogy a mentés nem
+tartalmazhat személyes adatot. A 32. cikk (1) c) kifejezetten elvárja a helyreállíthatóságot.
+A valódi kérdés a törlés és a mentés viszonya - és mivel a 7 napos rotáció jóval a 30 napos
+teljesítési határidőn belül van, a törölt adat magától eltűnik a mentésekből is. Az
+archívumokat nem kell sebészileg átírni.
+
+**A titkosítás pontosítása - és egy javított állítás a tájékoztatóban:**
+A tervezéskor abból indultam ki, hogy a mentés a feltöltés ELŐTT titkosítódik, és ennek
+megfelelően került a tájékoztatóba, hogy "a tárhelyszolgáltató nem fér hozzá" a tartalomhoz.
+A tényleges beállítás utólag tisztázódott: a `PMA-Backups` bucketen a Backblaze webes
+felületén bekapcsolt titkosítás **SSE-B2**, ahol a kulcsokat **a Backblaze kezeli**. Az SSE-C
+(saját kulcs) bucket-szinten nem is állítható be, csak fájlonként feltöltéskor - amit a
+Dokploy beépített backup funkciója nem tesz meg.
+
+Ez a GDPR 32. cikk "titkosítás nyugalmi állapotban" elvárására **elegendő**, tehát a beállítás
+jó. De a "nem fér hozzá" állítás **valótlan volt**, ezért a tájékoztató szövege javítva:
+a mentés "titkosítva tárolódik, a tárhelyszolgáltató által kezelt kulcsokkal". A maradék
+kockázatot (amerikai anyavállalat) a szolgáltatóval kötött adatfeldolgozói szerződés rendezi,
+ami felkerült az indulási ellenőrzőlistára.
+
+Tanulság a szakdolgozathoz: egy jogi dokumentumba került technikai állítást **ellenőrizni kell
+a tényleges konfiguráción**, nem a tervezéskori feltételezésen. Itt a feltételezés és a
+valóság között pont az a különbség volt, ami a mondat igazságtartalmát eldöntötte.
+
+**Az indulási ellenőrzőlista** azért került bele, mert a jogi dokumentumok olyan állításokat
+tartalmaznak, amelyeknek az indulás pillanatában igaznak kell lenniük. A lista ezeket egy
+helyre gyűjti a kitöltendő helyőrzőkkel együtt - köztük az **activity-leírások
+sablonosítását** (7. etap) és a **Backblaze DPA** elfogadását.
+
+**Amit nem tudtunk kitölteni:** a mentés nem a repóból fut, hanem a Dokploy beépített backup
+funkciója végzi. A pontos ütemezés és a rotáció beállításának helye helyőrzőként szerepel -
+ezeket az üzemeltetőnek kell rögzítenie, hogy egy visszaállítás ne találgatásból álljon.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.

@@ -187,10 +187,16 @@
     </table>
 
     <p>
-        Minden felsorolt szolgáltató az Európai Gazdasági Térségen belül tárolja az adatokat,
-        ezért harmadik országba történő adattovábbításra nem kerül sor. A biztonsági mentések
-        <strong>titkosítva</strong> kerülnek feltöltésre, így azok tartalmához a tárhelyszolgáltató
-        nem fér hozzá.
+        Minden felsorolt szolgáltató az <strong>Európai Gazdasági Térségen belül</strong> tárolja
+        az adatokat, ezért harmadik országba történő adattovábbításra nem kerül sor. A biztonsági
+        mentések <strong>titkosítva tárolódnak</strong>, a tárhelyszolgáltató által kezelt
+        kulcsokkal, a kapcsolat pedig minden esetben titkosított.
+    </p>
+
+    <p>
+        A mentéseket tároló szolgáltató anyavállalata az Egyesült Államokban működik. Az adat
+        maga az Európai Unióban marad, és a szolgáltatóval adatfeldolgozói szerződés van
+        érvényben, amely a szükséges garanciákat tartalmazza.
     </p>
 
     <h2>5. Meddig őrizzük az adatokat</h2>
