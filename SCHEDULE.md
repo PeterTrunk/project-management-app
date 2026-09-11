@@ -4124,6 +4124,66 @@ Megoldás: explicit felülírás a javított `2026.0.0`-ra. Megjelenés 2026-08-
 kódban van, nem a környezetben. Utána egy külön `docker pull postgres:17` lépés, hogy az
 image-letöltés ne a tesztek idejébe számítson, végül az integrációs kör.
 
+### Tesztlefedettség 3. etap: projekt-hatókör (IDOR) és a jogosultsági réteg
+
+**Probléma:**
+A teljes biztonsági refaktor - az IDOR project-scoping, a tipizált kivételek, a jogosultsági
+réteg fail-closed javítása - **nulla teszttel** ment ki, 257 committal az utolsó tesztcommit
+után. Ha valaki egy refaktor közben kivesz egy `&& t.ProjectId == projectId` feltételt, ma
+semmi nem szól: a kód fordul, a felület működik, és csendben elérhetővé válik idegen projekt
+adata.
+
+**Megoldás:**
+29 teszt a mag 6 szolgáltatás **28 projekt-hatókörű metódusára**, plusz 21 teszt a
+`ProjectRoleHandler`-re.
+
+A minta mindenhol ugyanaz: az **A projekt azonosítójával** nyúlunk a **B projekt entitásához**.
+A helyes válasz `NotFoundException` - nem `ForbiddenException`, mert a hívónak azt sem kell
+megtudnia, hogy az entitás egyáltalán létezik.
+
+Két részlet, ami nélkül a teszt önmagát csapná be:
+
+- **Külön context a seedeléshez és a művelethez.** Közös context mellett a change trackerbe
+  már betöltött entitások elfedhetnék a hiányzó szűrést. Külön contexttel a szolgáltatás friss
+  állapotból indul - pont mint élesben, ahol minden kérés saját `DbContext`-et kap.
+- **A kivétel önmagában nem elég.** Minden mutáló metódusnál FRISS contexttel ellenőrizzük,
+  hogy a sor tényleg megvan még, illetve hogy a mező értéke nem változott. Egy szolgáltatás
+  dobhatna kivételt AZUTÁN is, hogy már törölt vagy módosított valamit.
+
+A címkéknél **két irányban** is mérünk: saját címke idegen taskra, és idegen címke saját
+taskra - egy hiányos szűrés bármelyik oldalon elég a bajhoz. Az oszlopoknál hasonlóan: a board
+a projekthez, az oszlop a boardhoz scope-ol, és mindkét lépcső külön tesztet kap.
+
+**A jogosultsági réteg.** A `ProjectRoleHandler` szándékosan valódi adatbázissal fut, mert a
+döntés egy `ProjectMembers` lekérdezésen múlik. A lefedett esetek: hiányzó és hibás formátumú
+claim (`TryParse` nélkül ez `FormatException`, azaz 500 lenne a jogosultsági rétegből),
+hiányzó és hibás route érték, nem tag, a teljes szerepkör-hierarchia 10 kombinációban, és a
+kis/nagybetűs eltérés.
+
+A legfontosabb a **fail-closed** hármas: ismeretlen szerepkör az adatbázisban, ismeretlen
+követelmény, és - a lényeg - **mindkettő ismeretlen egyszerre**. Ez zárja a `-1 >= -1` lyukat:
+a rangsor ismeretlen szerepkörre -1-et ad, tehát egy puszta `userRank >= requiredRank`
+összehasonlítás két ismeretlen érték esetén IGAZ lenne, és átengedné a kérést.
+
+**A tesztek valódi próbája.** Ideiglenesen kivettem a `&& t.ProjectId == projectId` feltételt
+a `TaskService.DeleteTaskAsync`-ből, és a készlet **pontosan egy teszttel** bukott el - a
+`DeleteTaskAsync_ForeignTask_ThrowsNotFound`-dal. Visszaállítás után a forrásfájl bájtazonos
+maradt. Egy teszt, ami sosem bukott el, nem bizonyít semmit.
+
+**Lefedettségi háló.** A `CrossProjectCoverageTests` reflexióval végigmegy a 6 interfészen, és
+kigyűjti azokat a metódusokat, ahol a projekt-hatókör értelmezhető: az első paraméter a
+`projectId`, és van legalább még egy **nem nullozható** `Guid`. A nullozható Guid paraméterek
+(pl. a `GetTasksAsync` `boardId` szűrője) szándékosan kimaradnak - azok szűrők, nem kikeresett
+entitások, idegen érték esetén üres eredményt adnak.
+
+Egy újonnan hozzáadott metódus így nem maradhat teszt nélkül. A darabszám-állítás (28) és a
+lefedettségi állítás **egymást is védi**: ha a metóduskeresés valaha üresen térne vissza, a
+lefedettségi teszt vakon átmenne - de a darabszám bukna.
+
+**Tudatosan kimarad:** a maradék 6 szolgáltatás 16 metódusa (Attachment, Integration, Team,
+Git, GitWebhook, Statistics). A mátrix additív, ezek később olcsón bővíthetők - a git rész
+pedig úgyis változik a következő munkában.
+
 ### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
 
 **Probléma:**

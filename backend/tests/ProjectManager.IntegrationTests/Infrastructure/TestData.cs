@@ -11,7 +11,10 @@ namespace ProjectManager.IntegrationTests.Infrastructure
         Project Project,
         Board Board,
         ColumnDefinition Column,
-        ProjectTask Task);
+        ProjectTask Task,
+        Sprint Sprint,
+        Label Label,
+        Comment Comment);
 
     /// <summary>
     /// Két, egymástól független projekt külön tulajdonossal - a projekt-scoping (IDOR) tesztek alapja:
@@ -94,9 +97,33 @@ namespace ProjectManager.IntegrationTests.Infrastructure
             };
             context.ProjectTasks.Add(task);
 
+            var sprint = new Sprint
+            {
+                ProjectId = project.Id,
+                Name = $"{projKey} Sprint 1",
+                State = SprintStates.Planning
+            };
+            context.Sprints.Add(sprint);
+
+            var label = new Label
+            {
+                ProjectId = project.Id,
+                Name = $"{projKey}-cimke",
+                Color = "#FF0000"
+            };
+            context.Labels.Add(label);
+
+            var comment = new Comment
+            {
+                TaskId = task.Id,
+                UserId = owner.Id,
+                Body = $"{projKey} első hozzászólása"
+            };
+            context.Comments.Add(comment);
+
             await context.SaveChangesAsync();
 
-            return new SeededProject(owner, project, board, column, task);
+            return new SeededProject(owner, project, board, column, task, sprint, label, comment);
         }
 
         /// <summary>

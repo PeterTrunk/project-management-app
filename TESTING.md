@@ -45,12 +45,33 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
+Összesen **56 teszt** (55 aktív, 1 szándékosan kihagyott), futásidő ~2 másodperc.
+
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
 - a felseedelt gráf másik contextből is olvasható
 - `CreatedAt`/`UpdatedAt` bélyegzés működik
 - az `xmin` feltöltődik és változik módosításkor
 - a Respawn üres adatbázist hagy minden teszt előtt
+
+**Projekt-hatókör (IDOR)** — a mag 6 szolgáltatás mind a 28 hatókörös metódusa:
+`TaskService`, `SprintService`, `ColumnService`, `BoardService`, `CommentService`,
+`LabelService`.
+
+A minta mindenhol azonos: az **A projekt azonosítójával** nyúlunk a **B projekt entitásához**,
+és `NotFoundException`-t várunk. A mutáló metódusoknál a kivétel nem elég — friss contexttel
+ellenőrizzük, hogy a sor tényleg megvan még és nem változott.
+
+A `CrossProjectCoverageTests` reflexióval őrzi a lefedettséget: egy új, projekt-hatókörű
+metódus nem maradhat teszt nélkül.
+
+**Jogosultsági réteg** — `ProjectRoleHandler`, valódi adatbázissal:
+- hiányzó és hibás formátumú felhasználói claim
+- hiányzó és hibás route érték
+- nem tag felhasználó
+- a teljes szerepkör-hierarchia (Viewer &lt; Member &lt; Admin &lt; Owner), 10 kombinációban
+- **fail-closed**: ismeretlen szerepkör, ismeretlen követelmény, és mindkettő egyszerre —
+  ez utóbbi zárja a `-1 >= -1` lyukat
 
 Egy `Skip`-elt teszt jelzi az ismert eltérést: a szinkron `SaveChanges()` nincs felülírva az
 `AppDbContext`-ben, tehát ott kimarad az időbélyegzés. Ennek javítása külön döntés.
