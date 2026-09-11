@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Ez a projekt Dockert igenyel: valodi PostgreSQL indul konteneben minden futashoz.
+       Azert kulon projekt a ProjectManager.Tests mellett, es nem egy mappa benne, hogy a
+       "Docker nelkul fut" a masik assembly forditasi ideju tulajdonsaga legyen - egy
+       elgepelt teszt-szuro igy nem tudja veletlenul behuzni a Testcontainerst. -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Respawn" Version="7.0.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.13.0" />
+
+    <!-- Tranzitiv fuggoseg a Testcontainers-bol, kezzel felulirva a javitott verziora.
+         A behuzott 2025.1.0-ban CVE-2026-48798 (magas sulyossag): path traversal a
+         ScpClient.Download()-ban, amit egy rosszindulatu SCP szerver hasznalhat ki rekurziv
+         konyvtar-letolteskor. Minket a gyakorlatban nem erint - a Testcontainers csak
+         tavoli, SSH-n keresztuli Docker hosthoz hasznalja, mi pedig helyi daemonnal
+         dolgozunk -, de egy teszt-fuggoseg is legyen javitott.
+         A 2026.0.0 megjelenese 2026-08-09, tehat a 30 napos szabalynak megfelel. -->
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <!-- A RecordingHubContext IHubContext-et valosit meg, a FakeCurrentUserService pedig
+       az ASP.NET Core absztrakcioira tamaszkodik. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- parallelizeTestCollections: false - egyetlen adatbazison osztozunk, es a Respawn
+       minden teszt ELOTT urit. Parhuzamos collection eseten egy reset belefutna egy masik
+       teszt kozepebe. -->
+  <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ProjectManager.API\ProjectManager.API.csproj" />
+  </ItemGroup>
+
+</Project>

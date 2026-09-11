@@ -4,7 +4,7 @@
 
 1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
 
-Összesen **554 teszt**, futásidő ~0,2 másodperc. A projekt szándékosan függőségmentes:
+Összesen **579 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
 nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
 
 **Tiszta logika**
@@ -23,8 +23,84 @@ nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pushol
   továbbá a már elindult válasz `Abort()`-ot kap kiírás helyett
 
 **Validátorok**
-- Mind a 33 FluentValidation validátor, határértékekkel
+- Mind a 34 FluentValidation validátor, határértékekkel
 - `ValidatorCoverageTests` — egy új validátor tesztek nélkül nem maradhat észrevétlen
+
+**Konzisztencia**
+- `LegalVersionTests` — a backend és a frontend dokumentumverziója nem csúszhat el
+  (eltérés esetén minden regisztráció elbukna)
+
+## Integrációs tesztek (xUnit + Testcontainers)
+
+1. `dotnet test backend/tests/ProjectManager.IntegrationTests/ProjectManager.IntegrationTests.csproj`
+
+**Ehhez Docker kell.** A tesztkód maga indít egy valódi `postgres:17` konténert, lefuttatja rá
+a migrációkat, és a végén eldobja. Az első futás lassabb (image letöltés), utána másodpercek.
+
+Azért valódi PostgreSQL és nem EF Core InMemory, mert az `AppDbContext` `xmin`
+konkurenciavezérlésre, `ExecuteUpdateAsync`-re, Serializable tranzakciókra és egyedi indexekre
+épül — ezeket az InMemory vagy nem tudja, vagy némán elfogadja. Az utóbbi a veszélyesebb: zöld
+teszt, ami nem néz oda.
+
+A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
+(nem utána — így egy elszállt teszt állapota megvizsgálható marad).
+
+Összesen **56 teszt** (55 aktív, 1 szándékosan kihagyott), futásidő ~2 másodperc.
+
+**Füstteszt** — az infrastruktúra maga:
+- a migrációk lefutottak, nincs függőben lévő
+- a felseedelt gráf másik contextből is olvasható
+- `CreatedAt`/`UpdatedAt` bélyegzés működik
+- az `xmin` feltöltődik és változik módosításkor
+- a Respawn üres adatbázist hagy minden teszt előtt
+
+**Projekt-hatókör (IDOR)** — a mag 6 szolgáltatás mind a 28 hatókörös metódusa:
+`TaskService`, `SprintService`, `ColumnService`, `BoardService`, `CommentService`,
+`LabelService`.
+
+A minta mindenhol azonos: az **A projekt azonosítójával** nyúlunk a **B projekt entitásához**,
+és `NotFoundException`-t várunk. A mutáló metódusoknál a kivétel nem elég — friss contexttel
+ellenőrizzük, hogy a sor tényleg megvan még és nem változott.
+
+A `CrossProjectCoverageTests` reflexióval őrzi a lefedettséget: egy új, projekt-hatókörű
+metódus nem maradhat teszt nélkül.
+
+**Jogosultsági réteg** — `ProjectRoleHandler`, valódi adatbázissal:
+- hiányzó és hibás formátumú felhasználói claim
+- hiányzó és hibás route érték
+- nem tag felhasználó
+- a teljes szerepkör-hierarchia (Viewer &lt; Member &lt; Admin &lt; Owner), 10 kombinációban
+- **fail-closed**: ismeretlen szerepkör, ismeretlen követelmény, és mindkettő egyszerre —
+  ez utóbbi zárja a `-1 >= -1` lyukat
+
+Egy `Skip`-elt teszt jelzi az ismert eltérést: a szinkron `SaveChanges()` nincs felülírva az
+`AppDbContext`-ben, tehát ott kimarad az időbélyegzés. Ennek javítása külön döntés.
+
+**Docker nélkül:** a `PMA_TEST_POSTGRES` környezeti változóval egy meglévő adatbázisra
+irányítható. Ide soha ne a fejlesztői adatbázis kerüljön — a Respawn minden táblát ürít.
+
+## Frontend tesztek (vitest)
+
+1. `cd frontend && npm test` — **52 teszt**, ~0,4 másodperc
+2. `cd frontend && npm run check` — típusellenőrzés, 0 hiba
+
+Nem kell hozzá Docker és böngésző: a tesztelt store-ok tiszta függvények, `node` környezetben
+futnak. jsdom sincs, mert egyikük sem nyúl `window`-hoz, `document`-hez vagy
+`localStorage`-hoz.
+
+**Mit fed le:** mind a **23 SignalR store handler** (`taskStore` 13, `boardStore` 7,
+`sprintStore` 3). Ezeknél nincs backend háló — ha egy handler rossz sorra ír, a szerver adata
+helyes marad, a felhasználó mégis hibás felületet lát valós időben.
+
+A tesztek a triviális eseteken túl ezeket rögzítik:
+- **idempotencia** — ugyanaz az esemény kétszer is megérkezhet újracsatlakozáskor
+- a megnyitott task (`activeTask`) külön hivatkozás, annak is frissülnie kell
+- a board törlése az oszlopait is viszi
+- az oszlop-átrendezés rendez is, nem csak frissít
+- az aktív sprint származtatott állapot, a `state` mezőből következik
+
+A tesztfájlok a vizsgált kód mellett élnek (`lib/stores/taskStore.test.ts`), így a
+`npm run check` **őket is típusellenőrzi**.
 
 ## E2E integration tesztelés (MVP szinten)
 2. Manuális Integration Tesztek

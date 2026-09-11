@@ -24,8 +24,20 @@ jobs:
       - name: Build
         run: dotnet build backend/ProjectManager.slnx --no-restore --configuration Release
 
-      - name: Test
-        run: dotnet test backend/ProjectManager.slnx --no-build --configuration Release --verbosity normal
+      # A gyors kör: nincs Docker, nincs hálózat. Ha ez elbukik, a hiba a kódban van,
+      # nem a környezetben - ezért fut előbb.
+      - name: Test (unit)
+        run: dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # Külön lépésben, hogy az image letöltése ne a tesztek idejébe számítson bele,
+      # és egy elakadás itt azonnal láthatóan a letöltés legyen.
+      - name: Pull PostgreSQL image
+        run: docker pull postgres:17
+
+      # A Testcontainers a runner Docker daemonját használja. Külön lépés, hogy a
+      # naplóban azonnal látszódjon, melyik kör bukott el.
+      - name: Test (integration)
+        run: dotnet test backend/tests/ProjectManager.IntegrationTests/ProjectManager.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
 
   frontend:
     name: Frontend build
@@ -47,7 +59,14 @@ jobs:
       - name: Install
         run: npm ci
 
-      # A build script ma csak `vite build` - típusellenőrzés nincs benne.
-      # Ha később bekerül a svelte-check, ide jöhet külön lépésként.
+      # A `vite build` nem típusellenőriz, csak fordít. A svelte-check ezért külön lépés:
+      # egy típushiba így merge előtt derül ki, nem futásidőben.
+      # A tsconfig `src/**/*.ts` include-ja miatt a tesztfájlokra is kiterjed.
+      - name: Type check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build

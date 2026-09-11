@@ -4048,6 +4048,209 @@ Relational 10.0.3-at az `EntityFrameworkCore.Design`-on át kapja, ami `PrivateA
 tehát a teszt-projektbe nem folyik át - ott a Npgsql 10.0.0-s Relationalja jönne, a
 `ProjectManager.API.dll` viszont 10.0.3-ra hivatkozik.
 
+### Tesztlefedettség 2. etap: PostgreSQL integrációs teszt-projekt
+
+**Probléma:**
+Az 1. etap 579 tesztje mind függőségmentes: tiszta logika, validátorok, middleware. A
+szolgáltatások viselkedését - és ezen belül a projekt-scoping (IDOR) helyességét - viszont
+csak valódi adatbázis ellen lehet megmérni.
+
+Az EF Core InMemory provider **nem járható út**, és ez nem ízlés kérdése. Az `AppDbContext`
+PostgreSQL-specifikus elemekre épül, amiket az InMemory vagy nem tud, vagy - és ez a rosszabb -
+**némán elfogad**: az `xmin` konkurenciavezérlés `xid` rendszeroszlopra képződik, az
+`AuthService` `ExecuteUpdateAsync`-et hív, a `CounterService` Serializable tranzakciót nyit és
+`PostgresException` 40001-re épít, a séma pedig ~12 egyedi indexet tartalmaz, amiket az
+InMemory nem tartat be. Egy hamis zöld teszt rosszabb, mint a teszt hiánya.
+
+**Megoldás:**
+Új `ProjectManager.IntegrationTests` projekt Testcontainers-szel: a tesztkód maga indít egy
+valódi `postgres:17` konténert, lefuttatja rá a 38 migrációt, és a végén eldobja.
+
+**Miért külön projekt és nem mappa a meglévőben:** így a "Docker nélkül fut" a másik assembly
+**fordítási idejű tulajdonsága**, nem fegyelem kérdése. Egy közös projektnél a
+kategória-szűrő is betöltené a Testcontainerst, és egy elgépelt szűrő Docker nélküli gépen
+image-letöltésen állna meg.
+
+Az `Infrastructure/` tartalma:
+
+- **`PostgresFixture`** - a konténer **futásonként egyszer** indul (`ICollectionFixture`), nem
+  tesztenként. A konténer belső portját a Testcontainers szabad hosztportra képezi le, ezért
+  nem ütközik a fejlesztői PostgreSQL-lel. Szándékosan `MigrateAsync` és nem `EnsureCreated`:
+  a szűrt egyedi index és az `xmin` leképzés pont az, amit valódi DDL ellen kell futtatni
+- **`Respawn`** - `TRUNCATE ... CASCADE` minden teszt **ELŐTT**, nem utána. Így egy elszállt
+  teszt állapota megvizsgálható marad, a következő teszt mégis tisztán indul. Ez
+  ezredmásodperc, szemben a konténer-újraindítás másodperceivel
+- **`RecordingHubContext`** - lásd lentebb
+- `PostgresCollection`, `DatabaseTestBase`, `FakeCurrentUserService`, `ServiceFactory`, `TestData`
+
+**Mock könyvtár nem kell.** Az eredeti terv NSubstitute-ot javasolt; a felhasználó jogos
+észrevétele nyomán kimaradt. A `ServiceFactory` szándékosan **valódi** implementációt ad
+mindenre, ami számít: `AppDbContext`, `LexorankService`, `CounterService` (ugyanazzal a
+contexttel, mert Serializable tranzakciót nyit azon a kapcsolaton), és `ActivityService` -
+utóbbi azért valódi, mert így az állítás nem az, hogy "meghívták", hanem hogy a sor **tényleg
+bekerült** az `Activities` táblába.
+
+Egyedül az `IHubContext` kap duplát, mert valódi implementációhoz futó SignalR szerver
+kellene. A kézi `RecordingHubContext` listába gyűjti a hívásokat, tehát az állítás egy
+hétköznapi LINQ kifejezés. Mellékhaszon: a SignalR `SendAsync` valójában **extension metódus**
+az `IClientProxy`-n, amit mockolni nem is lehet - csak az alatta lévő `SendCoreAsync`-et.
+Itt ez a különbség nem okoz meglepetést.
+
+**Füstteszt, hat esettel:** a migrációk lefutottak és nincs függőben lévő; a felseedelt gráf
+**másik contextből** is olvasható (a change tracker ne hazudhassa, hogy megvan a sor); a
+`CreatedAt`/`UpdatedAt` bélyegzés működik; az `xmin` feltöltődik és **változik módosításkor**;
+és a Respawn tényleg üres adatbázist hagy minden teszt előtt.
+
+A hatodik `Skip`-elt: az `AppDbContext` **csak** az aszinkron `SaveChangesAsync`-et írja felül,
+tehát szinkron mentésnél mind a 24 entitáson kimarad az időbélyegzés. Ez minden entitást
+érintő viselkedésváltozás lenne, ezért nem javítjuk egy teszt-etapban - a `Skip` teszi
+láthatóvá, hogy a döntés a felhasználóé maradjon.
+
+**Kimenekülő út Docker nélkül:** a fixture először a `PMA_TEST_POSTGRES` környezeti változót
+nézi. Ha be van állítva, azt a meglévő adatbázist használja. **Ide soha ne a fejlesztői
+adatbázis kerüljön** - a Respawn minden táblát ürít.
+
+**Egy sebezhetőség, ami menet közben előkerült:**
+A Testcontainers tranzitívan behúzza az `SSH.NET 2025.1.0`-t, amiben **CVE-2026-48798**
+(magas súlyosság) van: path traversal a `ScpClient.Download()`-ban, amit egy rosszindulatú SCP
+szerver használhat ki rekurzív könyvtár-letöltéskor. Minket a gyakorlatban nem érint - a
+Testcontainers csak távoli, SSH-n keresztüli Docker hosthoz használja, mi pedig helyi
+daemonnal dolgozunk -, de a build figyelmeztetése valós.
+
+Megoldás: explicit felülírás a javított `2026.0.0`-ra. Megjelenés 2026-08-09, tehát a
+**30 napos szabálynak megfelel**. A build így 0 warninggal fordul.
+
+**CI:** a `Test` lépés kettévált. Előbb a gyors, Docker nélküli kör fut - ha az bukik, a hiba a
+kódban van, nem a környezetben. Utána egy külön `docker pull postgres:17` lépés, hogy az
+image-letöltés ne a tesztek idejébe számítson, végül az integrációs kör.
+
+### Tesztlefedettség 3. etap: projekt-hatókör (IDOR) és a jogosultsági réteg
+
+**Probléma:**
+A teljes biztonsági refaktor - az IDOR project-scoping, a tipizált kivételek, a jogosultsági
+réteg fail-closed javítása - **nulla teszttel** ment ki, 257 committal az utolsó tesztcommit
+után. Ha valaki egy refaktor közben kivesz egy `&& t.ProjectId == projectId` feltételt, ma
+semmi nem szól: a kód fordul, a felület működik, és csendben elérhetővé válik idegen projekt
+adata.
+
+**Megoldás:**
+29 teszt a mag 6 szolgáltatás **28 projekt-hatókörű metódusára**, plusz 21 teszt a
+`ProjectRoleHandler`-re.
+
+A minta mindenhol ugyanaz: az **A projekt azonosítójával** nyúlunk a **B projekt entitásához**.
+A helyes válasz `NotFoundException` - nem `ForbiddenException`, mert a hívónak azt sem kell
+megtudnia, hogy az entitás egyáltalán létezik.
+
+Két részlet, ami nélkül a teszt önmagát csapná be:
+
+- **Külön context a seedeléshez és a művelethez.** Közös context mellett a change trackerbe
+  már betöltött entitások elfedhetnék a hiányzó szűrést. Külön contexttel a szolgáltatás friss
+  állapotból indul - pont mint élesben, ahol minden kérés saját `DbContext`-et kap.
+- **A kivétel önmagában nem elég.** Minden mutáló metódusnál FRISS contexttel ellenőrizzük,
+  hogy a sor tényleg megvan még, illetve hogy a mező értéke nem változott. Egy szolgáltatás
+  dobhatna kivételt AZUTÁN is, hogy már törölt vagy módosított valamit.
+
+A címkéknél **két irányban** is mérünk: saját címke idegen taskra, és idegen címke saját
+taskra - egy hiányos szűrés bármelyik oldalon elég a bajhoz. Az oszlopoknál hasonlóan: a board
+a projekthez, az oszlop a boardhoz scope-ol, és mindkét lépcső külön tesztet kap.
+
+**A jogosultsági réteg.** A `ProjectRoleHandler` szándékosan valódi adatbázissal fut, mert a
+döntés egy `ProjectMembers` lekérdezésen múlik. A lefedett esetek: hiányzó és hibás formátumú
+claim (`TryParse` nélkül ez `FormatException`, azaz 500 lenne a jogosultsági rétegből),
+hiányzó és hibás route érték, nem tag, a teljes szerepkör-hierarchia 10 kombinációban, és a
+kis/nagybetűs eltérés.
+
+A legfontosabb a **fail-closed** hármas: ismeretlen szerepkör az adatbázisban, ismeretlen
+követelmény, és - a lényeg - **mindkettő ismeretlen egyszerre**. Ez zárja a `-1 >= -1` lyukat:
+a rangsor ismeretlen szerepkörre -1-et ad, tehát egy puszta `userRank >= requiredRank`
+összehasonlítás két ismeretlen érték esetén IGAZ lenne, és átengedné a kérést.
+
+**A tesztek valódi próbája.** Ideiglenesen kivettem a `&& t.ProjectId == projectId` feltételt
+a `TaskService.DeleteTaskAsync`-ből, és a készlet **pontosan egy teszttel** bukott el - a
+`DeleteTaskAsync_ForeignTask_ThrowsNotFound`-dal. Visszaállítás után a forrásfájl bájtazonos
+maradt. Egy teszt, ami sosem bukott el, nem bizonyít semmit.
+
+**Lefedettségi háló.** A `CrossProjectCoverageTests` reflexióval végigmegy a 6 interfészen, és
+kigyűjti azokat a metódusokat, ahol a projekt-hatókör értelmezhető: az első paraméter a
+`projectId`, és van legalább még egy **nem nullozható** `Guid`. A nullozható Guid paraméterek
+(pl. a `GetTasksAsync` `boardId` szűrője) szándékosan kimaradnak - azok szűrők, nem kikeresett
+entitások, idegen érték esetén üres eredményt adnak.
+
+Egy újonnan hozzáadott metódus így nem maradhat teszt nélkül. A darabszám-állítás (28) és a
+lefedettségi állítás **egymást is védi**: ha a metóduskeresés valaha üresen térne vissza, a
+lefedettségi teszt vakon átmenne - de a darabszám bukna.
+
+**Tudatosan kimarad:** a maradék 6 szolgáltatás 16 metódusa (Attachment, Integration, Team,
+Git, GitWebhook, Statistics). A mátrix additív, ezek később olcsón bővíthetők - a git rész
+pedig úgyis változik a következő munkában.
+
+### Tesztlefedettség 4. etap: típusellenőrzés a CI-ban és a store handler tesztek
+
+**Probléma:**
+Két, egymástól független hiányosság a frontenden.
+
+A `svelte-check` telepítve volt, de **nem futott sehol**: se npm script, se CI lépés. A
+`ci.yml`-ben még egy komment is állt róla, hogy "ha később bekerül, ide jöhet". A `vite build`
+nem típusellenőriz, csak fordít - egy típushiba így csak futásidőben derült volna ki.
+
+A másik: a **23 SignalR store handler** (`taskStore` 13, `boardStore` 7, `sprintStore` 3)
+teszteletlen volt. Ezeknél **nincs backend háló**: ha egy handler rossz sorra ír vagy nem
+törli az elemet a listából, a szerver adata helyes marad, a felhasználó mégis hibás felületet
+lát valós időben. Egy ilyen hibát csak az vesz észre, aki éppen nézi a képernyőt.
+
+**Megoldás:**
+`vitest`, `vitest.config.ts` és három scriptek (`check`, `test`, `test:watch`), plusz két új
+CI lépés a frontend jobban. 52 teszt fedi le mind a 23 handlert.
+
+**Külön `vitest.config.ts`**, nem a `vite.config.js` bővítése: így a `vite build` viselkedése
+bizonyíthatóan érintetlen marad - a build konfigurációjához egyetlen sort sem nyúltunk. A
+`mergeConfig` mégis garantálja, hogy a tesztek ugyanazt a plugin- és feloldási beállítást
+lássák, tehát egy import nem viselkedhet másképp a két helyen.
+
+**jsdom nem kell.** Ellenőrizve, hogy sem a három store, sem a `projectStore` (amit a
+`taskStore` importál) nem nyúl `window`-hoz, `document`-hez vagy `localStorage`-hoz, az
+`api/*` importjaik pedig kizárólag `import type` alakúak - amiket a fordító töröl, tehát az
+axios sem kerül be a futtatásba. A `node` környezet elég.
+
+**A tesztfájlok a vizsgált kód mellett élnek** (`lib/stores/taskStore.test.ts`). Ennek van egy
+mellékhaszna: a `tsconfig` `src/**/*.ts` include-ja miatt a `npm run check` **őket is
+típusellenőrzi** - a vizsgált fájlszám 3970-ről 4019-re nőtt. Egy elgépelt payload mező így
+nem a teszt futásakor derül ki, hanem fordításkor.
+
+**Amit a tesztek rögzítenek**, a triviális eseteken túl:
+
+- **Idempotencia.** Ugyanaz az esemény kétszer is megérkezhet (újracsatlakozás, két replika),
+  ezért a felelős- és címke-hozzáadás nem duplikálhat. A SignalR reconnect munka után ez nem
+  elméleti kérdés
+- **A megnyitott task külön hivatkozáson ül.** Az `activeTask` nem ugyanaz az objektum, mint a
+  listabeli - ha nem frissül, a részletnézetben a régi felelősök maradnának, miközben a
+  kártyán már az újak látszanak
+- **A board törlése az oszlopait is viszi**, és nullázza az aktív hivatkozást
+- **Az oszlop-átrendezés nem csak frissít, hanem rendez is** - enélkül a régi sorrend maradna
+  a képernyőn az új pozíciók ellenére
+- **A származtatott aktív sprint** a `state` mezőből következik, nem külön eseményből
+- Két szándékos viselkedés szerződésként rögzítve: a `handleTaskMoved` null `columnId` esetén
+  **megtartja** a korábbi oszlopot, a `handleAttachmentUploaded` pedig `taskId` nélkül némán
+  kilép (projekt szintű feltöltés)
+
+**A tesztek valódi próbája.** Kivettem a `handleBoardDeleted`-ből az oszlop-szűrést, és
+**pontosan egy teszt** bukott el - a helyes. Visszaállítás után a fájl bájtazonos.
+
+**Kivétel a 30 napos szabály alól - a felhasználó döntése:**
+A terv a `vitest 4.1.10`-et jelölte ki (66 napos). Telepítés után az `npm audit` kimutatta a
+**CVE-2026-84373**-at: path traversal az `@vitest/mocker` redirect mock funkciójában, ami a
+4.1.10-zel bezárólag minden verziót érint. A javítás a **4.1.11**, ami viszont csak **23
+napos** - hét nappal a szabály alatt.
+
+A kitettség gyakorlatilag nulla lett volna: a sebezhetőség dev-szerver működésű, a támadónak
+el kell érnie a dev szerver WebSocketjét (alapértelmezésben csak localhost), mi pedig egyszeri
+`vitest run`-t futtatunk, browser mode és `vi.mock()` nélkül.
+
+A felhasználó ennek ellenére a **frissítést** választotta: egy álló `npm audit`
+figyelmeztetés rosszabb, mint egy dokumentált, hét napos kivétel. Az `npm audit` most
+**0 sebezhetőséget** jelent. A verzió caret nélkül, pontosan rögzítve - a `^4.1.11` mellett egy
+`npm i` felcsúszhatna egy frissebb kiadásra, és csendben megsértené a szabályt.
+
 ### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
 
 **Probléma:**
