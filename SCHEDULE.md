@@ -4184,6 +4184,73 @@ lefedettségi teszt vakon átmenne - de a darabszám bukna.
 Git, GitWebhook, Statistics). A mátrix additív, ezek később olcsón bővíthetők - a git rész
 pedig úgyis változik a következő munkában.
 
+### Tesztlefedettség 4. etap: típusellenőrzés a CI-ban és a store handler tesztek
+
+**Probléma:**
+Két, egymástól független hiányosság a frontenden.
+
+A `svelte-check` telepítve volt, de **nem futott sehol**: se npm script, se CI lépés. A
+`ci.yml`-ben még egy komment is állt róla, hogy "ha később bekerül, ide jöhet". A `vite build`
+nem típusellenőriz, csak fordít - egy típushiba így csak futásidőben derült volna ki.
+
+A másik: a **23 SignalR store handler** (`taskStore` 13, `boardStore` 7, `sprintStore` 3)
+teszteletlen volt. Ezeknél **nincs backend háló**: ha egy handler rossz sorra ír vagy nem
+törli az elemet a listából, a szerver adata helyes marad, a felhasználó mégis hibás felületet
+lát valós időben. Egy ilyen hibát csak az vesz észre, aki éppen nézi a képernyőt.
+
+**Megoldás:**
+`vitest`, `vitest.config.ts` és három scriptek (`check`, `test`, `test:watch`), plusz két új
+CI lépés a frontend jobban. 52 teszt fedi le mind a 23 handlert.
+
+**Külön `vitest.config.ts`**, nem a `vite.config.js` bővítése: így a `vite build` viselkedése
+bizonyíthatóan érintetlen marad - a build konfigurációjához egyetlen sort sem nyúltunk. A
+`mergeConfig` mégis garantálja, hogy a tesztek ugyanazt a plugin- és feloldási beállítást
+lássák, tehát egy import nem viselkedhet másképp a két helyen.
+
+**jsdom nem kell.** Ellenőrizve, hogy sem a három store, sem a `projectStore` (amit a
+`taskStore` importál) nem nyúl `window`-hoz, `document`-hez vagy `localStorage`-hoz, az
+`api/*` importjaik pedig kizárólag `import type` alakúak - amiket a fordító töröl, tehát az
+axios sem kerül be a futtatásba. A `node` környezet elég.
+
+**A tesztfájlok a vizsgált kód mellett élnek** (`lib/stores/taskStore.test.ts`). Ennek van egy
+mellékhaszna: a `tsconfig` `src/**/*.ts` include-ja miatt a `npm run check` **őket is
+típusellenőrzi** - a vizsgált fájlszám 3970-ről 4019-re nőtt. Egy elgépelt payload mező így
+nem a teszt futásakor derül ki, hanem fordításkor.
+
+**Amit a tesztek rögzítenek**, a triviális eseteken túl:
+
+- **Idempotencia.** Ugyanaz az esemény kétszer is megérkezhet (újracsatlakozás, két replika),
+  ezért a felelős- és címke-hozzáadás nem duplikálhat. A SignalR reconnect munka után ez nem
+  elméleti kérdés
+- **A megnyitott task külön hivatkozáson ül.** Az `activeTask` nem ugyanaz az objektum, mint a
+  listabeli - ha nem frissül, a részletnézetben a régi felelősök maradnának, miközben a
+  kártyán már az újak látszanak
+- **A board törlése az oszlopait is viszi**, és nullázza az aktív hivatkozást
+- **Az oszlop-átrendezés nem csak frissít, hanem rendez is** - enélkül a régi sorrend maradna
+  a képernyőn az új pozíciók ellenére
+- **A származtatott aktív sprint** a `state` mezőből következik, nem külön eseményből
+- Két szándékos viselkedés szerződésként rögzítve: a `handleTaskMoved` null `columnId` esetén
+  **megtartja** a korábbi oszlopot, a `handleAttachmentUploaded` pedig `taskId` nélkül némán
+  kilép (projekt szintű feltöltés)
+
+**A tesztek valódi próbája.** Kivettem a `handleBoardDeleted`-ből az oszlop-szűrést, és
+**pontosan egy teszt** bukott el - a helyes. Visszaállítás után a fájl bájtazonos.
+
+**Kivétel a 30 napos szabály alól - a felhasználó döntése:**
+A terv a `vitest 4.1.10`-et jelölte ki (66 napos). Telepítés után az `npm audit` kimutatta a
+**CVE-2026-84373**-at: path traversal az `@vitest/mocker` redirect mock funkciójában, ami a
+4.1.10-zel bezárólag minden verziót érint. A javítás a **4.1.11**, ami viszont csak **23
+napos** - hét nappal a szabály alatt.
+
+A kitettség gyakorlatilag nulla lett volna: a sebezhetőség dev-szerver működésű, a támadónak
+el kell érnie a dev szerver WebSocketjét (alapértelmezésben csak localhost), mi pedig egyszeri
+`vitest run`-t futtatunk, browser mode és `vi.mock()` nélkül.
+
+A felhasználó ennek ellenére a **frissítést** választotta: egy álló `npm audit`
+figyelmeztetés rosszabb, mint egy dokumentált, hét napos kivétel. Az `npm audit` most
+**0 sebezhetőséget** jelent. A verzió caret nélkül, pontosan rögzítve - a `^4.1.11` mellett egy
+`npm i` felcsúszhatna egy frissebb kiadásra, és csendben megsértené a szabályt.
+
 ### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
 
 **Probléma:**

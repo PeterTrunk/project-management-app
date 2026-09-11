@@ -59,7 +59,14 @@ jobs:
       - name: Install
         run: npm ci
 
-      # A build script ma csak `vite build` - típusellenőrzés nincs benne.
-      # Ha később bekerül a svelte-check, ide jöhet külön lépésként.
+      # A `vite build` nem típusellenőriz, csak fordít. A svelte-check ezért külön lépés:
+      # egy típushiba így merge előtt derül ki, nem futásidőben.
+      # A tsconfig `src/**/*.ts` include-ja miatt a tesztfájlokra is kiterjed.
+      - name: Type check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
