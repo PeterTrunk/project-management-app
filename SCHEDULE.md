@@ -4048,6 +4048,82 @@ Relational 10.0.3-at az `EntityFrameworkCore.Design`-on át kapja, ami `PrivateA
 tehát a teszt-projektbe nem folyik át - ott a Npgsql 10.0.0-s Relationalja jönne, a
 `ProjectManager.API.dll` viszont 10.0.3-ra hivatkozik.
 
+### Tesztlefedettség 2. etap: PostgreSQL integrációs teszt-projekt
+
+**Probléma:**
+Az 1. etap 579 tesztje mind függőségmentes: tiszta logika, validátorok, middleware. A
+szolgáltatások viselkedését - és ezen belül a projekt-scoping (IDOR) helyességét - viszont
+csak valódi adatbázis ellen lehet megmérni.
+
+Az EF Core InMemory provider **nem járható út**, és ez nem ízlés kérdése. Az `AppDbContext`
+PostgreSQL-specifikus elemekre épül, amiket az InMemory vagy nem tud, vagy - és ez a rosszabb -
+**némán elfogad**: az `xmin` konkurenciavezérlés `xid` rendszeroszlopra képződik, az
+`AuthService` `ExecuteUpdateAsync`-et hív, a `CounterService` Serializable tranzakciót nyit és
+`PostgresException` 40001-re épít, a séma pedig ~12 egyedi indexet tartalmaz, amiket az
+InMemory nem tartat be. Egy hamis zöld teszt rosszabb, mint a teszt hiánya.
+
+**Megoldás:**
+Új `ProjectManager.IntegrationTests` projekt Testcontainers-szel: a tesztkód maga indít egy
+valódi `postgres:17` konténert, lefuttatja rá a 38 migrációt, és a végén eldobja.
+
+**Miért külön projekt és nem mappa a meglévőben:** így a "Docker nélkül fut" a másik assembly
+**fordítási idejű tulajdonsága**, nem fegyelem kérdése. Egy közös projektnél a
+kategória-szűrő is betöltené a Testcontainerst, és egy elgépelt szűrő Docker nélküli gépen
+image-letöltésen állna meg.
+
+Az `Infrastructure/` tartalma:
+
+- **`PostgresFixture`** - a konténer **futásonként egyszer** indul (`ICollectionFixture`), nem
+  tesztenként. A konténer belső portját a Testcontainers szabad hosztportra képezi le, ezért
+  nem ütközik a fejlesztői PostgreSQL-lel. Szándékosan `MigrateAsync` és nem `EnsureCreated`:
+  a szűrt egyedi index és az `xmin` leképzés pont az, amit valódi DDL ellen kell futtatni
+- **`Respawn`** - `TRUNCATE ... CASCADE` minden teszt **ELŐTT**, nem utána. Így egy elszállt
+  teszt állapota megvizsgálható marad, a következő teszt mégis tisztán indul. Ez
+  ezredmásodperc, szemben a konténer-újraindítás másodperceivel
+- **`RecordingHubContext`** - lásd lentebb
+- `PostgresCollection`, `DatabaseTestBase`, `FakeCurrentUserService`, `ServiceFactory`, `TestData`
+
+**Mock könyvtár nem kell.** Az eredeti terv NSubstitute-ot javasolt; a felhasználó jogos
+észrevétele nyomán kimaradt. A `ServiceFactory` szándékosan **valódi** implementációt ad
+mindenre, ami számít: `AppDbContext`, `LexorankService`, `CounterService` (ugyanazzal a
+contexttel, mert Serializable tranzakciót nyit azon a kapcsolaton), és `ActivityService` -
+utóbbi azért valódi, mert így az állítás nem az, hogy "meghívták", hanem hogy a sor **tényleg
+bekerült** az `Activities` táblába.
+
+Egyedül az `IHubContext` kap duplát, mert valódi implementációhoz futó SignalR szerver
+kellene. A kézi `RecordingHubContext` listába gyűjti a hívásokat, tehát az állítás egy
+hétköznapi LINQ kifejezés. Mellékhaszon: a SignalR `SendAsync` valójában **extension metódus**
+az `IClientProxy`-n, amit mockolni nem is lehet - csak az alatta lévő `SendCoreAsync`-et.
+Itt ez a különbség nem okoz meglepetést.
+
+**Füstteszt, hat esettel:** a migrációk lefutottak és nincs függőben lévő; a felseedelt gráf
+**másik contextből** is olvasható (a change tracker ne hazudhassa, hogy megvan a sor); a
+`CreatedAt`/`UpdatedAt` bélyegzés működik; az `xmin` feltöltődik és **változik módosításkor**;
+és a Respawn tényleg üres adatbázist hagy minden teszt előtt.
+
+A hatodik `Skip`-elt: az `AppDbContext` **csak** az aszinkron `SaveChangesAsync`-et írja felül,
+tehát szinkron mentésnél mind a 24 entitáson kimarad az időbélyegzés. Ez minden entitást
+érintő viselkedésváltozás lenne, ezért nem javítjuk egy teszt-etapban - a `Skip` teszi
+láthatóvá, hogy a döntés a felhasználóé maradjon.
+
+**Kimenekülő út Docker nélkül:** a fixture először a `PMA_TEST_POSTGRES` környezeti változót
+nézi. Ha be van állítva, azt a meglévő adatbázist használja. **Ide soha ne a fejlesztői
+adatbázis kerüljön** - a Respawn minden táblát ürít.
+
+**Egy sebezhetőség, ami menet közben előkerült:**
+A Testcontainers tranzitívan behúzza az `SSH.NET 2025.1.0`-t, amiben **CVE-2026-48798**
+(magas súlyosság) van: path traversal a `ScpClient.Download()`-ban, amit egy rosszindulatú SCP
+szerver használhat ki rekurzív könyvtár-letöltéskor. Minket a gyakorlatban nem érint - a
+Testcontainers csak távoli, SSH-n keresztüli Docker hosthoz használja, mi pedig helyi
+daemonnal dolgozunk -, de a build figyelmeztetése valós.
+
+Megoldás: explicit felülírás a javított `2026.0.0`-ra. Megjelenés 2026-08-09, tehát a
+**30 napos szabálynak megfelel**. A build így 0 warninggal fordul.
+
+**CI:** a `Test` lépés kettévált. Előbb a gyors, Docker nélküli kör fut - ha az bukik, a hiba a
+kódban van, nem a környezetben. Utána egy külön `docker pull postgres:17` lépés, hogy az
+image-letöltés ne a tesztek idejébe számítson, végül az integrációs kör.
+
 ### Jogi megfelelés 1. etap: adatkezelési tájékoztató és felhasználási feltételek
 
 **Probléma:**

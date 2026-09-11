@@ -4,7 +4,7 @@
 
 1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
 
-Összesen **554 teszt**, futásidő ~0,2 másodperc. A projekt szándékosan függőségmentes:
+Összesen **579 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
 nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
 
 **Tiszta logika**
@@ -23,8 +23,40 @@ nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pushol
   továbbá a már elindult válasz `Abort()`-ot kap kiírás helyett
 
 **Validátorok**
-- Mind a 33 FluentValidation validátor, határértékekkel
+- Mind a 34 FluentValidation validátor, határértékekkel
 - `ValidatorCoverageTests` — egy új validátor tesztek nélkül nem maradhat észrevétlen
+
+**Konzisztencia**
+- `LegalVersionTests` — a backend és a frontend dokumentumverziója nem csúszhat el
+  (eltérés esetén minden regisztráció elbukna)
+
+## Integrációs tesztek (xUnit + Testcontainers)
+
+1. `dotnet test backend/tests/ProjectManager.IntegrationTests/ProjectManager.IntegrationTests.csproj`
+
+**Ehhez Docker kell.** A tesztkód maga indít egy valódi `postgres:17` konténert, lefuttatja rá
+a migrációkat, és a végén eldobja. Az első futás lassabb (image letöltés), utána másodpercek.
+
+Azért valódi PostgreSQL és nem EF Core InMemory, mert az `AppDbContext` `xmin`
+konkurenciavezérlésre, `ExecuteUpdateAsync`-re, Serializable tranzakciókra és egyedi indexekre
+épül — ezeket az InMemory vagy nem tudja, vagy némán elfogadja. Az utóbbi a veszélyesebb: zöld
+teszt, ami nem néz oda.
+
+A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
+(nem utána — így egy elszállt teszt állapota megvizsgálható marad).
+
+**Füstteszt** — az infrastruktúra maga:
+- a migrációk lefutottak, nincs függőben lévő
+- a felseedelt gráf másik contextből is olvasható
+- `CreatedAt`/`UpdatedAt` bélyegzés működik
+- az `xmin` feltöltődik és változik módosításkor
+- a Respawn üres adatbázist hagy minden teszt előtt
+
+Egy `Skip`-elt teszt jelzi az ismert eltérést: a szinkron `SaveChanges()` nincs felülírva az
+`AppDbContext`-ben, tehát ott kimarad az időbélyegzés. Ennek javítása külön döntés.
+
+**Docker nélkül:** a `PMA_TEST_POSTGRES` környezeti változóval egy meglévő adatbázisra
+irányítható. Ide soha ne a fejlesztői adatbázis kerüljön — a Respawn minden táblát ürít.
 
 ## E2E integration tesztelés (MVP szinten)
 2. Manuális Integration Tesztek
