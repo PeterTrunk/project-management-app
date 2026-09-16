@@ -24,7 +24,7 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.Name);
         }
 
-        //A When(Name != null) miatt az üres sztring NEM null, tehát a MinimumLength megfogja
+        //A When(Name != null) miatt az üres string NEM null, tehát a MinimumLength megfogja
         [Fact]
         public void Name_Empty_ShouldHaveError()
         {
@@ -78,7 +78,7 @@ namespace ProjectManager.Tests.Validators
         [Fact]
         public void Description_Empty_ShouldNotHaveError()
         {
-            //Az üres sztring itt szándékos törlés, nem hiba
+            //Az üres string itt szándékos törlés, nem hiba
             var dto = Valid();
             dto.Description = "";
             _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.Description);

@@ -1,18 +1,17 @@
 ﻿using FluentValidation;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.DTOs.Integration;
 
 namespace ProjectManager.API.Validators.IntegrationValidators
 {
     public class CreateIntegrationDtoValidator : AbstractValidator<CreateIntegrationDto>
     {
-        private static readonly string[] ValidProviders = { "GitHub", "GitLab" };
-
         public CreateIntegrationDtoValidator()
         {
             RuleFor(x => x.Provider)
                 .NotEmpty()
                 .WithMessage("Provider megadása kötelező!")
-                .Must(p => ValidProviders.Contains(p))
+                .Must(p => GitProviders.All.Contains(p))
                 .WithMessage("Érvénytelen provider! Lehetséges értékek: GitHub, GitLab");
 
             RuleFor(x => x.RepoFullName)

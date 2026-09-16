@@ -4,24 +4,29 @@ using ProjectManager.API.Data;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
-using System.Runtime.Intrinsics.Arm;
+using ProjectManager.API.Services.GitWebhookService.Payloads;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ProjectManager.API.Services.GitWebhookService
 {
     public class GitWebhookService : IGitWebhookService
     {
+        //A rövidített sha hossza az activity szövegében. A git maga is 7 karakterrel kezdi.
+        private const int ShortShaLength = 7;
+
+        //Ennyi karakter kerül a commit üzenetéből az activity szövegébe
+        private const int MessagePreviewLength = 50;
+
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
         private readonly ILogger<GitWebhookService> _logger;
 
         public GitWebhookService(
-            AppDbContext context, 
-            IHubContext<ProjectHub> hubContext, 
+            AppDbContext context,
+            IHubContext<ProjectHub> hubContext,
             IActivityService activityService,
             ILogger<GitWebhookService> logger)
         {
@@ -31,59 +36,24 @@ namespace ProjectManager.API.Services.GitWebhookService
             _logger = logger;
         }
 
-        public async Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
+        public async Task ProcessPullRequestEventAsync(
+            Guid projectId, Guid integrationId, string provider, GitPullRequestEvent prEvent)
         {
-            var action = payload.GetProperty("action").GetString();
-            var pr = payload.GetProperty("pull_request");
-            
-            var prNumber = pr.GetProperty("number").GetInt32();
-            var title = pr.GetProperty("title").GetString() ?? string.Empty;
-            var prUrl = pr.TryGetProperty("html_url", out var urlProp)
-                ? urlProp.GetString() : null;
-            var authorName = pr.GetProperty("user")
-                .GetProperty("login").GetString() ?? string.Empty;
-            var repoFullName = payload.GetProperty("repository")
-                .GetProperty("full_name").GetString() ?? string.Empty;
-            
             var matchedTasks = new List<ProjectTask>();
-
-            // State meghatározása
-            var state = action switch
-            {
-                "opened" or "reopened" => "open",
-                "closed" => pr.TryGetProperty("merged", out var merged) &&
-                             merged.GetBoolean() ? "merged" : "closed",
-                _ => "open"
-            };
-
-            // Csak ezeket kezeljük
-            if (action != "opened" &&
-                action != "closed" &&
-                action != "reopened" &&
-                action != "edited")
-            {
-                return;  // ignoráljuk a többi action-t
-            }
-            
-            DateTime? mergedAt = null;
-            if (state == "merged" && pr.TryGetProperty("merged_at", out var mergedAtProp))
-            {
-                mergedAt = DateTime.Parse(mergedAtProp.GetString()!).ToUniversalTime();
-            }
 
             // Létező PR frissítése vagy új létrehozása
             var existingPr = await _context.PrLinks
                 .FirstOrDefaultAsync(pl =>
                     pl.IntegrationId == integrationId &&
-                    pl.PrNumber == prNumber);
+                    pl.PrNumber == prEvent.Number);
 
             bool isUnmatched = false;
 
             if (existingPr != null)
             {
-                existingPr.State = state;
-                existingPr.MergedAt = mergedAt;
-                existingPr.Title = title;
+                existingPr.State = prEvent.State;
+                existingPr.MergedAt = prEvent.MergedAt;
+                existingPr.Title = prEvent.Title;
 
                 // Ha csak title változott (edited action), nincs más változás
                 await _context.SaveChangesAsync();
@@ -92,44 +62,20 @@ namespace ProjectManager.API.Services.GitWebhookService
             else
             {
                 // Task matching
-                var tasks = await MatchTasksAsync(projectId, title);
+                var tasks = await MatchTasksAsync(projectId, prEvent.Title);
 
                 if (tasks.Count == 0)
                 {
                     isUnmatched = true;
                     // Unmatched PR
-                    _context.PrLinks.Add(new PrLink
-                    {
-                        Id = Guid.NewGuid(),
-                        TaskId = null,
-                        IntegrationId = integrationId,
-                        PrNumber = prNumber,
-                        PrUrl = prUrl,
-                        Title = title,
-                        State = state,
-                        AuthorName = authorName,
-                        CreatedAt = DateTime.UtcNow,
-                        MergedAt = mergedAt
-                    });
+                    _context.PrLinks.Add(NewPrLink(null, integrationId, prEvent));
                 }
                 else
                 {
                     foreach (var task in tasks)
                     {
                         matchedTasks.Add(task);
-                        _context.PrLinks.Add(new PrLink
-                        {
-                            Id = Guid.NewGuid(),
-                            TaskId = task.Id,
-                            IntegrationId = integrationId,
-                            PrNumber = prNumber,
-                            PrUrl = prUrl,
-                            Title = title,
-                            State = state,
-                            AuthorName = authorName,
-                            CreatedAt = DateTime.UtcNow,
-                            MergedAt = mergedAt
-                        });
+                        _context.PrLinks.Add(NewPrLink(task.Id, integrationId, prEvent));
                     }
                 }
             }
@@ -146,7 +92,7 @@ namespace ProjectManager.API.Services.GitWebhookService
                         "PullRequest",
                         integrationId,
                         "Unmatched",
-                        $"Hozzárendeletlen PR érkezett: #{prNumber} — {title} ({authorName})"
+                        $"Hozzárendeletlen PR érkezett: #{prEvent.Number} — {prEvent.Title} ({prEvent.AuthorName})"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
@@ -164,7 +110,14 @@ namespace ProjectManager.API.Services.GitWebhookService
                 {
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
-                        .SendAsync("PrLinked", new { taskId = task.Id, prNumber, title, state, authorName });
+                        .SendAsync("PrLinked", new
+                        {
+                            taskId = task.Id,
+                            prNumber = prEvent.Number,
+                            title = prEvent.Title,
+                            state = prEvent.State,
+                            authorName = prEvent.AuthorName
+                        });
                 }
                 catch (Exception ex)
                 {
@@ -174,10 +127,10 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 try
                 {
-                    var actionText = state switch
+                    var actionText = prEvent.State switch
                     {
-                        "merged" => "mergelte",
-                        "closed" => "lezárta",
+                        GitPrStates.Merged => "mergelte",
+                        GitPrStates.Closed => "lezárta",
                         _ => "megnyitotta"
                     };
 
@@ -185,8 +138,10 @@ namespace ProjectManager.API.Services.GitWebhookService
                         projectId,
                         "PullRequest",
                         task.Id,
-                        state == "merged" ? "Merged" : state == "closed" ? "Closed" : "Opened",
-                        $"GitHub {actionText} a #{prNumber} PR-t a {task.TaskKey} taskhoz: {title}"
+                        prEvent.State == GitPrStates.Merged ? "Merged"
+                            : prEvent.State == GitPrStates.Closed ? "Closed"
+                            : "Opened",
+                        $"{provider} {actionText} a #{prEvent.Number} PR-t a {task.TaskKey} taskhoz: {prEvent.Title}"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
@@ -199,29 +154,16 @@ namespace ProjectManager.API.Services.GitWebhookService
             }
         }
 
-        public async Task ProcessPushEventAsync(Guid projectId, Guid integrationId, JsonElement payload)
+        public async Task ProcessPushEventAsync(
+            Guid projectId, Guid integrationId, string provider, GitPushEvent pushEvent)
         {
-            var commits = payload.GetProperty("commits");
             var matchedTasks = new List<(ProjectTask task, string sha, string message, string authorName)>();
             var unmatchedMessages = new List<string>();
 
-            foreach (var commit in commits.EnumerateArray())
+            foreach (var commit in pushEvent.Commits)
             {
-                var sha = commit.GetProperty("id").GetString() ?? string.Empty;
-                var message = commit.GetProperty("message").GetString() ?? string.Empty;
-                var url = commit.TryGetProperty("url", out var urlProp)
-                    ? urlProp.GetString() : null;
-                var authorName = commit.GetProperty("author")
-                    .GetProperty("name").GetString() ?? string.Empty;
-                var authorEmail = commit.GetProperty("author")
-                    .GetProperty("email").GetString() ?? string.Empty;
-                var committedAt = commit.TryGetProperty("timestamp", out var tsProp)
-                    ? DateTime.Parse(tsProp.GetString()!).ToUniversalTime()
-                    : DateTime.UtcNow;
-
                 // Task matching
-                var tasks = await MatchTasksAsync(projectId, message);
-                
+                var tasks = await MatchTasksAsync(projectId, commit.Message);
 
                 if (tasks.Count == 0)
                 {
@@ -229,14 +171,13 @@ namespace ProjectManager.API.Services.GitWebhookService
                     var existingUnmatched = await _context.CommitLinks
                         .FirstOrDefaultAsync(cl =>
                             cl.IntegrationId == integrationId &&
-                            cl.CommitSha == sha);
+                            cl.CommitSha == commit.Sha);
                     if (existingUnmatched != null) continue;
 
-                    await CreateCommitLinkAsync(
-                        null, integrationId, sha, url, message,
-                        authorName, authorEmail, committedAt);
+                    CreateCommitLink(null, integrationId, commit);
 
-                    unmatchedMessages.Add($"{sha[..7]} — {message[..Math.Min(50, message.Length)]} ({authorName})");
+                    unmatchedMessages.Add(
+                        $"{ShortSha(commit.Sha)} — {Preview(commit.Message)} ({commit.AuthorName})");
                 }
                 else
                 {
@@ -246,28 +187,23 @@ namespace ProjectManager.API.Services.GitWebhookService
                         var existing = await _context.CommitLinks
                             .FirstOrDefaultAsync(cl =>
                                 cl.IntegrationId == integrationId &&
-                                cl.CommitSha == sha &&
+                                cl.CommitSha == commit.Sha &&
                                 cl.TaskId == task.Id);
                         if (existing != null)
                         {
                             //Forcepush: üzenet és URL frissítése.
-                            existing.Message = message;
-                            existing.CommitUrl = url;
+                            existing.Message = commit.Message;
+                            existing.CommitUrl = commit.Url;
 
                             continue;
                         }
 
-                        await CreateCommitLinkAsync(
-                            task.Id, integrationId, sha, url, message,
-                            authorName, authorEmail, committedAt);
+                        CreateCommitLink(task.Id, integrationId, commit);
                     }
-                }
-                
-                if (tasks.Count > 0)
-                {
+
                     foreach (var task in tasks)
                     {
-                        matchedTasks.Add((task, sha, message, authorName));
+                        matchedTasks.Add((task, commit.Sha, commit.Message, commit.AuthorName));
                     }
                 }
             }
@@ -305,7 +241,6 @@ namespace ProjectManager.API.Services.GitWebhookService
                     _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
                         "CommitLinked", projectId);
                 }
-                
 
                 try
                 {
@@ -314,7 +249,7 @@ namespace ProjectManager.API.Services.GitWebhookService
                         "Commit",
                         task.Id,
                         "Linked",
-                        $"GitHub kapcsolta a {sha[..7]} commitot a {task.TaskKey} taskhoz: {message[..Math.Min(50, message.Length)]}"
+                        $"{provider} kapcsolta a {ShortSha(sha)} commitot a {task.TaskKey} taskhoz: {Preview(message)}"
                     );
                     await _hubContext.Clients
                         .Group($"project-{projectId}")
@@ -379,23 +314,41 @@ namespace ProjectManager.API.Services.GitWebhookService
                 .ToListAsync();
         }
 
-        private async Task CreateCommitLinkAsync(
-            Guid? taskId, Guid integrationId,
-            string sha, string? url, string message, string authorName, string authorEmail,
-            DateTime committedAt)
+        private static PrLink NewPrLink(Guid? taskId, Guid integrationId, GitPullRequestEvent prEvent) =>
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TaskId = taskId,
+                IntegrationId = integrationId,
+                PrNumber = prEvent.Number,
+                PrUrl = prEvent.Url,
+                Title = prEvent.Title,
+                State = prEvent.State,
+                AuthorName = prEvent.AuthorName,
+                CreatedAt = DateTime.UtcNow,
+                MergedAt = prEvent.MergedAt
+            };
+
+        private void CreateCommitLink(Guid? taskId, Guid integrationId, GitCommitInfo commit)
         {
             _context.CommitLinks.Add(new CommitLink
             {
                 Id = Guid.NewGuid(),
                 TaskId = taskId,
                 IntegrationId = integrationId,
-                CommitSha = sha,
-                CommitUrl = url,
-                Message = message,
-                AuthorName = authorName,
-                AuthorEmail = authorEmail,
-                CommittedAt = committedAt
+                CommitSha = commit.Sha,
+                CommitUrl = commit.Url,
+                Message = commit.Message,
+                AuthorName = commit.AuthorName,
+                AuthorEmail = commit.AuthorEmail,
+                CommittedAt = commit.CommittedAt
             });
         }
+
+        private static string ShortSha(string sha) =>
+            sha.Length <= ShortShaLength ? sha : sha[..ShortShaLength];
+
+        private static string Preview(string message) =>
+            message.Length <= MessagePreviewLength ? message : message[..MessagePreviewLength];
     }
 }

@@ -1,10 +1,10 @@
-# Manual Test Results
+﻿# Manual Test Results
 
 ## Unit Tesztek (xUnit)
 
 1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
 
-Összesen **579 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
+Összesen **645 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
 nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
 
 **Tiszta logika**
@@ -29,6 +29,18 @@ nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pushol
 **Konzisztencia**
 - `LegalVersionTests` — a backend és a frontend dokumentumverziója nem csúszhat el
   (eltérés esetén minden regisztráció elbukna)
+
+**Git webhook payload parserek**
+- `GitHubPayloadParserTests`, `GitLabPayloadParserTests` — a két szolgáltató saját alakú
+  payloadjának leképzése a közös rekordokra: esemény-felismerés, mezőnevek, akciónevek,
+  állapotok és időbélyegek
+- `GitPayloadParserContractTests` — ami minden parserre igaz kell legyen: minden ismert
+  providernek van pontosan egy parsere; egy váratlan alakú, de érvényes JSON sosem dob
+  kivételt (abból a végpont 500-at adna, amitől a szolgáltató kikapcsolja a webhookot);
+  és a két szolgáltató payloadjából ugyanaz a normalizált rekord jön ki
+
+  A parserek szándékosan függőség nélküliek — se adatbázis, se hálózat, se óra —, ezért
+  kerülnek a gyors projektbe: a mintapayload önmagában elegendő bemenet.
 
 ## Integrációs tesztek (xUnit + Testcontainers)
 

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+﻿using ProjectManager.API.Services.GitWebhookService.Payloads;
 
 namespace ProjectManager.API.Services.GitWebhookService
 {
@@ -6,8 +6,7 @@ namespace ProjectManager.API.Services.GitWebhookService
     {
         bool ValidateGitHubSignature(string payload, string signature, string secret);
         bool ValidateGitLabSignature(string token, string secret);
-
-        Task ProcessPushEventAsync(Guid projectId, Guid integrationId, JsonElement payload);
-        Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, JsonElement payload);
+        Task ProcessPushEventAsync(Guid projectId, Guid integrationId, string provider, GitPushEvent pushEvent);
+        Task ProcessPullRequestEventAsync(Guid projectId, Guid integrationId, string provider, GitPullRequestEvent prEvent);
     }
 }

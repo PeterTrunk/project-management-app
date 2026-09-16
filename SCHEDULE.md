@@ -4771,6 +4771,71 @@ A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
 Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
 
+### Webhook payloadok normalizálása szolgáltatók között
+
+**Probléma:**
+A GitLab merge request webhook nem hiányzott - ELSZÁLLT. 
+A `WebhookController` a "Merge Request Hook" eseményt ugyanarra a metódusra irányította,
+mint a GitHub `pull_request` eseményét, az viszont GitHub-specifikus JSON-t olvasott:
+a gyökérszintű `action` és `pull_request` mezőket. A GitLab payloadban egyik sincs
+(`object_attributes` a gyökérelem, `iid` a sorszám, és az action is máshol van, más szavakkal), 
+tehát minden merge request kezeletlen kivétellel végződött. 
+Az app felkínálta a GitLabot, elkérte a secretet, ellenőrizte az aláírást - és utána 500-zal elhasalt,
+amitől a GitLab hibásnak jelöli a webhookot, és ismétlődő hiba után kikapcsolja.
+
+A push ág csak azért működött, mert a két szolgáltató commit-payloadja véletlenül egybeesik.
+
+Emellett a payload olvasása végig `GetProperty`-vel ment, ami hiányzó mezőnél dob: 
+egy váratlan alakú payload így 500-at adott volna a szolgáltató felé ahelyett, hogy csendben átugorjuk.
+Az időbélyegeket pedig kultúrafüggő `DateTime.Parse` értelmezte, tehát az eredmény a konténer nyelvi beállításától függött.
+
+**Megoldás:**
+Normalizáló réteg a `Services/GitWebhookService/Payloads/` alatt.
+A nyers JSON nem megy tovább a feldolgozó szolgáltatásba: 
+a controller a provider szerinti parserrel közös alakú rekordokká fordítja, és a `GitWebhookService` már csak azokkal dolgozik.
+
+Új típusok:
+- `GitCommitInfo`, `GitPushEvent`, `GitPullRequestEvent` - szolgáltatófüggetlen rekordok
+- `GitPullRequestAction` enum és `GitPrStates` konstansok
+- `WebhookEventKind` - az esemény típusa a fejlécnevek ismerete nélkül
+- `IGitPayloadParser` + `GitHubPayloadParser`, `GitLabPayloadParser`
+- `JsonPayloadReader` - védekező olvasás, `CommitArrayReader` - a közös commit-alak
+
+A parser kiválasztása az `Integration.Provider` alapján történik: a controller `IEnumerable<IGitPayloadParser>`-t kap,
+és `Provider` szerint választ. Ez a "factory", külön regiszter-osztály nélkül. A parserek szándékosan függőség nélküliek 
+(se adatbázis, se naplózó, se óra), ezért singletonok és Docker nélkül tesztelhetők.
+
+A GitLab leképezés, ami miatt az egész kell:
+| Fogalom | GitHub | GitLab |
+|---|---|---|
+| MR gyökér | `pull_request` | `object_attributes` |
+| Sorszám | `number` | `iid` (nem `id`!) |
+| Akció | `action` a gyökérben | `object_attributes.action` |
+| Akció értékei | opened / closed / reopened / edited | open / close / reopen / merge / update |
+| URL | `html_url` | `url` |
+| Szerző | `pull_request.user.login` | `user.name` a gyökérben |
+| Leírás | `body` | `description` |
+| Állapot | `state` + `merged` jelző | `state` (opened/closed/merged/locked) |
+
+Menet közben javított további hibák:
+(Mivel az MVP szintről lett felhozva a feature ezért tényleg csak egy minimális megvalósítás volt ez elött)
+- **Beégetett "GitHub" az activity szövegében** - a GitLabról érkező eseményre is azt írta volna ki. Most a provider neve megy a szövegbe.
+- **Szerkesztés visszanyitotta a lezárt PR-t.** Az `edited` akcióból nem következik állapot, a korábbi kód mégis "open"-t adott rá. Most a PR saját `state`/`merged` mezője dönt.
+- **Kultúrafüggő időbélyeg-értelmezés.** Most `DateTimeOffset` + `InvariantCulture`, ami egy lépésben ad `DateTimeKind.Utc` értéket. A GitLab merge request dátumai ráadásul NEM ISO 8601 alakúak (`2026-09-16 12:05:00 UTC`), amit az általános elemző elutasít - erre külön formátum került be.
+- **`sha[..7]` csonka azonosítón.** Rövidebb sha-ra kivételt dobott volna; most hossz-ellenőrzött.
+- **`GetProperty` mindenütt.** Helyette `TryGetProperty` + `ValueKind` ellenőrzés: egy  váratlan alakú, de érvényes JSON-ra a végpont 200 "Event ignored"-ot ad, nem 500-at. (A `TryGetProperty` önmagában nem elég: JSON `null`-ra is igazat ad.)
+- **Néma commit-kihagyás.** A `GitPushEvent` viszi a kihagyott commitok számát, hogy a controller figyelmeztetést írhasson - enélkül a push feldolgozottnak látszana hiányzó adattal.
+
+A `GitProviders` konstans osztály kiváltja a "GitHub"/"GitLab" szövegliterálokat a controllerben és a validátorban.
+
+**Tesztek (66 új, Docker nélkül):**
+- `GitHubPayloadParserTests`, `GitLabPayloadParserTests` - mintapayloadok mindkét szolgáltatótól, a fenti leképezési táblázat minden sorára
+- `GitPayloadParserContractTests` - minden ismert providernek van pontosan egy parsere (egy új provider parser nélkül csendben minden eseményt eldobna); egyik parser sem dob kivételt ellenséges payloadra; és a két szolgáltató payloadjából ugyanaz a normalizált rekord jön ki
+
+**Amihez nem nyúltunk:**
+Az aláírás-ellenőrzés már jó volt a controllerben, provider szerinti elágazással. 
+Az nem a payload alakjáról szól, hanem arról, melyik FEJLÉCBEN érkezik a hitelesítő adat - egy biztonsági ág átrendezése külön döntés.
+
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
