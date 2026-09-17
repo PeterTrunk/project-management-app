@@ -94,11 +94,19 @@ namespace ProjectManager.API.Services.GitService
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
+                    //A payload alakja azonos a REST válasz DTO-jával,
+                    //és a taskId ugyanaz, amit a webhook küld.
+                    //Korábban a két forrás eltérő, hiányos alakot használt,
+                    //és a böngészőben azonosító nélküli kártya keletkezett.
                     .SendAsync("CommitLinked", new
                     {
                         taskId,
-                        commitId = commit.Id,
-                        commitSha = commit.CommitSha
+                        id = commit.Id,
+                        commitSha = commit.CommitSha,
+                        commitUrl = commit.CommitUrl,
+                        message = commit.Message,
+                        authorName = commit.AuthorName,
+                        committedAt = commit.CommittedAt
                     });
             }
             catch (Exception ex)
@@ -155,8 +163,14 @@ namespace ProjectManager.API.Services.GitService
                     .SendAsync("PrLinked", new
                     {
                         taskId,
-                        prId = pr.Id,
-                        prNumber = pr.PrNumber
+                        id = pr.Id,
+                        prNumber = pr.PrNumber,
+                        prUrl = pr.PrUrl,
+                        title = pr.Title,
+                        state = pr.State,
+                        authorName = pr.AuthorName,
+                        createdAt = pr.CreatedAt,
+                        mergedAt = pr.MergedAt
                     });
             }
             catch (Exception ex)

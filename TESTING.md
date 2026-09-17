@@ -4,7 +4,7 @@
 
 1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
 
-Összesen **645 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
+Összesen **681 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
 nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
 
 **Tiszta logika**
@@ -42,6 +42,16 @@ nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pushol
   A parserek szándékosan függőség nélküliek — se adatbázis, se hálózat, se óra —, ezért
   kerülnek a gyors projektbe: a mintapayload önmagában elegendő bemenet.
 
+**Task kulcs illesztés**
+- `TaskKeyMatcherTests` — mi számít task kulcsnak a commit üzenetben, a PR címében és a
+  leírásában. Elfogadott alakok (`PMA-1`, `#PMA-1`, `[PMA-1]`, mondatzáró írásjel előtt),
+  elutasítottak (`XPMA-1`, `PMA-1x`), a projekt kulcsának escape-elése, és a cím+leírás
+  összefűzése
+
+  Ez a szabályhalmaz dönti el, mi kapcsolódik mihez, és mindkét irányú hiba **néma**: a túl
+  bőkezű minta idegen szövegre illeszkedik, a túl szigorú pedig észrevétlenül hagyja a
+  felhasználó szándékát. Nincs hibaüzenet, csak egy összekapcsolás, ami létrejön vagy nem.
+
 ## Integrációs tesztek (xUnit + Testcontainers)
 
 1. `dotnet test backend/tests/ProjectManager.IntegrationTests/ProjectManager.IntegrationTests.csproj`
@@ -57,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **56 teszt** (55 aktív, 1 szándékosan kihagyott), futásidő ~2 másodperc.
+Összesen **75 teszt** (74 aktív, 1 szándékosan kihagyott), futásidő ~11 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
@@ -65,6 +75,18 @@ A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden tes
 - `CreatedAt`/`UpdatedAt` bélyegzés működik
 - az `xmin` feltöltődik és változik módosításkor
 - a Respawn üres adatbázist hagy minden teszt előtt
+
+**Git hivatkozások** — `PullRequestLinkSyncTests`, `CommitLinkSyncTests`:
+- egy több taskot említő commit vagy PR mindegyik task alá bekerül (ez korábban egyedi
+  index sértéssel elszállt)
+- merge után **minden** kapcsolódó sor megkapja az új állapotot
+- utólag beírt task kulcs esetén az összekapcsolás létrejön, és a hozzárendeletlen
+  helyőrző sor eltűnik
+- ugyanaz az esemény többször is megérkezhet: nem keletkezik duplikátum
+- állapotváltozáskor megy SignalR esemény, puszta címátíráskor nem
+
+Ezek adatbázist igényelnek, mert a mért viselkedés maga a **több sor** kezelése — egy tiszta
+függvény tesztje ezt nem tudná megfogni.
 
 **Projekt-hatókör (IDOR)** — a mag 6 szolgáltatás mind a 28 hatókörös metódusa:
 `TaskService`, `SprintService`, `ColumnService`, `BoardService`, `CommentService`,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import type { TaskResponse } from '../api/taskApi';
 import {
@@ -273,20 +273,110 @@ describe('taskStore', () => {
     });
 
     describe('git hivatkozások', () => {
+        //A payload alakja megegyezik a REST válasz DTO-jával, plusz a taskId - ez a
+        //backenddel kötött szerződés, nem a store kényelmi alakja
+        const commitPayload = {
+            taskId: '1',
+            id: 'cm1',
+            commitSha: 'abc1234def',
+            commitUrl: 'https://example.com/commit/abc1234',
+            message: 'PMA-1 hibajavítás',
+            authorName: 'Teszt Elek',
+            committedAt: '2026-09-16T12:00:00Z'
+        };
+
+        const prPayload = {
+            taskId: '1',
+            id: 'pr1',
+            prNumber: 42,
+            prUrl: 'https://example.com/pr/42',
+            title: 'PMA-1 hibajavítás',
+            state: 'open',
+            authorName: 'Teszt Elek',
+            createdAt: '2026-09-16T12:00:00Z',
+            mergedAt: null
+        };
+
         it('hozzáfűzi a commitot a taskhoz', () => {
             setTasks([task('1')]);
 
-            handleCommitLinked({ taskId: '1', commitId: 'cm1', commitSha: 'abc1234' });
+            handleCommitLinked(commitPayload);
 
-            expect(get(taskStore).tasks[0].commitLinks).toHaveLength(1);
+            const [commit] = get(taskStore).tasks[0].commitLinks;
+            expect(commit.id).toBe('cm1');
+            expect(commit.commitSha).toBe('abc1234def');
+            //A taskId a címzés, nem a kártya adata: nem maradhat benne
+            expect(commit).not.toHaveProperty('taskId');
         });
 
         it('hozzáfűzi a pull requestet a taskhoz', () => {
             setTasks([task('1')]);
 
-            handlePrLinked({ taskId: '1', prId: 'pr1', prNumber: 42 });
+            handlePrLinked(prPayload);
 
-            expect(get(taskStore).tasks[0].prLinks).toHaveLength(1);
+            const [pr] = get(taskStore).tasks[0].prLinks;
+            expect(pr.id).toBe('pr1');
+            expect(pr.prNumber).toBe(42);
+            expect(pr).not.toHaveProperty('taskId');
+        });
+
+        //Egy pull request állapota többször is változik (megnyitás, szerkesztés, merge), 
+        //és a backend mindannyiszor elküldi a friss sort. 
+        //Vak hozzáfűzéssel ugyanaz a kártya többször jelenne meg azonos kulccsal,
+        //amitől a Svelte each blokkja hibát dob.
+        it('nem duplikálja a pull requestet ismételt eseményre, hanem frissíti', () => {
+            setTasks([task('1')]);
+
+            handlePrLinked(prPayload);
+            handlePrLinked({ ...prPayload, state: 'merged', mergedAt: '2026-09-16T13:00:00Z' });
+
+            const prLinks = get(taskStore).tasks[0].prLinks;
+            expect(prLinks).toHaveLength(1);
+            expect(prLinks[0].state).toBe('merged');
+            expect(prLinks[0].mergedAt).toBe('2026-09-16T13:00:00Z');
+        });
+
+        it('nem duplikálja a commitot ismételt eseményre', () => {
+            setTasks([task('1')]);
+
+            handleCommitLinked(commitPayload);
+            handleCommitLinked({ ...commitPayload, message: 'PMA-1 javított üzenet' });
+
+            const commitLinks = get(taskStore).tasks[0].commitLinks;
+            expect(commitLinks).toHaveLength(1);
+            expect(commitLinks[0].message).toBe('PMA-1 javított üzenet');
+        });
+
+        it('a különböző azonosítójú hivatkozások egymás mellé kerülnek', () => {
+            setTasks([task('1')]);
+
+            handlePrLinked(prPayload);
+            handlePrLinked({ ...prPayload, id: 'pr2', prNumber: 43 });
+
+            expect(get(taskStore).tasks[0].prLinks.map(p => p.id)).toEqual(['pr1', 'pr2']);
+        });
+
+        //A megnyitott részletnézet külön hivatkozáson ül: enélkül a modálban nem jelenne meg
+        //az élőben érkező commit vagy PR
+        it('a megnyitott taskot is frissíti', () => {
+            setTasks([task('1')]);
+            setActiveTask(task('1'));
+
+            handlePrLinked(prPayload);
+            handleCommitLinked(commitPayload);
+
+            const active = get(taskStore).activeTask!;
+            expect(active.prLinks).toHaveLength(1);
+            expect(active.commitLinks).toHaveLength(1);
+        });
+
+        it('nem nyúl a megnyitott taskhoz, ha másik taskhoz érkezett a hivatkozás', () => {
+            setTasks([task('1'), task('2')]);
+            setActiveTask(task('1'));
+
+            handlePrLinked({ ...prPayload, taskId: '2' });
+
+            expect(get(taskStore).activeTask!.prLinks).toHaveLength(0);
         });
     });
 

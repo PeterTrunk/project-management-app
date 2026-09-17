@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.BoardService;
@@ -6,6 +6,7 @@ using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
 using ProjectManager.API.Services.ProjectTaskService;
@@ -55,6 +56,24 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 activity,
                 new CounterService(context),
                 NullLogger<TaskService>.Instance);
+
+            return (sut, new ServiceContext(context, hub));
+        }
+
+        /// <summary>
+        /// A webhook feldolgozó. Nincs benne aktuális felhasználó: 
+        /// a beérkező eseményt nem egy bejelentkezett ember váltja ki,
+        /// ezért az activity sorok ActorId nélkül keletkeznek.
+        /// </summary>
+        public static (GitWebhookService Sut, ServiceContext Ctx) CreateGitWebhookService(AppDbContext context)
+        {
+            var (_, hub, activity) = Common(context, Guid.Empty, "System");
+
+            var sut = new GitWebhookService(
+                context,
+                hub,
+                activity,
+                NullLogger<GitWebhookService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
         }

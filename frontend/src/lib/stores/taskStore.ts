@@ -193,37 +193,54 @@ export function handleTaskLabelRemoved(payload: { taskId: string; labelId: strin
     });
 }
 
-export function handleCommitLinked(payload: {
-    taskId: string;
-    commitId: string;
-    commitSha: string;
-}) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, commitLinks: [...t.commitLinks, payload as unknown as CommitLinkResponse] }
-                : t
-        )
-    }));
+/**
+ * Beszúrás vagy felülírás azonosító szerint.
+ *
+ * Azért nem egyszerű hozzáfűzés, mert ugyanaz a hivatkozás többször is megérkezhet: 
+ * a pull request állapota megváltozik (megnyitás, szerkesztés, lezárás, merge), 
+ * és a backend mindannyiszor elküldi a friss sort. 
+ * Vak hozzáfűzéssel ugyanaz a kártya többször jelenne meg,
+ * ráadásul azonos kulccsal - amitől a Svelte kulcsolt each blokkja hibát dob.
+ */
+function upsertById<T extends { id: string }>(links: T[], incoming: T): T[] {
+    const index = links.findIndex(l => l.id === incoming.id);
+    if (index === -1) return [...links, incoming];
+    
+    const next = [...links];
+    next[index] = incoming;
+    return next;
 }
 
-export function handlePrLinked(payload: {
-    taskId: string;
-    prId: string;
-    prNumber: number;
-    title?: string;
-    state?: string;
-    authorName?: string;
-}) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, prLinks: [...t.prLinks, payload as unknown as PrLinkResponse] }
+export function handleCommitLinked(payload: CommitLinkResponse & { taskId: string }) {
+    const { taskId, ...commit } = payload;
+
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
+            t.id === taskId
+                ? { ...t, commitLinks: upsertById(t.commitLinks, commit) }
                 : t
-        )
-    }));
+        );
+        const updatedActiveTask = state.activeTask?.id === taskId
+            ? updatedTasks.find(t => t.id === taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
+}
+
+export function handlePrLinked(payload: PrLinkResponse & { taskId: string }) {
+    const { taskId, ...pr } = payload;
+
+    taskStore.update(state => {
+        const updatedTasks = state.tasks.map(t =>
+            t.id === taskId
+                ? { ...t, prLinks: upsertById(t.prLinks, pr) }
+                : t
+        );
+        const updatedActiveTask = state.activeTask?.id === taskId
+            ? updatedTasks.find(t => t.id === taskId) ?? state.activeTask
+            : state.activeTask;
+        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    });
 }
 
 export function handleAttachmentUploaded(payload: {

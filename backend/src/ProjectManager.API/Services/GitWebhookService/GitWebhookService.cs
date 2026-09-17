@@ -7,7 +7,6 @@ using ProjectManager.API.Services.ActivityService;
 using ProjectManager.API.Services.GitWebhookService.Payloads;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace ProjectManager.API.Services.GitWebhookService
 {
@@ -39,226 +38,159 @@ namespace ProjectManager.API.Services.GitWebhookService
         public async Task ProcessPullRequestEventAsync(
             Guid projectId, Guid integrationId, string provider, GitPullRequestEvent prEvent)
         {
-            var matchedTasks = new List<ProjectTask>();
+            //Egy PR több taskhoz is illeszkedhet, tehát TÖBB sora lehet. Korábban a keresés
+            //FirstOrDefault volt, így merge után csak az első sor kapta meg az új állapotot -
+            //a többi task alatt "open" maradt a jelölés.
+            var existingLinks = await _context.PrLinks
+                .Where(pl => pl.IntegrationId == integrationId && pl.PrNumber == prEvent.Number)
+                .ToListAsync();
 
-            // Létező PR frissítése vagy új létrehozása
-            var existingPr = await _context.PrLinks
-                .FirstOrDefaultAsync(pl =>
-                    pl.IntegrationId == integrationId &&
-                    pl.PrNumber == prEvent.Number);
+            var stateChanged = existingLinks.Any(link => link.State != prEvent.State);
 
-            bool isUnmatched = false;
-
-            if (existingPr != null)
+            foreach (var link in existingLinks)
             {
-                existingPr.State = prEvent.State;
-                existingPr.MergedAt = prEvent.MergedAt;
-                existingPr.Title = prEvent.Title;
-
-                // Ha csak title változott (edited action), nincs más változás
-                await _context.SaveChangesAsync();
-                return;
+                link.State = prEvent.State;
+                link.MergedAt = prEvent.MergedAt;
+                link.Title = prEvent.Title;
             }
-            else
-            {
-                // Task matching
-                var tasks = await MatchTasksAsync(projectId, prEvent.Title);
 
-                if (tasks.Count == 0)
-                {
-                    isUnmatched = true;
-                    // Unmatched PR
-                    _context.PrLinks.Add(NewPrLink(null, integrationId, prEvent));
-                }
-                else
-                {
-                    foreach (var task in tasks)
-                    {
-                        matchedTasks.Add(task);
-                        _context.PrLinks.Add(NewPrLink(task.Id, integrationId, prEvent));
-                    }
-                }
+            //Az illesztés a címre és is leírásra fut. 
+            var tasks = await MatchTasksAsync(
+                projectId, TaskKeyMatcher.CombineTitleAndBody(prEvent.Title, prEvent.Description));
+
+            var alreadyLinkedTaskIds = existingLinks
+                .Where(link => link.TaskId.HasValue)
+                .Select(link => link.TaskId!.Value)
+                .ToHashSet();
+
+            //Újraillesztés: a szerkesztés ága korábban korán visszatért,
+            //tehát aki utólag írta bele a kulcsot a PR címébe vagy leírásába,
+            //annál az összekapcsolás sosem jött létre.
+            var newLinks = new List<(ProjectTask Task, PrLink Link)>();
+            foreach (var task in tasks)
+            {
+                if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
+
+                var link = NewPrLink(task.Id, integrationId, prEvent);
+                _context.PrLinks.Add(link);
+                newLinks.Add((task, link));
+            }
+
+            //A hozzárendeletlen helyőrző sor felesleges,
+            //amint van valódi találat - különben a PR egyszerre látszana a "hozzárendeletlen" listában és a task alatt
+            var placeholder = existingLinks.FirstOrDefault(link => link.TaskId == null);
+            if (placeholder != null && tasks.Count > 0)
+            {
+                _context.PrLinks.Remove(placeholder);
+                existingLinks.Remove(placeholder);
+            }
+
+            PrLink? unmatchedLink = null;
+            if (existingLinks.Count == 0 && tasks.Count == 0)
+            {
+                unmatchedLink = NewPrLink(null, integrationId, prEvent);
+                _context.PrLinks.Add(unmatchedLink);
             }
 
             await _context.SaveChangesAsync();
 
-            // Unmatched PR logolás
-            if (isUnmatched)
+            if (unmatchedLink != null)
             {
-                try
-                {
-                    var activity = await _activityService.LogSystemActivityAsync(
-                        projectId,
-                        "PullRequest",
-                        integrationId,
-                        "Unmatched",
-                        $"Hozzárendeletlen PR érkezett: #{prEvent.Number} — {prEvent.Title} ({prEvent.AuthorName})"
-                    );
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("ActivityCreated", activity);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
-                }
+                await LogSystemActivityAsync(
+                    projectId, "PullRequest", integrationId, "Unmatched",
+                    $"Hozzárendeletlen PR érkezett: #{prEvent.Number} — {prEvent.Title} ({prEvent.AuthorName})");
             }
 
-            foreach (var task in matchedTasks)
+            foreach (var (task, link) in newLinks)
             {
-                try
-                {
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("PrLinked", new
-                        {
-                            taskId = task.Id,
-                            prNumber = prEvent.Number,
-                            title = prEvent.Title,
-                            state = prEvent.State,
-                            authorName = prEvent.AuthorName
-                        });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
-                        "PrLinked", projectId);
-                }
+                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(task.Id, link));
+                await LogPrStateActivityAsync(projectId, provider, task, link);
+            }
 
-                try
-                {
-                    var actionText = prEvent.State switch
-                    {
-                        GitPrStates.Merged => "mergelte",
-                        GitPrStates.Closed => "lezárta",
-                        _ => "megnyitotta"
-                    };
+            //Állapotváltozás a MÁR meglévő sorokon.
+            //Enélkül a mentés megtörténik, de a böngésző nem tud róla:
+            //a felhasználó egy mergelt PR-t "open" jelöléssel lát egészen az oldal újratöltéséig,
+            //és a tevékenységlistába sem kerül semmi.
+            if (!stateChanged) return;
 
-                    var activity = await _activityService.LogSystemActivityAsync(
-                        projectId,
-                        "PullRequest",
-                        task.Id,
-                        prEvent.State == GitPrStates.Merged ? "Merged"
-                            : prEvent.State == GitPrStates.Closed ? "Closed"
-                            : "Opened",
-                        $"{provider} {actionText} a #{prEvent.Number} PR-t a {task.TaskKey} taskhoz: {prEvent.Title}"
-                    );
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("ActivityCreated", activity);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
-                }
+            foreach (var link in existingLinks.Where(link => link.TaskId.HasValue))
+            {
+                var task = await _context.ProjectTasks
+                    .FirstOrDefaultAsync(t => t.Id == link.TaskId!.Value);
+                if (task == null) continue;
+
+                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(task.Id, link));
+                await LogPrStateActivityAsync(projectId, provider, task, link);
             }
         }
 
         public async Task ProcessPushEventAsync(
             Guid projectId, Guid integrationId, string provider, GitPushEvent pushEvent)
         {
-            var matchedTasks = new List<(ProjectTask task, string sha, string message, string authorName)>();
+            var newLinks = new List<(ProjectTask Task, CommitLink Link)>();
             var unmatchedMessages = new List<string>();
 
             foreach (var commit in pushEvent.Commits)
             {
-                // Task matching
+                //Egy commit üzenete több task kulcsát is tartalmazhatja,
+                //tehát TÖBB sora lehet - ugyanaz a szerkezet, mint a pull requesteknél
+                var existingLinks = await _context.CommitLinks
+                    .Where(cl => cl.IntegrationId == integrationId && cl.CommitSha == commit.Sha)
+                    .ToListAsync();
+
+                //Forcepush: az üzenet és az URL felülíródhat ugyanazon a sha-n
+                foreach (var link in existingLinks)
+                {
+                    link.Message = commit.Message;
+                    link.CommitUrl = commit.Url;
+                }
+
                 var tasks = await MatchTasksAsync(projectId, commit.Message);
 
-                if (tasks.Count == 0)
+                var alreadyLinkedTaskIds = existingLinks
+                    .Where(link => link.TaskId.HasValue)
+                    .Select(link => link.TaskId!.Value)
+                    .ToHashSet();
+
+                foreach (var task in tasks)
                 {
-                    // Unmatched commit — ellenőrzés hogy már létezik-e
-                    var existingUnmatched = await _context.CommitLinks
-                        .FirstOrDefaultAsync(cl =>
-                            cl.IntegrationId == integrationId &&
-                            cl.CommitSha == commit.Sha);
-                    if (existingUnmatched != null) continue;
+                    if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
 
-                    CreateCommitLink(null, integrationId, commit);
-
-                    unmatchedMessages.Add(
-                        $"{ShortSha(commit.Sha)} — {Preview(commit.Message)} ({commit.AuthorName})");
+                    newLinks.Add((task, CreateCommitLink(task.Id, integrationId, commit)));
                 }
-                else
+
+                //A hozzárendeletlen helyőrző sor felesleges, amint van valódi találat
+                var placeholder = existingLinks.FirstOrDefault(link => link.TaskId == null);
+                if (placeholder != null && tasks.Count > 0)
                 {
-                    foreach (var task in tasks)
-                    {
-                        // Már létezik?
-                        var existing = await _context.CommitLinks
-                            .FirstOrDefaultAsync(cl =>
-                                cl.IntegrationId == integrationId &&
-                                cl.CommitSha == commit.Sha &&
-                                cl.TaskId == task.Id);
-                        if (existing != null)
-                        {
-                            //Forcepush: üzenet és URL frissítése.
-                            existing.Message = commit.Message;
-                            existing.CommitUrl = commit.Url;
-
-                            continue;
-                        }
-
-                        CreateCommitLink(task.Id, integrationId, commit);
-                    }
-
-                    foreach (var task in tasks)
-                    {
-                        matchedTasks.Add((task, commit.Sha, commit.Message, commit.AuthorName));
-                    }
+                    _context.CommitLinks.Remove(placeholder);
+                    existingLinks.Remove(placeholder);
                 }
+
+                if (existingLinks.Count > 0 || tasks.Count > 0) continue;
+
+                CreateCommitLink(null, integrationId, commit);
+                unmatchedMessages.Add(
+                    $"{ShortSha(commit.Sha)} — {Preview(commit.Message)} ({commit.AuthorName})");
             }
 
             await _context.SaveChangesAsync();
 
             foreach (var msg in unmatchedMessages)
             {
-                try
-                {
-                    var activity = await _activityService.LogSystemActivityAsync(
-                        projectId, "Commit", integrationId, "Unmatched",
-                        $"Hozzárendeletlen commit érkezett: {msg}"
-                    );
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("ActivityCreated", activity);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
-                }
+                await LogSystemActivityAsync(
+                    projectId, "Commit", integrationId, "Unmatched",
+                    $"Hozzárendeletlen commit érkezett: {msg}");
             }
 
-            foreach (var (task, sha, message, authorName) in matchedTasks)
+            foreach (var (task, link) in newLinks)
             {
-                try
-                {
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("CommitLinked", new { taskId = task.Id, sha, message, authorName });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
-                        "CommitLinked", projectId);
-                }
+                await BroadcastAsync(projectId, "CommitLinked", CommitLinkedPayload(task.Id, link));
 
-                try
-                {
-                    var activity = await _activityService.LogSystemActivityAsync(
-                        projectId,
-                        "Commit",
-                        task.Id,
-                        "Linked",
-                        $"{provider} kapcsolta a {ShortSha(sha)} commitot a {task.TaskKey} taskhoz: {Preview(message)}"
-                    );
-                    await _hubContext.Clients
-                        .Group($"project-{projectId}")
-                        .SendAsync("ActivityCreated", activity);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
-                }
+                await LogSystemActivityAsync(
+                    projectId, "Commit", task.Id, "Linked",
+                    $"{provider} kapcsolta a {ShortSha(link.CommitSha)} commitot a {task.TaskKey} taskhoz: {Preview(link.Message)}");
+                    //A szolgáltató neve a payloadból jön: korábban itt "GitHub" volt beégetve
             }
         }
 
@@ -288,26 +220,12 @@ namespace ProjectManager.API.Services.GitWebhookService
 
         private async Task<List<ProjectTask>> MatchTasksAsync(Guid projectId, string text)
         {
-            //Projekt ProjKey lekérése
             var project = await _context.Projects
                 .FirstOrDefaultAsync(p => p.Id == projectId);
-            if (project == null) return new List<ProjectTask>();
+            if (project == null) return [];
 
-            //Valid Regexek: PM-123, #PM-123, [PM-123], (PM-123)
-            //A ProjKey escape-elve kerül a mintába: a validátor ma ugyan csak [A-Z0-9]-t enged,
-            //de egyetlen lazítása regex-injektálást nyitna egy webhook payloadon futó illesztésben. A timeout a ReDoS ellen véd.
-            var pattern = $@"(?:^|[\s\[(\#])({Regex.Escape(project.ProjKey)}-\d+)(?:$|[\s\])\.,!])";
-            var matches = Regex.Matches(
-                text, pattern,
-                RegexOptions.IgnoreCase,
-                TimeSpan.FromMilliseconds(100));
-
-            var taskKeys = matches
-                .Select(m => m.Groups[1].Value.ToUpper())
-                .Distinct()
-                .ToList();
-
-            if (!taskKeys.Any()) return new List<ProjectTask>();
+            var taskKeys = TaskKeyMatcher.ExtractTaskKeys(project.ProjKey, text);
+            if (taskKeys.Count == 0) return [];
 
             return await _context.ProjectTasks
                 .Where(t => t.ProjectId == projectId && taskKeys.Contains(t.TaskKey))
@@ -329,9 +247,9 @@ namespace ProjectManager.API.Services.GitWebhookService
                 MergedAt = prEvent.MergedAt
             };
 
-        private void CreateCommitLink(Guid? taskId, Guid integrationId, GitCommitInfo commit)
+        private CommitLink CreateCommitLink(Guid? taskId, Guid integrationId, GitCommitInfo commit)
         {
-            _context.CommitLinks.Add(new CommitLink
+            var link = new CommitLink
             {
                 Id = Guid.NewGuid(),
                 TaskId = taskId,
@@ -342,9 +260,99 @@ namespace ProjectManager.API.Services.GitWebhookService
                 AuthorName = commit.AuthorName,
                 AuthorEmail = commit.AuthorEmail,
                 CommittedAt = commit.CommittedAt
-            });
+            };
+
+            _context.CommitLinks.Add(link);
+            return link;
         }
 
+        /// <summary>
+        /// A SignalR küldés sosem buktathatja el a webhook feldolgozását.
+        /// </summary>
+        private async Task BroadcastAsync(Guid projectId, string eventName, object payload)
+        {
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync(eventName, payload);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    eventName, projectId);
+            }
+        }
+
+        private async Task LogSystemActivityAsync(
+            Guid projectId, string entityType, Guid entityId, string action, string description)
+        {
+            try
+            {
+                var activity = await _activityService.LogSystemActivityAsync(
+                    projectId, entityType, entityId, action, description);
+
+                await BroadcastAsync(projectId, "ActivityCreated", activity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Activity naplózási hiba | EntityType: {EntityType} | ProjectId: {ProjectId}",
+                    entityType, projectId);
+            }
+        }
+
+        private Task LogPrStateActivityAsync(Guid projectId, string provider, ProjectTask task, PrLink link)
+        {
+            var (action, actionText) = link.State switch
+            {
+                GitPrStates.Merged => ("Merged", "mergelte"),
+                GitPrStates.Closed => ("Closed", "lezárta"),
+                _ => ("Opened", "megnyitotta")
+            };
+
+            return LogSystemActivityAsync(
+                projectId, "PullRequest", task.Id, action,
+                $"{provider} {actionText} a #{link.PrNumber} PR-t a {task.TaskKey} taskhoz: {link.Title}");
+                //A szolgáltató neve a payloadból jön: korábban itt "GitHub" volt beégetve,
+                //tehát egy GitLab merge requestről is azt írta volna ki
+        }
+
+        /// <summary>
+        /// A SignalR payload alakja azonos a válasz DTO-jával, + taskId.
+        /// Korábban a két forrás: a webhook és a kézi összekapcsolás esetén különböztek.
+        /// </summary>
+        private static object PrLinkedPayload(Guid taskId, PrLink link) => new
+        {
+            taskId,
+            id = link.Id,
+            prNumber = link.PrNumber,
+            prUrl = link.PrUrl,
+            title = link.Title,
+            state = link.State,
+            authorName = link.AuthorName,
+            createdAt = link.CreatedAt,
+            mergedAt = link.MergedAt
+        };
+
+        /// <inheritdoc cref="PrLinkedPayload"/>
+        //Az AuthorEmail szándékosan nincs: harmadik személy adata, amire ma nem épül funkció
+        private static object CommitLinkedPayload(Guid taskId, CommitLink link) => new
+        {
+            taskId,
+            id = link.Id,
+            commitSha = link.CommitSha,
+            commitUrl = link.CommitUrl,
+            message = link.Message,
+            
+            
+            authorName = link.AuthorName,
+            committedAt = link.CommittedAt
+        };
+
+        /// <summary>
+        /// A sha eleje az activity szövegéhez. A hossz-ellenőrzés nem elméleti:
+        /// egy csonka payloadból rövidebb azonosító is érkezhet, és a vágás akkor kivételt dobna.
+        /// </summary>
         private static string ShortSha(string sha) =>
             sha.Length <= ShortShaLength ? sha : sha[..ShortShaLength];
 

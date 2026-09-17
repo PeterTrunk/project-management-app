@@ -4836,6 +4836,75 @@ A `GitProviders` konstans osztály kiváltja a "GitHub"/"GitLab" szövegliterál
 Az aláírás-ellenőrzés már jó volt a controllerben, provider szerinti elágazással. 
 Az nem a payload alakjáról szól, hanem arról, melyik FEJLÉCBEN érkezik a hitelesítő adat - egy biztonsági ág átrendezése külön döntés.
 
+### Illesztés a leírásból és minden hivatkozás szinkronban tartása
+
+**Probléma:**
+Négy hiba ugyanabban a feldolgozóban, plusz egy ötödik, ami csak a tesztek írásakor derült ki.
+
+1. **A PR leírásába írt kulcs semmit nem csinált.** Az illesztés csak a CÍMRE futott, pedig a
+   legtöbb PR sablon a leírásba teszi a hivatkozást.
+2. **A szerkesztés nem illesztett újra.** A létező PR ága frissítette a címet és korán
+   visszatért, tehát aki UTÓLAG írta bele a kulcsot, annál az összekapcsolás sosem jött létre.
+3. **A hozzárendeletlen helyőrző sor bent maradt.** Ha egy kulcs nélküli PR később kulcsot
+   kapott, a PR egyszerre látszott a "hozzárendeletlen" listában és a task alatt.
+4. **Az állapotváltozás nem jutott el a böngészőig.** Merge után a sor frissült az
+   adatbázisban, de sem SignalR esemény, sem tevékenység-bejegyzés nem keletkezett: a
+   felhasználó egy mergelt PR-t "open" jelöléssel látott az oldal újratöltéséig.
+5. **Egy két taskot említő commit vagy PR 500-zal szállt el.** Ez a tesztek írása közben
+   derült ki, és súlyosabb a többinél. A `CommitLinks` és a `PrLinks` táblán egyedi index
+   állt `(IntegrationId, CommitSha)`, illetve `(IntegrationId, PrNumber)` oszlopokon - a kód
+   viszont TASKONKÉNT egy sort szúr be. Vagyis egy `"AAA-1 és AAA-2 javítása"` üzenetű commit
+   egyedi index sértést okozott, és a webhook kezeletlen kivétellel végződött. A séma és a kód
+   sosem értett egyet: a többtaskos illesztés a gyakorlatban soha nem működött.
+
+**Megoldás:**
+
+*Séma* - `ScopeGitLinkUniquenessToTask` migráció. Az egyedi index a `TaskId`-vel bővül:
+`(IntegrationId, CommitSha, TaskId)` és `(IntegrationId, PrNumber, TaskId)`. Így ugyanaz a
+commit vagy PR több task alá is bekerülhet, de taskonként csak egyszer.
+
+A `NULLS NOT DISTINCT` nélkülözhetetlen: PostgreSQL-ben alapból minden NULL külön értéknek
+számít, tehát nélküle a hozzárendeletlen sorok (`TaskId = null`) korlátozás nélkül
+duplikálódhatnának - épp az a védelem veszne el, ami eddig megvolt.
+
+*Illesztés* - a `MatchTasksAsync` a címre ÉS a leírásra fut (`cím` + újsor + `leírás`). Az
+elválasztó nem lehet üres: enélkül a cím vége és a leírás eleje összeragadna, és egy sor végi
+kulcs elveszne.
+
+*Feldolgozás* - a két ág (commit és pull request) azonos szerkezetű lett:
+- a meglévő sorok listaként jönnek le, nem `FirstOrDefault`-tal
+- mindegyik megkapja a friss állapotot, címet és üzenetet
+- a hiányzó hozzárendelések kiegészülnek, a meglévők érintetlenül maradnak
+- a helyőrző sor eltűnik, amint van valódi találat
+- a kulcs kivétele a szövegből NEM bontja fel a meglévő összekapcsolást: az már megtörtént
+  tény, és a felhasználó kézzel is állíthatta
+
+*Valós idejű frissítés* - állapotváltozáskor minden kapcsolódó task megkapja a friss sort és a
+tevékenység-bejegyzést. Ha az állapot nem változott (puszta címátírás), nem megy semmi -
+enélkül minden szerkesztés bejegyzést szórna a listába.
+
+*A SignalR payload alakja* - a `CommitLinked` és a `PrLinked` eseményt két helyről küldjük (a
+webhookból és a kézi összekapcsolásból), és a két alak eltért egymástól, mindkettő
+hiányos volt a kártyához képest. 
+A webhook `sha` néven küldte azt, amit a frontend `commitSha`-ként várt, és egyik sem küldött azonosítót - így a kártya azonosító és időpont nélkül érkezett meg, a kulcsolt `{#each}` blokk pedig két ilyen elemtől hibát dobott volna. 
+Mostantól mindkét forrás a REST válasz DTO-jának alakját küldi, plusz a `taskId`.
+
+*Frontend* - a `handleCommitLinked` és a `handlePrLinked` azonosító szerint illeszt be vagy
+ír felül, nem vakon hozzáfűz (ugyanaz a hivatkozás többször is megérkezhet), és a megnyitott
+részletnézetet is frissíti - ahogy a többi handler már régóta.
+
+*Tiszta függvény* - a kulcskeresés a `TaskKeyMatcher` osztályba került, a projekt kulcsát
+paraméterként kapva. Így az illesztés határesetei Docker nélkül mérhetők. Két apró javítás is
+belefért: `CultureInvariant` a kis-nagybetű összevetéshez (török területi beállítás mellett az
+"i" nem az "I" párja), és a `RegexMatchTimeoutException` elkapása, ami eddig 500-at adott volna.
+
+**Tesztek (+36 gyors, +19 integrációs):**
+- `TaskKeyMatcherTests` - elfogadott és elutasított alakok, escape-elés, cím+leírás összefűzés
+- `PullRequestLinkSyncTests`, `CommitLinkSyncTests` - a többsoros hozzárendelés, az
+  újraillesztés, a helyőrző eltűnése és a valós idejű értesítés. Ezekhez adatbázis kell:
+  a mért viselkedés maga a több sor kezelése
+
+
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
