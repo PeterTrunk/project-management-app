@@ -67,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **75 teszt** (74 aktív, 1 szándékosan kihagyott), futásidő ~11 másodperc.
+Összesen **83 teszt** (82 aktív, 1 szándékosan kihagyott), futásidő ~11 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
@@ -87,6 +87,13 @@ A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden tes
 
 Ezek adatbázist igényelnek, mert a mért viselkedés maga a **több sor** kezelése — egy tiszta
 függvény tesztje ezt nem tudná megfogni.
+
+**Kézi átrendelés** — `ManualLinkTests`:
+- a kézi hozzárendelés megjelöli a sort, az illesztőtől származó nem
+- forcepush vagy PR-szerkesztés a régi, hibás kulccsal **nem** fordítja vissza a javítást,
+  és nem duplikálja az elemet
+- a jelölő az illesztést tiltja, nem a frissítést: az állapot és az üzenet továbbra is átjön
+- jelölő nélkül az újraillesztés változatlanul működik — a védelem csak a kézi döntésekre szól
 
 **Projekt-hatókör (IDOR)** — a mag 6 szolgáltatás mind a 28 hatókörös metódusa:
 `TaskService`, `SprintService`, `ColumnService`, `BoardService`, `CommentService`,

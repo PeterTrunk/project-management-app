@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { onMount } from 'svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
@@ -19,8 +19,10 @@
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
+    import TaskPickerModal from './TaskPickerModal.svelte';
+    import { assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
 
-    import { X, Pencil, Trash2, Info, Paperclip, GitBranch, Plus, MessageSquare } from 'lucide-svelte';
+    import { X, Pencil, Trash2, Info, Paperclip, GitBranch, Plus, MessageSquare, CornerUpRight } from 'lucide-svelte';
     
     import { notify } from '../stores/notificationStore';
 
@@ -173,6 +175,47 @@
             const message = e.response?.data ?? e.message ?? 'Hiba történt a törlés során!';
             error = message;
             notify.error(message);
+        }
+    }
+
+    //Egy rossz task kulcs a commit üzenetében vagy a PR címében utólag javítható: az elemet
+    //át lehet tenni a helyes taskra. A backend ilyenkor kézinek jelöli a hozzárendelést,
+    //hogy egy későbbi webhook esemény ne írja felül a döntést.
+    let isTaskPickerOpen = false;
+    let pendingCommitId = '';
+    let pendingPrId = '';
+
+    function openTaskPicker(kind: 'commit' | 'pr', linkId: string) {
+        pendingCommitId = kind === 'commit' ? linkId : '';
+        pendingPrId = kind === 'pr' ? linkId : '';
+        isTaskPickerOpen = true;
+    }
+
+    function closeTaskPicker() {
+        isTaskPickerOpen = false;
+        pendingCommitId = '';
+        pendingPrId = '';
+    }
+
+    async function handleGitReassign(targetTaskId: string) {
+        if (targetTaskId === currentTask.id) {
+            notify.error('Ez már ehhez a taskhoz tartozik!');
+            closeTaskPicker();
+            return;
+        }
+
+        try {
+            if (pendingCommitId) {
+                await assignCommitToTaskAsync(projectId, pendingCommitId, targetTaskId);
+                notify.success('Commit áthelyezve!');
+            } else if (pendingPrId) {
+                await assignPrToTaskAsync(projectId, pendingPrId, targetTaskId);
+                notify.success('Pull request áthelyezve!');
+            }
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt az áthelyezéskor!');
+        } finally {
+            closeTaskPicker();
         }
     }
 
@@ -333,8 +376,8 @@
                         <button class="tab-btn" class:active={activeDetailTab === 'git'}
                             on:click={() => activeDetailTab = 'git'}>
                             <GitBranch size={14} /> Git
-                            {#if task.commitLinks.length + task.prLinks.length > 0}
-                                <span class="tab-badge">{task.commitLinks.length + task.prLinks.length}</span>
+                            {#if currentTask.commitLinks.length + currentTask.prLinks.length > 0}
+                                <span class="tab-badge">{currentTask.commitLinks.length + currentTask.prLinks.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'comments'}
@@ -461,11 +504,20 @@
                     {#if activeDetailTab === 'git'}
                         <div class="section">
                             <h3>Commitok</h3>
-                            {#if task.commitLinks.length > 0}
+                            {#if currentTask.commitLinks.length > 0}
                                 <div class="git-list">
-                                    {#each task.commitLinks as commit (commit.id)}
+                                    {#each currentTask.commitLinks as commit (commit.id)}
                                         <div class="git-item">
-                                            <CommitCard {commit} />
+                                            <CommitCard {commit}>
+                                                <button
+                                                    slot="actions"
+                                                    class="git-move-btn"
+                                                    title="Áthelyezés másik taskra"
+                                                    aria-label="Commit áthelyezése másik taskra"
+                                                    on:click={() => openTaskPicker('commit', commit.id)}>
+                                                    <CornerUpRight size={14} />
+                                                </button>
+                                            </CommitCard>
                                         </div>
                                     {/each}
                                 </div>
@@ -475,11 +527,20 @@
                         </div>
                         <div class="section">
                             <h3>Pull Requestek</h3>
-                            {#if task.prLinks.length > 0}
+                            {#if currentTask.prLinks.length > 0}
                                 <div class="git-list">
-                                    {#each task.prLinks as pr (pr.id)}
+                                    {#each currentTask.prLinks as pr (pr.id)}
                                         <div class="git-item">
-                                            <PrCard {pr} />
+                                            <PrCard {pr}>
+                                                <button
+                                                    slot="actions"
+                                                    class="git-move-btn"
+                                                    title="Áthelyezés másik taskra"
+                                                    aria-label="Pull request áthelyezése másik taskra"
+                                                    on:click={() => openTaskPicker('pr', pr.id)}>
+                                                    <CornerUpRight size={14} />
+                                                </button>
+                                            </PrCard>
                                         </div>
                                     {/each}
                                 </div>
@@ -621,6 +682,14 @@
         message={confirmMessage}
         confirmText="Megerősítés"
         onConfirm={confirmAction}
+    />
+{/if}
+{#if isTaskPickerOpen}
+    <TaskPickerModal
+        isOpen={isTaskPickerOpen}
+        {projectId}
+        onSelect={handleGitReassign}
+        onClose={closeTaskPicker}
     />
 {/if}
 {#if isCreateLabelOpen}
@@ -1103,6 +1172,24 @@
         background: var(--bg-hover);
         border-radius: 6px;
         border: 1px solid var(--border-subtle);
+    }
+
+    .git-move-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        padding: 0.25rem;
+        background: none;
+        border: none;
+        border-radius: 4px;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+
+    .git-move-btn:hover {
+        background: var(--bg-card);
+        color: var(--text-primary);
     }
 
     /* ── Priority ── */

@@ -88,6 +88,11 @@ namespace ProjectManager.API.Services.GitService
                 throw new NotFoundException("Task nem található!");
 
             commit.TaskId = taskId;
+
+            //Innentől az illesztő nem nyúl ehhez a commithoz: egy újabb esemény (forcepush)
+            //különben újra megtalálná az eredeti, hibás kulcsot, és a javítás visszafordulna
+            commit.IsManuallyLinked = true;
+
             await _context.SaveChangesAsync();
 
             try
@@ -154,6 +159,11 @@ namespace ProjectManager.API.Services.GitService
                 throw new NotFoundException("Task nem található!");
 
             pr.TaskId = taskId;
+
+            //Lásd a commitnál: a pull requesteknél ez még fontosabb -
+            //mert a webhook szerkesztéskor, lezáráskor és mergeléskor is újra lefut
+            pr.IsManuallyLinked = true;
+
             await _context.SaveChangesAsync();
 
             try

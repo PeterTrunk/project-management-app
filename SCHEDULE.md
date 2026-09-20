@@ -4905,8 +4905,46 @@ belefért: `CultureInvariant` a kis-nagybetű összevetéshez (török területi
   a mért viselkedés maga a több sor kezelése
 
 
+### Összekapcsolt commit vagy pull request áthelyezése
+
+**Probléma:**
+Ha valaki rossz task kulcsot írt a commit üzenetébe vagy a PR címébe, az elem a HIBÁS task
+alá került, és onnan nem volt mód elmozdítani. A `GitView` ugyanis csak a *hozzárendeletlen*
+listákat mutatja, tehát egy már összekapcsolt elemhez a felületen nem lehetett eljutni.
+
+A backend nagy része viszont megvolt: az `AssignCommitToTaskAsync` és az `AssignPrToTaskAsync`
+egyszerűen átírja a `TaskId`-t, és nem követeli meg, hogy a hivatkozás hozzárendeletlen legyen.
+Új végpont tehát nem kellett.
+
+**A nem nyilvánvaló rész:** az áthelyezés önmagában visszafordult volna. 
+Ha egy commit automatikusan az AAA-1-hez került, a felhasználó átteszi az AAA-2-re, majd egy forcepush újra elküldi ugyanazt a sha-t a régi, hibás üzenettel, akkor az illesztő ismét megtalálja az AAA-1-et, nem talál hozzá létező sort (hiszen az már máshová mutat), és létrehoz egy újat, az elem mindkettő task alatt megjelenne. 
+Pull requesteknél ez gyakoribb, mert a webhook szerkesztéskor, lezáráskor és mergeléskor is újra lefut.
+
+**Megoldás:**
+
+*Séma* - `AddManualGitLinkFlag` migráció: `IsManuallyLinked` logikai mező a `CommitLink` és a `PrLink` entitáson, `false` alapértékkel. A meglévő sorok mind az illesztőtől származnak, tehát ez a helyes visszamenőleges érték.
+
+Az `Assign*` metódusok igazra állítják. A webhook illesztő ága kihagyja az automatikus illesztést arra a commitra vagy pull requestre, amelyhez tartozik kézzel beállított sor.
+
+A flag jelentése: *ehhez valaki hozzányúlt, ne bíráljuk felül utólag.*
+
+Amit a jelölő NEM tilt: állapot, cím üzenet frissítését. Az a szolgáltató adata, nem illesztési döntés, enélkül egy átrendelt PR örökre nyitva maradna a felületen.
+
+*Felület* - a `TaskDetailModal` git fülén minden kártyára került egy áthelyezés gomb, ami a meglévő `TaskPickerModal`-t nyitja, majd a meglévő API-függvényt hívja. A `CommitCard`-nak már volt `actions` slotja, a `PrCard` most kapott egyet.
+
+Két javítás kellett hozzá:
+- A store handlerek mostantól áthelyeznek, nem csak hozzáadnak: egy hivatkozás az adatbázisban egy sor, egy `TaskId`-vel, tehát ha megjelenik az egyik task alatt, a többiről el kell tűnnie. Enélkül az áthelyezés duplikálásnak látszott volna az oldal újratöltéséig.
+- A git listák eddig a `task` propból rendereltek, ami nem követi a store-t - a `currentTask` viszont igen, ahogy a címkéknél és a csatolmányoknál is. Enélkül a nyitott részletnézetben semmi nem történt volna az áthelyezés után.
+
+**Tesztek (+5 frontend, +8 integrációs):**
+- `ManualLinkTests` - a jelölő beállítása, a forcepush és a szerkesztés utáni védelem, és külön az, hogy az állapot- és üzenetfrissítés TOVÁBBRA IS átmegy. Plusz egy teszt arra, hogy a jelölő nélküli sorokon az újraillesztés változatlanul működik: a védelem csak a kézi döntésekre szól, nem kapcsolja ki a funkciót
+- `taskStore.test.ts` - az áthelyezés szemantikája, beleértve azt, hogy az érintetlen taskok objektuma nem íródik újra
+
+
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
+
+**Megjegyzés:** a "Manual commit/PR reassignment between tasks" tétel a Git Webhook fejezetben elkészült - lásd *Összekapcsolt commit vagy pull request áthelyezése*. Az áthelyezés a task részletnézetéből érhető el; ami ebből a fejezetből hátravan, az a sprint szerinti csoportosítás és a sprint szűrő.
 
 ## Git Intelligence – Branches & Insights
 Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads - no access token required.

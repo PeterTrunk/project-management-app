@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import type { PrLinkResponse } from '../api/taskApi';
 
     import { CircleDot, GitMerge, CircleX, Circle } from 'lucide-svelte';
@@ -55,6 +55,7 @@
             {/if}
         </div>
     </div>
+    <slot name="actions" />
 </div>
 
 <style>

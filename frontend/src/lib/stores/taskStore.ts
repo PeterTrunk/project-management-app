@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+﻿import { writable, get } from 'svelte/store';
 import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
 
@@ -205,41 +205,54 @@ export function handleTaskLabelRemoved(payload: { taskId: string; labelId: strin
 function upsertById<T extends { id: string }>(links: T[], incoming: T): T[] {
     const index = links.findIndex(l => l.id === incoming.id);
     if (index === -1) return [...links, incoming];
-    
+
     const next = [...links];
     next[index] = incoming;
     return next;
 }
 
+/**
+ * A megnyitott részletnézet külön hivatkozáson ül,
+ * ezért a frissített listából kell újraolvasni, akkor is ha a hivatkozás épp ELKERÜLT róla.
+ */
+function syncActiveTask(state: TaskState, tasks: TaskResponse[]): TaskResponse | null {
+    if (!state.activeTask) return null;
+    return tasks.find(t => t.id === state.activeTask!.id) ?? state.activeTask;
+}
+
+/**
+ * Egy commit vagy PR hivatkozás EGYETLEN taskhoz tartozik: az adatbázisban egy sor, egy TaskId-vel.
+ * Ezért az esemény nem csak hozzáad, hanem áthelyez is, a többi taskról leszedjük ugyanazt az azonosítót.
+ *
+ * Enélkül egy átrendelt commit a régi task alatt is ott maradna az oldal újratöltéséig,
+ * vagyis a javítás úgy nézne ki, mintha duplikálta volna az elemet.
+ */
 export function handleCommitLinked(payload: CommitLinkResponse & { taskId: string }) {
     const { taskId, ...commit } = payload;
 
     taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === taskId
-                ? { ...t, commitLinks: upsertById(t.commitLinks, commit) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === taskId
-            ? updatedTasks.find(t => t.id === taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+        const tasks = state.tasks.map(t => {
+            if (t.id === taskId) return { ...t, commitLinks: upsertById(t.commitLinks, commit) };
+            if (!t.commitLinks.some(l => l.id === commit.id)) return t;
+            return { ...t, commitLinks: t.commitLinks.filter(l => l.id !== commit.id) };
+        });
+
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
     });
 }
 
+/** @see handleCommitLinked */
 export function handlePrLinked(payload: PrLinkResponse & { taskId: string }) {
     const { taskId, ...pr } = payload;
 
     taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === taskId
-                ? { ...t, prLinks: upsertById(t.prLinks, pr) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === taskId
-            ? updatedTasks.find(t => t.id === taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+        const tasks = state.tasks.map(t => {
+            if (t.id === taskId) return { ...t, prLinks: upsertById(t.prLinks, pr) };
+            if (!t.prLinks.some(l => l.id === pr.id)) return t;
+            return { ...t, prLinks: t.prLinks.filter(l => l.id !== pr.id) };
+        });
+
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
     });
 }
 

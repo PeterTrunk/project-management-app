@@ -728,6 +728,10 @@ public class AppDbContext : DbContext
             entity.Property(cl => cl.CommittedAt)
                   .IsRequired();
 
+            //A meglévő sorok mind az illesztőtől származnak, tehát a false a helyes visszamenőleges érték
+            entity.Property(cl => cl.IsManuallyLinked)
+                  .HasDefaultValue(false);
+
             //Unique: egy commit egy integrationhoz TASKONKÉNT csak egyszer.
             //A TaskId azért része a kulcsnak, mert egy commit üzenete több task kulcsát is tartalmazhatja,
             //(pl.:"AAA-1 és AAA-2 javítása") és ilyenkor mindegyik task alatt meg kell jelennie.
@@ -765,6 +769,9 @@ public class AppDbContext : DbContext
 
             entity.Property(pl => pl.CreatedAt)
                   .IsRequired();
+
+            entity.Property(pl => pl.IsManuallyLinked)
+                  .HasDefaultValue(false);
 
             //Unique: egy PR egy integrationhoz TASKONKÉNT csak egyszer - lásd a CommitLink
             //ugyanezen indexénél a részletes indoklást

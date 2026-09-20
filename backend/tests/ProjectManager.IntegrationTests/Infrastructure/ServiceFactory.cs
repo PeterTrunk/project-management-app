@@ -6,6 +6,7 @@ using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
@@ -56,6 +57,25 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 activity,
                 new CounterService(context),
                 NullLogger<TaskService>.Instance);
+
+            return (sut, new ServiceContext(context, hub));
+        }
+
+        /// <summary>
+        /// A kézi összekapcsolás. Ennek van aktuális felhasználója.
+        /// De ez a különbség a webhookhoz képest, és ezért kerül a hozzárendelésre a kézi jelölő.
+        /// </summary>
+        public static (GitService Sut, ServiceContext Ctx) CreateGitService(
+            AppDbContext context, Guid currentUserId, string currentUserDisplayName = "Teszt Elek")
+        {
+            var (user, hub, activity) = Common(context, currentUserId, currentUserDisplayName);
+
+            var sut = new GitService(
+                context,
+                activity,
+                hub,
+                user,
+                NullLogger<GitService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
         }

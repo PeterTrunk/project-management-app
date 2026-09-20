@@ -66,20 +66,29 @@ namespace ProjectManager.API.Services.GitWebhookService
             //Újraillesztés: a szerkesztés ága korábban korán visszatért,
             //tehát aki utólag írta bele a kulcsot a PR címébe vagy leírásába,
             //annál az összekapcsolás sosem jött létre.
-            var newLinks = new List<(ProjectTask Task, PrLink Link)>();
-            foreach (var task in tasks)
-            {
-                if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
 
-                var link = NewPrLink(task.Id, integrationId, prEvent);
-                _context.PrLinks.Add(link);
-                newLinks.Add((task, link));
+            //Ha ehhez a PR-hez tartozik kézzel beállított sor, az illesztés kimarad:
+            //valaki már eldöntötte, hova tartozik igazából.
+            //Enélkül egy szerkesztés vagy merge újra megtalálná az eredeti, hibás kulcsot, és a PR mindkét task alatt megjelenne.
+            var isManuallyLinked = existingLinks.Any(link => link.IsManuallyLinked);
+
+            var newLinks = new List<(ProjectTask Task, PrLink Link)>();
+            if (!isManuallyLinked)
+            {
+                foreach (var task in tasks)
+                {
+                    if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
+
+                    var link = NewPrLink(task.Id, integrationId, prEvent);
+                    _context.PrLinks.Add(link);
+                    newLinks.Add((task, link));
+                }
             }
 
             //A hozzárendeletlen helyőrző sor felesleges,
             //amint van valódi találat - különben a PR egyszerre látszana a "hozzárendeletlen" listában és a task alatt
             var placeholder = existingLinks.FirstOrDefault(link => link.TaskId == null);
-            if (placeholder != null && tasks.Count > 0)
+            if (placeholder != null && newLinks.Count > 0)
             {
                 _context.PrLinks.Remove(placeholder);
                 existingLinks.Remove(placeholder);
@@ -152,16 +161,24 @@ namespace ProjectManager.API.Services.GitWebhookService
                     .Select(link => link.TaskId!.Value)
                     .ToHashSet();
 
-                foreach (var task in tasks)
-                {
-                    if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
+                //Lásd a pull request ágát: kézzel beállított sor mellett nem illesztünk újra
+                var isManuallyLinked = existingLinks.Any(link => link.IsManuallyLinked);
+                var linkedNow = 0;
 
-                    newLinks.Add((task, CreateCommitLink(task.Id, integrationId, commit)));
+                if (!isManuallyLinked)
+                {
+                    foreach (var task in tasks)
+                    {
+                        if (alreadyLinkedTaskIds.Contains(task.Id)) continue;
+
+                        newLinks.Add((task, CreateCommitLink(task.Id, integrationId, commit)));
+                        linkedNow++;
+                    }
                 }
 
                 //A hozzárendeletlen helyőrző sor felesleges, amint van valódi találat
                 var placeholder = existingLinks.FirstOrDefault(link => link.TaskId == null);
-                if (placeholder != null && tasks.Count > 0)
+                if (placeholder != null && linkedNow > 0)
                 {
                     _context.CommitLinks.Remove(placeholder);
                     existingLinks.Remove(placeholder);

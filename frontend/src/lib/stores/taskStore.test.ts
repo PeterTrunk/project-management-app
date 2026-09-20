@@ -378,6 +378,67 @@ describe('taskStore', () => {
 
             expect(get(taskStore).activeTask!.prLinks).toHaveLength(0);
         });
+
+        //Egy hivatkozás az adatbázisban EGY sor, egy TaskId-vel. Ha megjelenik a másik task
+        //alatt, akkor az előzőről el is kell tűnnie - különben egy áthelyezés duplikálásnak
+        //látszana az oldal újratöltéséig.
+        describe('áthelyezés másik taskra', () => {
+            it('a pull request elkerül a korábbi taskról', () => {
+                setTasks([task('1'), task('2')]);
+                handlePrLinked(prPayload);
+
+                handlePrLinked({ ...prPayload, taskId: '2' });
+
+                const state = get(taskStore);
+                expect(state.tasks.find(t => t.id === '1')!.prLinks).toHaveLength(0);
+                expect(state.tasks.find(t => t.id === '2')!.prLinks).toHaveLength(1);
+            });
+
+            it('a commit elkerül a korábbi taskról', () => {
+                setTasks([task('1'), task('2')]);
+                handleCommitLinked(commitPayload);
+
+                handleCommitLinked({ ...commitPayload, taskId: '2' });
+
+                const state = get(taskStore);
+                expect(state.tasks.find(t => t.id === '1')!.commitLinks).toHaveLength(0);
+                expect(state.tasks.find(t => t.id === '2')!.commitLinks).toHaveLength(1);
+            });
+
+            //A nyitott részletnézet is követi az elvitelt, nem csak az érkezést
+            it('a megnyitott taskról is eltűnik', () => {
+                setTasks([task('1'), task('2')]);
+                handlePrLinked(prPayload);
+                setActiveTask(get(taskStore).tasks.find(t => t.id === '1')!);
+
+                handlePrLinked({ ...prPayload, taskId: '2' });
+
+                expect(get(taskStore).activeTask!.prLinks).toHaveLength(0);
+            });
+
+            it('a többi hivatkozást nem viszi magával', () => {
+                setTasks([task('1'), task('2')]);
+                handlePrLinked(prPayload);
+                handlePrLinked({ ...prPayload, id: 'pr2', prNumber: 43 });
+
+                handlePrLinked({ ...prPayload, taskId: '2' });
+
+                const state = get(taskStore);
+                expect(state.tasks.find(t => t.id === '1')!.prLinks.map(p => p.id)).toEqual(['pr2']);
+                expect(state.tasks.find(t => t.id === '2')!.prLinks.map(p => p.id)).toEqual(['pr1']);
+            });
+
+            //Az érintetlen taskok hivatkozása maradjon ugyanaz az objektum: a felesleges
+            //újrarenderelést ez akadályozza meg
+            it('nem írja újra az érintetlen taskokat', () => {
+                setTasks([task('1'), task('2'), task('3')]);
+                const before = get(taskStore).tasks.find(t => t.id === '3')!;
+
+                handlePrLinked(prPayload);
+
+                expect(get(taskStore).tasks.find(t => t.id === '3')).toBe(before);
+            });
+        });
     });
 
     describe('csatolmányok', () => {
