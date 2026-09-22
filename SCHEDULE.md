@@ -2516,8 +2516,138 @@ accessTokenFactory: () => tokenStore.get() ?? token
 ---
 
 ## General Improvements & Fixes
-Kisebb javítások és fejlesztések amelyek nem illeszkednek 
-egy specifikus fejezetbe.
+Kisebb javítások és fejlesztések amelyek nem illeszkednek egy specifikus fejezetbe.
+
+### Ismert szerkezeti adósság: a taskStore mérete
+
+**Nem hiba, csak feljegyzés** - hogy ne kelljen újra felfedezni.
+
+A frontend store-ok felosztása domain-entitásonként koherens (`auth`, `board`, `integration`,
+`project`, `sprint`, `task`, `team`, plusz három segéd és az `activity`). Egy kivétel van:
+
+| Store | Sor | Feladat |
+|---|---|---|
+| `taskStore.ts` | ~340 | taskok, felelősök, címkék, git hivatkozások, csatolmányok - **öt** |
+| `boardStore.ts` | 131 | board + oszlop |
+| a többi | 7-105 | egy-egy |
+
+A szétbontása tisztán refaktor lenne, felhasználói haszon nélkül, és ez az egyetlen store,
+amire teszt van. Ezért **tudatosan nem történt meg**. Ha a projekt folytatódik, a természetes
+törésvonalak: a git hivatkozások és a csatolmányok kezelése.
+
+Ugyanitt egy elvarratlan szál: a git hivatkozások két helyen is elérhetők - a
+`TaskResponse.commitLinks`-ben (task részletnézet) és a projekt szintű végponton (git nézet).
+Ez két **projekció** ugyanarra a táblára, nem két igazságforrás: a git nézet nem gyorsítótáraz,
+minden belépéskor frissen kér. Ez szándékos - a git hivatkozás az egyetlen adat az
+alkalmazásban, aminek KÜLSŐ írója van (a webhook), tehát egy kliensoldali gyorsítótár itt
+hajlamosabb elavulni, mint bárhol máshol.
+
+
+### A TOTP titok titkosítása nyugalmi állapotban
+
+**Probléma:**
+A `User.TotpSecret` nyers base32 alakban állt az adatbázisban: nem volt rá value converter, és az `AuthService` sehol nem hívta az `EncryptionService`-t. Eközben az adatkezelési tájékoztató - egy élő, GDPR 13. cikkes dokumentum - három helyen állította, hogy a kétfaktoros hitelesítés kulcsa titkosítva van, a 32. cikk szerinti intézkedések felsorolásában is.
+
+Miért épp ez a titok számít: az `ENCRYPTION_KEY` környezeti változóban él, nem az adatbázisban, tehát egy adatbázis-oldali szivárgás (kiszivárgott mentés, ellopott dump, csak olvasó SQL injection) nem adja meg. A TOTP titok pedig az egyetlen olyan érték a táblában, ami ÁLLANDÓ - sosem jár le, nincs rotáció - és a JELSZÓTÓL FÜGGETLEN: pont az a dolga, hogy túlélje a jelszó kompromittálódását. Plaintextben tárolva egy szivárgás a 2FA-t nullára csökkenti.
+
+**Megoldás:**
+A `SetupTotpAsync` titkosítva menti a titkot. Az olvasás mind a négy helyen egy privát
+`ReadTotpSecret` helperen át megy, ami MEGENGEDŐ: `IsEncrypted(x) ? Decrypt(x) : x`.
+
+Ez nem óvatoskodás. A titkosítás bevezetése előtt mentett értékek prefix nélkül, nyersen
+álltak az adatbázisban, és azokat nem szabad megpróbálni visszafejteni: a base32 szöveg
+átmegy a base64 dekódoláson, a `Decrypt` szeletelése viszont kivétellel szállna el - vagyis a
+meglévő 2FA-felhasználók nem tudnának bejelentkezni.
+
+A régi sorokat egy induláskor futó `EncryptExistingTotpSecretsAsync` számolja fel, a meglévő
+`MigrateWebhookSecretsAsync` mintájára. Idempotens: a már jelölt (`enc:v1:`) sorokhoz hozzá sem
+nyúl, így minden indulásnál lefuthat, és egy régi mentésből visszaállított sort is rendbe tesz.
+
+A tájékoztató 32. cikkes mondata ezzel pontossá vált.
+
+### Refresh token visszajátszás felismerése
+
+**Probléma:**
+A feltételes `ExecuteUpdateAsync` miatt egy már felhasznált token `rowsAffected == 0`-t adott,
+és a kód ezt naplózta is - a REAKCIÓ viszont hiányzott. A forgatókönyv: a támadó megszerez egy
+refresh tokent és rotál vele. A jogos felhasználó következő megújítása elbukik, de csak annyit
+vesz észre, hogy ki kellett jelentkeznie - a támadó tokenje viszont érvényben marad.
+
+**Megoldás:**
+`rowsAffected == 0` esetén a kód megkeresi a sort. Ha létezik és visszavont, akkor
+visszajátszásról van szó, és a felhasználó ÖSSZES tokenje visszavonódik. Ha nem létezik, az
+találgatás - marad a korábbi viselkedés.
+
+A nem nyilvánvaló rész: a `LogoutAsync` eddig szintén `IsRevoked = true`-t állított, tehát egy
+kijelentkezés utáni ártatlan versenyhelyzet - a háttérfül még egyszer megpróbálja - riasztást
+váltott volna ki, és a felhasználót minden eszközről kilépteti. Ezért a kijelentkezés mostantól
+TÖRLI a sort. Így az `IsRevoked == true` egyértelműen azt jelenti, hogy rotáció miatt vonódott
+vissza. Séma-változtatás nem kellett.
+
+Ugyanitt törlésre került a halott `IsTotpRequiredAsync`: nem tartozott hozzá végpont, és a
+frontend sem hívta sehol. Kiaknázható nem volt, de egy későbbi "bekötöm, hiszen ott van"
+reflex valódi 2FA-állapot szivárgást csinált volna belőle.
+
+### IP-szintű rate limit a bejelentkezésen és a megerősítő levél újraküldésén
+
+**Probléma:**
+A `login:{ip}:{email}` és a `resend_verification:{ip}:{email}` kulcs az e-mail címet is
+tartalmazza, tehát minden új címhez ÚJ vödör tartozik - egyetlen gépről korlátlanul végig
+lehetett próbálni egy címlistát. A jelszó-visszaállításnál ez már orvosolva volt egy tágabb
+`forgot_password_ip:{ip}` korláttal, a másik két végponton viszont nem.
+
+**Megoldás:**
+`login_ip:{ip}` (50 kísérlet / 15 perc) és `resend_verification_ip:{ip}` (15 / óra) társkorlát.
+A szűkebb kulcs marad: önmagában az IP-alapú korlát egy megosztott kijáratról kizárná a
+jóhiszemű felhasználókat. A bejelentkezés küszöbe azért magasabb a jelszó-visszaállításénál,
+mert gyakoribb művelet.
+
+### Az AuthService tesztelése valódi adatbázissal
+
+**Probléma:**
+Az `AuthService` a projekt legbiztonság-érzékenyebb szolgáltatása, és NULLA tesztje volt. A
+fenti három javítás egyike sem lett volna ellenőrizhető.
+
+**Megoldás:**
+Két kézzel írt dupla a meglévő `FakeCurrentUserService` / `RecordingHubContext` mintájára, mock
+könyvtár nélkül:
+- `FakeRateLimitService` - rögzíti a megkérdezett kulcsokat, és kérésre bármelyiket
+  korlátozottnak jelöli. A tesztek nem azt mérik, hogy a Redis jól számol, hanem hogy a
+  szolgáltatás a HELYES kulcsokra kérdez rá
+- `RecordingEmailService` - listába gyűjti a kiküldött leveleket. A tesztek a levélbe került
+  tokent olvassák, nem az adatbázisból másolják: a kettő eltérhet, és ezt csak így lehet mérni
+
+Plusz `ServiceFactory.CreateAuthService`: valódi `AppDbContext`, valódi BCrypt, valódi JWT
+előállítás és valódi titkosítás. Dupla csak ott van, ahol külső hatás lenne. Az
+`IHttpContextAccessor` kézi `DefaultHttpContext`-et kap rögzített IP-vel, különben minden rate
+limit kulcs "unknown" lenne.
+
+15 új teszt: `TotpSecretEncryptionTests` (5) és `RefreshTokenRotationTests` (10).
+
+### A használaton kívüli git access token eltávolítása
+
+**Probléma:**
+Az `Integration.AccessToken` oszlop egy hitelesítő adatot tárolt, amit **semmi nem olvasott**.
+A teljes lábnyoma a modell, a `CreateIntegrationDto`, egy `HasAccessToken` bool a válaszban,
+és két leképezés az `IntegrationService`-ben. A git integráció kizárólag a beérkező webhook
+payloadból dolgozik, tehát a token sosem került felhasználásra; a `HasAccessToken` a
+frontenden sem volt sehol megjelenítve, csak a típusban és egy store alapértékben élt.
+
+Ráadásul plaintextként tárolódott (`IntegrationService.cs:66`), miközben mellette a
+`WebhookSecret` AES-GCM-mel titkosítva ment be - az adatkezelési tájékoztató pedig mindkettőt
+titkosítottnak nevezte.
+
+**Megoldás:**
+Az oszlop és a hozzá tartozó DTO mezők törlése, `RemoveUnusedIntegrationAccessToken`
+migrációval. A felületről eltűnt az "Access Token (opcionális)" űrlapmező is.
+
+Egy sosem használt hitelesítő adat **törlése jobb, mint a titkosítása**: így a kockázat nem
+csökken, hanem megszűnik. Ez a döntés abban tér el az `AuthorEmail` kezelésétől, hogy ott az
+oszlopnak van tervezett célja (a commit-szerző összekapcsolása), csak a megjelenítése szűnt
+meg - itt viszont nincs mire várni.
+
+A tájékoztató git integrációs sorából ezzel kikerült a "hozzáférési token" említése.
+
 
 ### Validátor átnézés és javítás
 
@@ -4768,11 +4898,245 @@ A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két
 Így az eltérés fordításkor derül ki, nem élesben.
 
 ## Git Webhook Enhancements
-PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
-Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
+PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern for easy extension with new providers. Webhook endpoint hardening: rate limiting to prevent spam/abuse despite existing HMAC signature validation.
+
+**Elvégzett munkák**
+- **Payload normalizálás szolgáltatók között** - provider-független rekordok az `IGitPayloadParser`
+  mögött. Ez volt a fejezet legsúlyosabb tétele: a GitLab merge request eseményeket addig
+  GitHub-specifikus kód olvasta, ami kivétellel szállt el
+- **Illesztés a PR leírásából**, nem csak a címből
+- **Minden hivatkozás szinkronban tartása** - újraillesztés szerkesztéskor, állapotfrissítés
+  az összes kapcsolódó soron, és a séma javítása, ami eddig 500-zal buktatta a többtaskos
+  commitokat
+- **Kézi átrendelés** és a védelme: az `IsManuallyLinked` jelző miatt egy későbbi webhook
+  esemény nem írja felül az ember döntését
+- **A kapcsolt elemek megtalálhatósága** - a git nézet Kapcsolt füle kereséssel és
+  áthelyezéssel
+
+**Kihagyott elemek (tudatos döntés)**
+- **IP allowlist a webhook végponton.** A HMAC aláírás már kriptográfiailag hitelesíti a
+  payloadot, és a kérésszám-korlátozás is megvan. Cserébe: a szolgáltatók IP tartományai
+  változnak, tehát a lista karbantartás nélkül némán elromló webhookot jelentene; a Traefik
+  mögött az `X-Forwarded-For` helytelen kezelése önmagában sebezhetőség; self-hosted GitLabnál
+  pedig az egész értelmezhetetlen, mert a cím a repót üzemeltetőtől függ. Rossz csereüzlet
+- **Bitbucket és Gitea támogatás.** A provider absztrakció készen áll rá, de nincs rá igény
+- **Aszinkron, sorbaállított feldolgozás.** A webhook ma a kérésben fut; egy nagy push lassú
+  lehet, de a jelenlegi terheléssel ez nem probléma
+
+### Webhook payloadok normalizálása szolgáltatók között
+
+**Probléma:**
+A GitLab merge request webhook nem hiányzott - ELSZÁLLT. 
+A `WebhookController` a "Merge Request Hook" eseményt ugyanarra a metódusra irányította,
+mint a GitHub `pull_request` eseményét, az viszont GitHub-specifikus JSON-t olvasott:
+a gyökérszintű `action` és `pull_request` mezőket. A GitLab payloadban egyik sincs
+(`object_attributes` a gyökérelem, `iid` a sorszám, és az action is máshol van, más szavakkal), 
+tehát minden merge request kezeletlen kivétellel végződött. 
+Az app felkínálta a GitLabot, elkérte a secretet, ellenőrizte az aláírást - és utána 500-zal elhasalt,
+amitől a GitLab hibásnak jelöli a webhookot, és ismétlődő hiba után kikapcsolja.
+
+A push ág csak azért működött, mert a két szolgáltató commit-payloadja véletlenül egybeesik.
+
+Emellett a payload olvasása végig `GetProperty`-vel ment, ami hiányzó mezőnél dob: 
+egy váratlan alakú payload így 500-at adott volna a szolgáltató felé ahelyett, hogy csendben átugorjuk.
+Az időbélyegeket pedig kultúrafüggő `DateTime.Parse` értelmezte, tehát az eredmény a konténer nyelvi beállításától függött.
+
+**Megoldás:**
+Normalizáló réteg a `Services/GitWebhookService/Payloads/` alatt.
+A nyers JSON nem megy tovább a feldolgozó szolgáltatásba: 
+a controller a provider szerinti parserrel közös alakú rekordokká fordítja, és a `GitWebhookService` már csak azokkal dolgozik.
+
+Új típusok:
+- `GitCommitInfo`, `GitPushEvent`, `GitPullRequestEvent` - szolgáltatófüggetlen rekordok
+- `GitPullRequestAction` enum és `GitPrStates` konstansok
+- `WebhookEventKind` - az esemény típusa a fejlécnevek ismerete nélkül
+- `IGitPayloadParser` + `GitHubPayloadParser`, `GitLabPayloadParser`
+- `JsonPayloadReader` - védekező olvasás, `CommitArrayReader` - a közös commit-alak
+
+A parser kiválasztása az `Integration.Provider` alapján történik: a controller `IEnumerable<IGitPayloadParser>`-t kap,
+és `Provider` szerint választ. Ez a "factory", külön regiszter-osztály nélkül. A parserek szándékosan függőség nélküliek 
+(se adatbázis, se naplózó, se óra), ezért singletonok és Docker nélkül tesztelhetők.
+
+A GitLab leképezés, ami miatt az egész kell:
+| Fogalom | GitHub | GitLab |
+|---|---|---|
+| MR gyökér | `pull_request` | `object_attributes` |
+| Sorszám | `number` | `iid` (nem `id`!) |
+| Akció | `action` a gyökérben | `object_attributes.action` |
+| Akció értékei | opened / closed / reopened / edited | open / close / reopen / merge / update |
+| URL | `html_url` | `url` |
+| Szerző | `pull_request.user.login` | `user.name` a gyökérben |
+| Leírás | `body` | `description` |
+| Állapot | `state` + `merged` jelző | `state` (opened/closed/merged/locked) |
+
+Menet közben javított további hibák:
+(Mivel az MVP szintről lett felhozva a feature ezért tényleg csak egy minimális megvalósítás volt ez elött)
+- **Beégetett "GitHub" az activity szövegében** - a GitLabról érkező eseményre is azt írta volna ki. Most a provider neve megy a szövegbe.
+- **Szerkesztés visszanyitotta a lezárt PR-t.** Az `edited` akcióból nem következik állapot, a korábbi kód mégis "open"-t adott rá. Most a PR saját `state`/`merged` mezője dönt.
+- **Kultúrafüggő időbélyeg-értelmezés.** Most `DateTimeOffset` + `InvariantCulture`, ami egy lépésben ad `DateTimeKind.Utc` értéket. A GitLab merge request dátumai ráadásul NEM ISO 8601 alakúak (`2026-09-16 12:05:00 UTC`), amit az általános elemző elutasít - erre külön formátum került be.
+- **`sha[..7]` csonka azonosítón.** Rövidebb sha-ra kivételt dobott volna; most hossz-ellenőrzött.
+- **`GetProperty` mindenütt.** Helyette `TryGetProperty` + `ValueKind` ellenőrzés: egy  váratlan alakú, de érvényes JSON-ra a végpont 200 "Event ignored"-ot ad, nem 500-at. (A `TryGetProperty` önmagában nem elég: JSON `null`-ra is igazat ad.)
+- **Néma commit-kihagyás.** A `GitPushEvent` viszi a kihagyott commitok számát, hogy a controller figyelmeztetést írhasson - enélkül a push feldolgozottnak látszana hiányzó adattal.
+
+A `GitProviders` konstans osztály kiváltja a "GitHub"/"GitLab" szövegliterálokat a controllerben és a validátorban.
+
+**Tesztek (66 új, Docker nélkül):**
+- `GitHubPayloadParserTests`, `GitLabPayloadParserTests` - mintapayloadok mindkét szolgáltatótól, a fenti leképezési táblázat minden sorára
+- `GitPayloadParserContractTests` - minden ismert providernek van pontosan egy parsere (egy új provider parser nélkül csendben minden eseményt eldobna); egyik parser sem dob kivételt ellenséges payloadra; és a két szolgáltató payloadjából ugyanaz a normalizált rekord jön ki
+
+**Amihez nem nyúltunk:**
+Az aláírás-ellenőrzés már jó volt a controllerben, provider szerinti elágazással. 
+Az nem a payload alakjáról szól, hanem arról, melyik FEJLÉCBEN érkezik a hitelesítő adat - egy biztonsági ág átrendezése külön döntés.
+
+### Illesztés a leírásból és minden hivatkozás szinkronban tartása
+
+**Probléma:**
+Négy hiba ugyanabban a feldolgozóban, plusz egy ötödik, ami csak a tesztek írásakor derült ki.
+
+1. **A PR leírásába írt kulcs semmit nem csinált.** Az illesztés csak a CÍMRE futott, pedig a
+   legtöbb PR sablon a leírásba teszi a hivatkozást.
+2. **A szerkesztés nem illesztett újra.** A létező PR ága frissítette a címet és korán
+   visszatért, tehát aki UTÓLAG írta bele a kulcsot, annál az összekapcsolás sosem jött létre.
+3. **A hozzárendeletlen helyőrző sor bent maradt.** Ha egy kulcs nélküli PR később kulcsot
+   kapott, a PR egyszerre látszott a "hozzárendeletlen" listában és a task alatt.
+4. **Az állapotváltozás nem jutott el a böngészőig.** Merge után a sor frissült az
+   adatbázisban, de sem SignalR esemény, sem tevékenység-bejegyzés nem keletkezett: a
+   felhasználó egy mergelt PR-t "open" jelöléssel látott az oldal újratöltéséig.
+5. **Egy két taskot említő commit vagy PR 500-zal szállt el.** Ez a tesztek írása közben
+   derült ki, és súlyosabb a többinél. A `CommitLinks` és a `PrLinks` táblán egyedi index
+   állt `(IntegrationId, CommitSha)`, illetve `(IntegrationId, PrNumber)` oszlopokon - a kód
+   viszont TASKONKÉNT egy sort szúr be. Vagyis egy `"AAA-1 és AAA-2 javítása"` üzenetű commit
+   egyedi index sértést okozott, és a webhook kezeletlen kivétellel végződött. A séma és a kód
+   sosem értett egyet: a többtaskos illesztés a gyakorlatban soha nem működött.
+
+**Megoldás:**
+
+*Séma* - `ScopeGitLinkUniquenessToTask` migráció. Az egyedi index a `TaskId`-vel bővül:
+`(IntegrationId, CommitSha, TaskId)` és `(IntegrationId, PrNumber, TaskId)`. Így ugyanaz a
+commit vagy PR több task alá is bekerülhet, de taskonként csak egyszer.
+
+A `NULLS NOT DISTINCT` nélkülözhetetlen: PostgreSQL-ben alapból minden NULL külön értéknek
+számít, tehát nélküle a hozzárendeletlen sorok (`TaskId = null`) korlátozás nélkül
+duplikálódhatnának - épp az a védelem veszne el, ami eddig megvolt.
+
+*Illesztés* - a `MatchTasksAsync` a címre ÉS a leírásra fut (`cím` + újsor + `leírás`). Az
+elválasztó nem lehet üres: enélkül a cím vége és a leírás eleje összeragadna, és egy sor végi
+kulcs elveszne.
+
+*Feldolgozás* - a két ág (commit és pull request) azonos szerkezetű lett:
+- a meglévő sorok listaként jönnek le, nem `FirstOrDefault`-tal
+- mindegyik megkapja a friss állapotot, címet és üzenetet
+- a hiányzó hozzárendelések kiegészülnek, a meglévők érintetlenül maradnak
+- a helyőrző sor eltűnik, amint van valódi találat
+- a kulcs kivétele a szövegből NEM bontja fel a meglévő összekapcsolást: az már megtörtént
+  tény, és a felhasználó kézzel is állíthatta
+
+*Valós idejű frissítés* - állapotváltozáskor minden kapcsolódó task megkapja a friss sort és a
+tevékenység-bejegyzést. Ha az állapot nem változott (puszta címátírás), nem megy semmi -
+enélkül minden szerkesztés bejegyzést szórna a listába.
+
+*A SignalR payload alakja* - a `CommitLinked` és a `PrLinked` eseményt két helyről küldjük (a
+webhookból és a kézi összekapcsolásból), és a két alak eltért egymástól, mindkettő
+hiányos volt a kártyához képest. 
+A webhook `sha` néven küldte azt, amit a frontend `commitSha`-ként várt, és egyik sem küldött azonosítót - így a kártya azonosító és időpont nélkül érkezett meg, a kulcsolt `{#each}` blokk pedig két ilyen elemtől hibát dobott volna. 
+Mostantól mindkét forrás a REST válasz DTO-jának alakját küldi, plusz a `taskId`.
+
+*Frontend* - a `handleCommitLinked` és a `handlePrLinked` azonosító szerint illeszt be vagy
+ír felül, nem vakon hozzáfűz (ugyanaz a hivatkozás többször is megérkezhet), és a megnyitott
+részletnézetet is frissíti - ahogy a többi handler már régóta.
+
+*Tiszta függvény* - a kulcskeresés a `TaskKeyMatcher` osztályba került, a projekt kulcsát
+paraméterként kapva. Így az illesztés határesetei Docker nélkül mérhetők. Két apró javítás is
+belefért: `CultureInvariant` a kis-nagybetű összevetéshez (török területi beállítás mellett az
+"i" nem az "I" párja), és a `RegexMatchTimeoutException` elkapása, ami eddig 500-at adott volna.
+
+**Tesztek (+36 gyors, +19 integrációs):**
+- `TaskKeyMatcherTests` - elfogadott és elutasított alakok, escape-elés, cím+leírás összefűzés
+- `PullRequestLinkSyncTests`, `CommitLinkSyncTests` - a többsoros hozzárendelés, az
+  újraillesztés, a helyőrző eltűnése és a valós idejű értesítés. Ezekhez adatbázis kell:
+  a mért viselkedés maga a több sor kezelése
+
+
+### Összekapcsolt commit vagy pull request áthelyezése
+
+**Probléma:**
+Ha valaki rossz task kulcsot írt a commit üzenetébe vagy a PR címébe, az elem a HIBÁS task
+alá került, és onnan nem volt mód elmozdítani. A `GitView` ugyanis csak a *hozzárendeletlen*
+listákat mutatja, tehát egy már összekapcsolt elemhez a felületen nem lehetett eljutni.
+
+A backend nagy része viszont megvolt: az `AssignCommitToTaskAsync` és az `AssignPrToTaskAsync`
+egyszerűen átírja a `TaskId`-t, és nem követeli meg, hogy a hivatkozás hozzárendeletlen legyen.
+Új végpont tehát nem kellett.
+
+**A nem nyilvánvaló rész:** az áthelyezés önmagában visszafordult volna. 
+Ha egy commit automatikusan az AAA-1-hez került, a felhasználó átteszi az AAA-2-re, majd egy forcepush újra elküldi ugyanazt a sha-t a régi, hibás üzenettel, akkor az illesztő ismét megtalálja az AAA-1-et, nem talál hozzá létező sort (hiszen az már máshová mutat), és létrehoz egy újat, az elem mindkettő task alatt megjelenne. 
+Pull requesteknél ez gyakoribb, mert a webhook szerkesztéskor, lezáráskor és mergeléskor is újra lefut.
+
+**Megoldás:**
+
+*Séma* - `AddManualGitLinkFlag` migráció: `IsManuallyLinked` logikai mező a `CommitLink` és a `PrLink` entitáson, `false` alapértékkel. A meglévő sorok mind az illesztőtől származnak, tehát ez a helyes visszamenőleges érték.
+
+Az `Assign*` metódusok igazra állítják. A webhook illesztő ága kihagyja az automatikus illesztést arra a commitra vagy pull requestre, amelyhez tartozik kézzel beállított sor.
+
+A flag jelentése: *ehhez valaki hozzányúlt, ne bíráljuk felül utólag.*
+
+Amit a jelölő NEM tilt: állapot, cím üzenet frissítését. Az a szolgáltató adata, nem illesztési döntés, enélkül egy átrendelt PR örökre nyitva maradna a felületen.
+
+*Felület* - a `TaskDetailModal` git fülén minden kártyára került egy áthelyezés gomb, ami a meglévő `TaskPickerModal`-t nyitja, majd a meglévő API-függvényt hívja. A `CommitCard`-nak már volt `actions` slotja, a `PrCard` most kapott egyet.
+
+Két javítás kellett hozzá:
+- A store handlerek mostantól áthelyeznek, nem csak hozzáadnak: egy hivatkozás az adatbázisban egy sor, egy `TaskId`-vel, tehát ha megjelenik az egyik task alatt, a többiről el kell tűnnie. Enélkül az áthelyezés duplikálásnak látszott volna az oldal újratöltéséig.
+- A git listák eddig a `task` propból rendereltek, ami nem követi a store-t - a `currentTask` viszont igen, ahogy a címkéknél és a csatolmányoknál is. Enélkül a nyitott részletnézetben semmi nem történt volna az áthelyezés után.
+
+**Tesztek (+5 frontend, +8 integrációs):**
+- `ManualLinkTests` - a jelölő beállítása, a forcepush és a szerkesztés utáni védelem, és külön az, hogy az állapot- és üzenetfrissítés TOVÁBBRA IS átmegy. Plusz egy teszt arra, hogy a jelölő nélküli sorokon az újraillesztés változatlanul működik: a védelem csak a kézi döntésekre szól, nem kapcsolja ki a funkciót
+- `taskStore.test.ts` - az áthelyezés szemantikája, beleértve azt, hogy az érintetlen taskok objektuma nem íródik újra
+
+
+### A kapcsolt commitok és pull requestek megtalálhatósága
+
+**Probléma:**
+Az átrendelés elkészült, de a *megtalálás* nem. Egy rossz task kulccsal **hibás taskhoz**
+kapcsolt commit gyakorlatilag elérhetetlen volt: a git nézet kizárólag a hozzárendeletlen
+listákat mutatta, a task részletnézete pedig csak akkor segít, ha már tudod, melyik taskra
+ment. Vagyis épp az a forgatókönyv maradt lefedetlen, amiért az átrendelés készült - nem
+elhagytuk a task kulcsot, hanem rosszat adtunk meg.
+
+**Megoldás:**
+
+*Backend* - a két `unmatched-*` végpont helyére `GET .../git/commits` és `GET .../git/prs`
+lépett, ami a projekt ÖSSZES hivatkozását adja, mindegyiken a task adatával (`TaskId`,
+`TaskKey`, `TaskTitle`) és a kézi jelölővel. A task mezők nullozhatók: a hozzárendeletlen
+hivatkozás pontosan az, ahol nincs task. A „hozzárendeletlen" fogalom így kliensoldali
+szűréssé vált - ugyanaz a feltétel, ami az adatbázisban is. A végpontok száma nem nőtt.
+
+*Felület* - a git nézet két fülre bomlott (Hozzárendeletlen és Kapcsolt). A Kapcsolt fülön
+keresés sha, üzenet, szerző, PR-szám és **task kulcs** szerint, minden kártyán a task kulcsa
+és egy áthelyezés gomb, ami a meglévő `TaskPickerModal`-t nyitja. Új komponens nem kellett.
+
+**Egy zsákutca, ami tanulságos.** Az első tervváltozat a `taskStore`-ból akarta építeni a
+listát - hiszen a hivatkozások már megérkeznek a `TaskResponse`-ban. Ez két okból hibás volt:
+
+1. A store csak a backlog és a nyitott sprintek taskjait tartalmazza (`TaskService`,
+   `scope == "initial"`), tehát egy **lezárt sprintben lévő task hivatkozása némán kimaradt
+   volna** - pedig épp a régebbi munkákhoz tartozik a legtöbb commit.
+2. A `BoardView` **lecseréli** a store-t egyetlen board nyitott taskjaira, tehát a lista
+   tartalma attól függött volna, honnan navigált oda a felhasználó.
+
+A végpont mindkettőt a gyökerénél oldja meg: a lekérdezés nem tud sprintről, és nem függ a
+kliens állapotától. Erre külön integrációs teszt is van.
+
+**Ami tudatosan kimaradt:** a leválasztás (`TaskId` → `null`). A meglévő `Assign*` végpontok
+kötelező `taskId`-t várnak, és a következő webhook esemény úgyis visszakapcsolná - ehhez egy
+külön „elutasítva" fogalom kellene.
+
 
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
+
+**Megjegyzés:** a "Manual commit/PR reassignment between tasks" tétel a Git Webhook fejezetben **elkészült** - lásd *Összekapcsolt commit vagy pull request áthelyezése* és *A kapcsolt commitok és pull requestek megtalálhatósága*. Az áthelyezés a task részletnézetéből ÉS a git nézet Kapcsolt füléből is elérhető, kereséssel együtt.
+
+Ami ebből a fejezetből hátravan: a **sprint szerinti csoportosítás** és a **sprint szűrő**. A "no new backend endpoints required" feltevés menet közben megdőlt: a kapcsolt elemek listájához végpont kellett, mert a `TaskResponse.commitLinks` csak a betöltött taskokat fedi - a lezárt sprintekét nem.
 
 ## Git Intelligence – Branches & Insights
 Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads - no access token required.

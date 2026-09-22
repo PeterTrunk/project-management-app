@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using ProjectManager.API.Common.Constants;
@@ -675,9 +675,6 @@ public class AppDbContext : DbContext
                   .HasMaxLength(200)
                   .IsRequired();
 
-            entity.Property(i => i.AccessToken)
-                  .IsRequired(false);
-
             entity.Property(i => i.WebhookSecret)
                   .IsRequired();
 
@@ -728,9 +725,20 @@ public class AppDbContext : DbContext
             entity.Property(cl => cl.CommittedAt)
                   .IsRequired();
 
-            //Unique: egy commit egy integrationhoz csak egyszer
-            entity.HasIndex(cl => new { cl.IntegrationId, cl.CommitSha })
-                  .IsUnique();
+            //A meglévő sorok mind az illesztőtől származnak, tehát a false a helyes visszamenőleges érték
+            entity.Property(cl => cl.IsManuallyLinked)
+                  .HasDefaultValue(false);
+
+            //Unique: egy commit egy integrationhoz TASKONKÉNT csak egyszer.
+            //A TaskId azért része a kulcsnak, mert egy commit üzenete több task kulcsát is tartalmazhatja,
+            //(pl.:"AAA-1 és AAA-2 javítása") és ilyenkor mindegyik task alatt meg kell jelennie.
+            //A TaskId nélküli változat emiatt unique index sértést adott, vagyis a webhook 500-zal szállt el.
+            //
+            //A NULLS NOT DISTINCT: PostgreSQL-ben alapból MINDEN NULL külön
+            //értéknek számít, tehát a hozzárendeletlen sorok (TaskId = null) korlátozás nélkül duplikálódhatnának.
+            entity.HasIndex(cl => new { cl.IntegrationId, cl.CommitSha, cl.TaskId })
+                  .IsUnique()
+                  .AreNullsDistinct(false);
 
             entity.HasOne(cl => cl.ProjectTask)
                   .WithMany(t => t.CommitLinks)
@@ -759,9 +767,14 @@ public class AppDbContext : DbContext
             entity.Property(pl => pl.CreatedAt)
                   .IsRequired();
 
-            //Unique: egy PR egy integrationhoz csak egyszer
-            entity.HasIndex(pl => new { pl.IntegrationId, pl.PrNumber })
-                  .IsUnique();
+            entity.Property(pl => pl.IsManuallyLinked)
+                  .HasDefaultValue(false);
+
+            //Unique: egy PR egy integrationhoz TASKONKÉNT csak egyszer - lásd a CommitLink
+            //ugyanezen indexénél a részletes indoklást
+            entity.HasIndex(pl => new { pl.IntegrationId, pl.PrNumber, pl.TaskId })
+                  .IsUnique()
+                  .AreNullsDistinct(false);
 
             entity.HasIndex(pl => pl.State);
 

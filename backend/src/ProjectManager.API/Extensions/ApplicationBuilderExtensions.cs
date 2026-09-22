@@ -163,6 +163,49 @@ namespace ProjectManager.API.Extensions
             Serilog.Log.Information("WebhookSecret migráció befejezve");
         }
 
+        // A titkosítás bevezetése előtt mentett TOTP titkok titkosítása:
+        // 
+        // A WebhookSecret migrációjánál egyszerűbb az eset:
+        // a TotpSecret sosem volt titkosítva, tehát minden jelöletlen érték biztosan nyers base32 - nincs mit megkülönböztetni,
+        // és nincs az a kockázat, hogy egy helyesen titkosított értéket írnánk felül.
+        //
+        // Idempotens: a jelölt (enc:v1:) sorokhoz hozzá sem nyúl, így minden indulásnál lefuthat.
+        // Egy visszaállított, régi mentésből érkező sort is rendbe tesz.
+        public static async Task EncryptExistingTotpSecretsAsync(this WebApplication app)
+        {
+            using var scope = app.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+
+            var pending = await context.Users
+                .Where(u => u.TotpSecret != null && !u.TotpSecret.StartsWith(EncryptionService.Prefix))
+                .ToListAsync();
+
+            if (pending.Count == 0)
+                return;
+
+            Serilog.Log.Information("TotpSecret titkosítás indul | Érintett sorok: {Count}", pending.Count);
+
+            foreach (var user in pending)
+            {
+                user.TotpSecret = encryption.Encrypt(user.TotpSecret!);
+
+                try
+                {
+                    //Soronkénti mentés: egy hibás sor ne vigye magával a többit
+                    await context.SaveChangesAsync();
+                    Serilog.Log.Information("TotpSecret titkosítva | UserId: {UserId}", user.Id);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "TotpSecret mentési hiba | UserId: {UserId}", user.Id);
+                    context.ChangeTracker.Clear();
+                }
+            }
+
+            Serilog.Log.Information("TotpSecret titkosítás befejezve");
+        }
+
         //A mi ciphertextünk base64, és dekódolva legalább nonce + tag hosszú.
         //Ennél rövidebb vagy nem base64 érték biztosan plain text.
         private static bool LooksLikeCiphertext(string value)

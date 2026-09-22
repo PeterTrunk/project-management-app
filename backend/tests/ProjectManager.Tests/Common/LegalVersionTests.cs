@@ -58,7 +58,7 @@ namespace ProjectManager.Tests.Common
         }
 
         //A verzió dátum alapú, és ugyanazt a napot kell jelentenie, mint a hatálybalépés.
-        //Egy félbehagyott verzióváltás (a sztring átírva, a dátum nem) így nem marad észrevétlen.
+        //Egy félbehagyott verzióváltás (a string átírva, a dátum nem) így nem marad észrevétlen.
         [Fact]
         public void CurrentVersion_MatchesItsEffectiveDate()
         {

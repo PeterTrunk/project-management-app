@@ -25,6 +25,7 @@ using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
+using ProjectManager.API.Services.GitWebhookService.Payloads;
 using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
@@ -190,6 +191,11 @@ namespace ProjectManager.API.Extensions
             services.AddSingleton<ILexorankService, LexorankService>();
             services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
             services.AddSingleton<IEncryptionService, EncryptionService>();
+            //A payload parserek függőség nélküli, állapotmentes fordítók, ezért singletonok.
+            //A WebhookController IEnumerable<IGitPayloadParser>-t kap,
+            //és a Provider alapján választ: ez a "factory", külön regiszter-osztály nélkül.
+            services.AddSingleton<IGitPayloadParser, GitHubPayloadParser>();
+            services.AddSingleton<IGitPayloadParser, GitLabPayloadParser>();
 
             //Scoped service-ek
             services.AddScoped<IAuthService, AuthService>();

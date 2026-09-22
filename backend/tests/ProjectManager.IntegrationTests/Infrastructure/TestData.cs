@@ -1,4 +1,4 @@
-using ProjectManager.API.Common.Constants;
+﻿using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.LexorankService;
@@ -124,6 +124,54 @@ namespace ProjectManager.IntegrationTests.Infrastructure
             await context.SaveChangesAsync();
 
             return new SeededProject(owner, project, board, column, task, sprint, label, comment);
+        }
+
+        /// <summary>
+        /// Git integráció a projekthez. 
+        /// A webhook titok titkosítatlanul kerül be: 
+        /// ezek a tesztek a feldolgozást ellenőrzik, nem az aláírás-ellenőrzést, ami a controllerben fut.
+        /// </summary>
+        public static async Task<Integration> SeedIntegrationAsync(
+            AppDbContext context, Guid projectId, string provider = GitProviders.GitHub)
+        {
+            var integration = new Integration
+            {
+                ProjectId = projectId,
+                Provider = provider,
+                RepoFullName = "peter/pma",
+                WebhookSecret = "nem-valodi-titok",
+                WebhookToken = Guid.NewGuid().ToString("N"),
+                IsEnabled = true
+            };
+
+            context.Integrations.Add(integration);
+            await context.SaveChangesAsync();
+
+            return integration;
+        }
+
+        /// <summary>
+        /// További task ugyanabba a projektbe. 
+        /// A TaskKey-t kézzel adjuk meg, a webhook teszt az illesztésének teszteléséhez.
+        /// </summary>
+        public static async Task<ProjectTask> AddTaskAsync(
+            AppDbContext context, SeededProject seed, string taskKey)
+        {
+            var task = new ProjectTask
+            {
+                ProjectId = seed.Project.Id,
+                BoardId = seed.Board.Id,
+                ColumnId = seed.Column.Id,
+                CreatedById = seed.Owner.Id,
+                TaskKey = taskKey,
+                Title = $"{taskKey} task",
+                Position = Lexorank.GetInitialPosition(null)
+            };
+
+            context.ProjectTasks.Add(task);
+            await context.SaveChangesAsync();
+
+            return task;
         }
 
         /// <summary>

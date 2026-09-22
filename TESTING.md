@@ -1,10 +1,10 @@
-# Manual Test Results
+﻿# Manual Test Results
 
 ## Unit Tesztek (xUnit)
 
 1. xUnit — `dotnet test backend/tests/ProjectManager.Tests/ProjectManager.Tests.csproj`
 
-Összesen **579 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
+Összesen **681 teszt**, futásidő ~0,4 másodperc. A projekt szándékosan függőségmentes:
 nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pusholásnál lefut.
 
 **Tiszta logika**
@@ -30,6 +30,28 @@ nem kell hozzá Docker, adatbázis vagy hálózat, ezért a CI-ban minden pushol
 - `LegalVersionTests` — a backend és a frontend dokumentumverziója nem csúszhat el
   (eltérés esetén minden regisztráció elbukna)
 
+**Git webhook payload parserek**
+- `GitHubPayloadParserTests`, `GitLabPayloadParserTests` — a két szolgáltató saját alakú
+  payloadjának leképzése a közös rekordokra: esemény-felismerés, mezőnevek, akciónevek,
+  állapotok és időbélyegek
+- `GitPayloadParserContractTests` — ami minden parserre igaz kell legyen: minden ismert
+  providernek van pontosan egy parsere; egy váratlan alakú, de érvényes JSON sosem dob
+  kivételt (abból a végpont 500-at adna, amitől a szolgáltató kikapcsolja a webhookot);
+  és a két szolgáltató payloadjából ugyanaz a normalizált rekord jön ki
+
+  A parserek szándékosan függőség nélküliek — se adatbázis, se hálózat, se óra —, ezért
+  kerülnek a gyors projektbe: a mintapayload önmagában elegendő bemenet.
+
+**Task kulcs illesztés**
+- `TaskKeyMatcherTests` — mi számít task kulcsnak a commit üzenetben, a PR címében és a
+  leírásában. Elfogadott alakok (`PMA-1`, `#PMA-1`, `[PMA-1]`, mondatzáró írásjel előtt),
+  elutasítottak (`XPMA-1`, `PMA-1x`), a projekt kulcsának escape-elése, és a cím+leírás
+  összefűzése
+
+  Ez a szabályhalmaz dönti el, mi kapcsolódik mihez, és mindkét irányú hiba **néma**: a túl
+  bőkezű minta idegen szövegre illeszkedik, a túl szigorú pedig észrevétlenül hagyja a
+  felhasználó szándékát. Nincs hibaüzenet, csak egy összekapcsolás, ami létrejön vagy nem.
+
 ## Integrációs tesztek (xUnit + Testcontainers)
 
 1. `dotnet test backend/tests/ProjectManager.IntegrationTests/ProjectManager.IntegrationTests.csproj`
@@ -45,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **56 teszt** (55 aktív, 1 szándékosan kihagyott), futásidő ~2 másodperc.
+Összesen **115 teszt** (114 aktív, 1 szándékosan kihagyott), futásidő ~20 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
@@ -53,6 +75,48 @@ A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden tes
 - `CreatedAt`/`UpdatedAt` bélyegzés működik
 - az `xmin` feltöltődik és változik módosításkor
 - a Respawn üres adatbázist hagy minden teszt előtt
+
+**Git hivatkozások** — `PullRequestLinkSyncTests`, `CommitLinkSyncTests`:
+- egy több taskot említő commit vagy PR mindegyik task alá bekerül (ez korábban egyedi
+  index sértéssel elszállt)
+- merge után **minden** kapcsolódó sor megkapja az új állapotot
+- utólag beírt task kulcs esetén az összekapcsolás létrejön, és a hozzárendeletlen
+  helyőrző sor eltűnik
+- ugyanaz az esemény többször is megérkezhet: nem keletkezik duplikátum
+- állapotváltozáskor megy SignalR esemény, puszta címátíráskor nem
+
+Ezek adatbázist igényelnek, mert a mért viselkedés maga a **több sor** kezelése — egy tiszta
+függvény tesztje ezt nem tudná megfogni.
+
+**Hitelesítés** — `TotpSecretEncryptionTests`, `RefreshTokenRotationTests`:
+- a TOTP titok titkosítva kerül az adatbázisba, és a bekapcsolás, a bejelentkezés és a
+  fióktörlés is működik vele
+- a titkosítás bevezetése előtt mentett, **nyers** titokkal is lehet bejelentkezni
+- a refresh token rotációja új tokent ad, a régit visszavonja
+- egy már elhasznált token visszajátszása **minden** munkamenetet visszavon
+- egy kijelentkezett token késői bemutatása **nem** vált ki riasztást, és a többi eszközt
+  nem érinti
+- a bejelentkezés és a megerősítő levél újraküldése a szűkebb és a tágabb rate limit kulcsot
+  is megkérdezi
+
+A külső hatások (levélküldés, Redis) kézzel írt duplát kapnak; a jelszóhash, a JWT
+előállítás, a titkosítás és a token rotáció valódi — ezek adják a teszt értelmét.
+
+**Projekt szintű hivatkozás-lista** — `GitLinkQueryTests`:
+- a hozzárendeletlen sor task adat nélkül, a kapcsolt task kulccsal és címmel — **egy listában**
+- **egy lezárt sprintben lévő task hivatkozása is szerepel.** Ez a lekérdezés létjogosultsága:
+  a korábbi tervváltozat a task store-ból építette volna a listát, az viszont csak a backlog
+  és a nyitott sprintek taskjait tartalmazza, tehát a régebbi munkák hivatkozásai némán
+  kimaradtak volna
+- másik projekt hivatkozása nem szivárog át
+- a kézi jelölő és a sorrend (legfrissebb elöl) is utazik
+
+**Kézi átrendelés** — `ManualLinkTests`:
+- a kézi hozzárendelés megjelöli a sort, az illesztőtől származó nem
+- forcepush vagy PR-szerkesztés a régi, hibás kulccsal **nem** fordítja vissza a javítást,
+  és nem duplikálja az elemet
+- a jelölő az illesztést tiltja, nem a frissítést: az állapot és az üzenet továbbra is átjön
+- jelölő nélkül az újraillesztés változatlanul működik — a védelem csak a kézi döntésekre szól
 
 **Projekt-hatókör (IDOR)** — a mag 6 szolgáltatás mind a 28 hatókörös metódusa:
 `TaskService`, `SprintService`, `ColumnService`, `BoardService`, `CommentService`,
@@ -81,12 +145,12 @@ irányítható. Ide soha ne a fejlesztői adatbázis kerüljön — a Respawn mi
 
 ## Frontend tesztek (vitest)
 
-1. `cd frontend && npm test` — **52 teszt**, ~0,4 másodperc
+1. `cd frontend && npm test` — **79 teszt**, ~1 másodperc
 2. `cd frontend && npm run check` — típusellenőrzés, 0 hiba
 
-Nem kell hozzá Docker és böngésző: a tesztelt store-ok tiszta függvények, `node` környezetben
-futnak. jsdom sincs, mert egyikük sem nyúl `window`-hoz, `document`-hez vagy
-`localStorage`-hoz.
+Nem kell hozzá Docker és böngésző: a tesztelt store-ok és segédfüggvények tiszta függvények,
+`node` környezetben futnak. jsdom sincs, mert egyikük sem nyúl `window`-hoz, `document`-hez
+vagy `localStorage`-hoz.
 
 **Mit fed le:** mind a **23 SignalR store handler** (`taskStore` 13, `boardStore` 7,
 `sprintStore` 3). Ezeknél nincs backend háló — ha egy handler rossz sorra ír, a szerver adata
@@ -98,6 +162,14 @@ A tesztek a triviális eseteken túl ezeket rögzítik:
 - a board törlése az oszlopait is viszi
 - az oszlop-átrendezés rendez is, nem csak frissít
 - az aktív sprint származtatott állapot, a `state` mezőből következik
+- egy git hivatkozás **áthelyeződik**, nem csak hozzáadódik: ha megjelenik az egyik task
+  alatt, a többiről el kell tűnnie
+
+**Git hivatkozások keresése** — `gitLinks.test.ts`. A keresés fő használati esete az, hogy egy
+rossz kulccsal beillesztett commitot keresünk, és tudjuk, hova került tévedésből — ezért a
+**task kulcs** ugyanolyan fontos keresési mező, mint a sha vagy az üzenet. A tesztek rögzítik
+azt is, hogy a `#42` alakú PR-szám működik (a felületen így látszik, a felhasználó ezt másolja
+vissza), a magányos `#` viszont **nem** ad találatot — különben minden PR-t visszaadna.
 
 A tesztfájlok a vizsgált kód mellett élnek (`lib/stores/taskStore.test.ts`), így a
 `npm run check` **őket is típusellenőrzi**.

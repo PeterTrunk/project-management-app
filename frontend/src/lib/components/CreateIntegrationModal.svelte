@@ -16,7 +16,6 @@
     let provider = 'GitHub';
     let repoFullName = '';
     let webhookSecret = '';
-    let accessToken = '';
     //Szándékosan alapból kipipálatlan: az előre bejelölt jelölőnégyzet nem érvényes nyilatkozat
     let authorityConfirmed = false;
     let error = '';
@@ -32,7 +31,6 @@
         provider = 'GitHub';
         repoFullName = '';
         webhookSecret = '';
-        accessToken = '';
         authorityConfirmed = false;
         error = '';
         loading = false;
@@ -46,7 +44,6 @@
                 provider,
                 repoFullName,
                 webhookSecret,
-                accessToken: accessToken || null,
                 authorityConfirmed
             });
             notify.success('Integráció létrehozva!');
@@ -86,10 +83,19 @@
                 <input
                     id="repoFullName"
                     type="text"
-                    placeholder="owner/repo"
+                    placeholder={provider === 'GitLab' ? 'csoport/projekt-utvonal' : 'owner/repo'}
                     bind:value={repoFullName}
                 />
-                <span class="hint">Formátum: tulajdonos/repository-neve</span>
+                {#if provider === 'GitLab'}
+                    <span class="hint">
+                        A projekt <strong>útvonala</strong>, ahogy a repó URL-jében szerepel
+                        (Settings / General / Project URL) nem a megjelenített
+                        neve. A kettő eltérhet: a név tartalmazhat szóközt és ékezetet, az
+                        útvonal nem.
+                    </span>
+                {:else}
+                    <span class="hint">Formátum: tulajdonos/repository-neve</span>
+                {/if}
             </div>
 
             <div class="form-group">
@@ -105,20 +111,6 @@
                     Ezt a secretet add meg a {provider} webhook beállításánál is!
                     Tárold biztonságos helyen — később nem lesz megjeleníthető!
                 </span>
-            </div>
-
-            <div class="form-group">
-                <label for="accessToken">
-                    Access Token
-                    <span class="optional">(opcionális)</span>
-                </label>
-                <input
-                    id="accessToken"
-                    type="password"
-                    placeholder="ghp_xxxxxxxxxxxx"
-                    bind:value={accessToken}
-                />
-                <span class="hint">Jövőbeli funkciókhoz szükséges</span>
             </div>
 
             <label class="authority-check">
@@ -207,12 +199,6 @@
     label {
         font-size: 0.9rem;
         color: var(--text-secondary);
-    }
-
-    .optional {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-        margin-left: 0.5rem;
     }
 
     select, input {

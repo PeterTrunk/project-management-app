@@ -294,6 +294,11 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("IntegrationId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsManuallyLinked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasColumnType("text");
@@ -305,8 +310,10 @@ namespace ProjectManager.API.Migrations
 
                     b.HasIndex("TaskId");
 
-                    b.HasIndex("IntegrationId", "CommitSha")
+                    b.HasIndex("IntegrationId", "CommitSha", "TaskId")
                         .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("IntegrationId", "CommitSha", "TaskId"), false);
 
                     b.ToTable("CommitLinks");
                 });
@@ -316,9 +323,6 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<string>("AccessToken")
-                        .HasColumnType("text");
 
                     b.Property<DateTime?>("AuthorityConfirmedAt")
                         .HasColumnType("timestamp with time zone");
@@ -459,6 +463,11 @@ namespace ProjectManager.API.Migrations
                     b.Property<Guid>("IntegrationId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsManuallyLinked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime?>("MergedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -489,8 +498,10 @@ namespace ProjectManager.API.Migrations
 
                     b.HasIndex("TaskId");
 
-                    b.HasIndex("IntegrationId", "PrNumber")
+                    b.HasIndex("IntegrationId", "PrNumber", "TaskId")
                         .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("IntegrationId", "PrNumber", "TaskId"), false);
 
                     b.ToTable("PrLinks");
                 });

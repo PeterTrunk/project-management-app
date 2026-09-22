@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.GitWebhookService;
+using ProjectManager.API.Services.GitWebhookService.Payloads;
 using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.RateLimit;
 using System.Text.Json;
@@ -11,14 +13,15 @@ namespace ProjectManager.API.Controllers
     [Route("api/git/webhook")]
     public class WebhookController : ControllerBase
     {
-        //A payload teljes egészében memóriába olvasódik, majd az EnableBuffering miatt
-        //még egyszer pufferelődik - korlát nélkül ez memórianyomás mindkét replikán
+        //A payload teljes egészében memóriába kerül, majd az EnableBuffering miatt
+        //még egyszer pufferelődik, ezért korlát nélkül ez memórianyomás mindkét replikán
         private const int MaxPayloadBytes = 1_000_000;
 
         private readonly IGitWebhookService _gitWebhookService;
         private readonly IIntegrationService _integrationService;
         private readonly IEncryptionService _encryptionService;
         private readonly IRateLimitService _rateLimitService;
+        private readonly IEnumerable<IGitPayloadParser> _payloadParsers;
         private readonly ILogger<WebhookController> _logger;
 
         public WebhookController(
@@ -26,12 +29,14 @@ namespace ProjectManager.API.Controllers
             IIntegrationService integrationService,
             IEncryptionService encryptionService,
             IRateLimitService rateLimitService,
+            IEnumerable<IGitPayloadParser> payloadParsers,
             ILogger<WebhookController> logger)
         {
             _gitWebhookService = gitWebhookService;
             _integrationService = integrationService;
             _encryptionService = encryptionService;
             _rateLimitService = rateLimitService;
+            _payloadParsers = payloadParsers;
             _logger = logger;
         }
 
@@ -62,13 +67,26 @@ namespace ProjectManager.API.Controllers
             var payload = await reader.ReadToEndAsync();
             Request.Body.Position = 0;
 
-            //Token alapján integráció keresése
+            //Token alapján integráció keresése.
+            //Maga a token nem kerül a naplóba: hitelesítő adat.
             var integration = await _integrationService.GetByWebhookTokenAsync(webhookToken);
+
             if (integration == null)
+            {
+                _logger.LogWarning("Webhook ismeretlen tokennel - nincs ilyen integráció");
                 return Unauthorized("Érvénytelen webhook token!");
+            }
+
+            if (!integration.IsEnabled)
+            {
+                _logger.LogWarning(
+                    "Webhook letiltott integrációhoz | IntegrationId: {IntegrationId} | ProjectId: {ProjectId}",
+                    integration.Id, integration.ProjectId);
+                return Unauthorized("Érvénytelen webhook token!");
+            }
 
             //Provider alapján validáció
-            if (integration.Provider == "GitHub")
+            if (integration.Provider == GitProviders.GitHub)
             {
                 var signature = Request.Headers["X-Hub-Signature-256"].ToString();
                 if (string.IsNullOrEmpty(signature))
@@ -78,7 +96,7 @@ namespace ProjectManager.API.Controllers
                 if (!_gitWebhookService.ValidateGitHubSignature(payload, signature, decryptedSecret))
                     return Unauthorized("Érvénytelen GitHub signature!");
             }
-            else if (integration.Provider == "GitLab")
+            else if (integration.Provider == GitProviders.GitLab)
             {
                 var token = Request.Headers["X-Gitlab-Token"].ToString();
                 if (string.IsNullOrEmpty(token))
@@ -97,9 +115,17 @@ namespace ProjectManager.API.Controllers
                 return Unauthorized("Ismeretlen provider!");
             }
 
-            //Event típus meghatározása
-            var gitHubEvent = Request.Headers["X-GitHub-Event"].ToString();
-            var gitLabEvent = Request.Headers["X-Gitlab-Event"].ToString();
+            //A payload értelmezése innentől a szolgáltató parserének a dolga:
+            //Ez az egyetlen hely, ahol a provider neve kódra fordul.
+            //Az aláírás-ellenőrzés fentebb azért marad külön, mert az nem a payload alakjáról szól,
+            //hanem arról, hogy melyik FEJLÉCBEN érkezik a hitelesítő adat és egy biztonsági ág átrendezése külön döntés.
+            var parser = _payloadParsers.FirstOrDefault(p => p.Provider == integration.Provider);
+            if (parser == null)
+            {
+                _logger.LogError("Nincs payload parser a providerhez | Provider: {Provider} | IntegrationId: {IntegrationId}",
+                    integration.Provider, integration.Id);
+                return Unauthorized("Ismeretlen provider!");
+            }
 
             JsonElement payloadJson;
             try
@@ -112,44 +138,61 @@ namespace ProjectManager.API.Controllers
                 return BadRequest("Érvénytelen JSON payload!");
             }
 
-            if (integration.Provider == "GitHub")
+            var eventHeader = Request.Headers[parser.EventHeaderName].ToString();
+
+            switch (parser.ResolveEventKind(eventHeader))
             {
-                switch (gitHubEvent)
-                {
-                    case "ping":
-                        await _integrationService.VerifyIntegrationAsync(integration.Id);
-                        return Ok("pong");
-                    case "push":
-                        await _gitWebhookService.ProcessPushEventAsync(
-                            integration.ProjectId, integration.Id, payloadJson);
-                        break;
-                    case "pull_request":
-                        await _gitWebhookService.ProcessPullRequestEventAsync(
-                            integration.ProjectId, integration.Id, payloadJson);
-                        break;
-                    default:
-                        //Ismeretlen event - ignoráljuk
-                        return Ok("Event ignored");
-                }
-            }
-            else if (integration.Provider == "GitLab")
-            {
-                switch (gitLabEvent)
-                {
-                    case "Push Hook":
-                        await _gitWebhookService.ProcessPushEventAsync(
-                            integration.ProjectId, integration.Id, payloadJson);
-                        break;
-                    case "Merge Request Hook":
-                        await _gitWebhookService.ProcessPullRequestEventAsync(
-                            integration.ProjectId, integration.Id, payloadJson);
-                        break;
-                    default:
-                        return Ok("Event ignored");
-                }
+                case WebhookEventKind.Ping:
+                    await _integrationService.VerifyIntegrationAsync(integration.Id);
+                    return Ok("pong");
+
+                case WebhookEventKind.Push:
+                    if (!parser.TryParsePush(payloadJson, out var pushEvent))
+                        return IgnoreEvent(integration.Id, parser.Provider, eventHeader);
+
+                    if (pushEvent.SkippedCommitCount > 0)
+                    {
+                        //Néma adatvesztés lenne: a push feldolgozottnak látszik, miközben commitok maradtak ki belőle
+                        _logger.LogWarning(
+                            "Értelmezhetetlen commitok a push payloadban | Kihagyva: {SkippedCount} | IntegrationId: {IntegrationId}",
+                            pushEvent.SkippedCommitCount, integration.Id);
+                    }
+
+                    await _gitWebhookService.ProcessPushEventAsync(
+                        integration.ProjectId, integration.Id, integration.Provider, pushEvent);
+                    break;
+
+                case WebhookEventKind.PullRequest:
+                    if (!parser.TryParsePullRequest(payloadJson, out var prEvent))
+                        return IgnoreEvent(integration.Id, parser.Provider, eventHeader);
+
+                    await _gitWebhookService.ProcessPullRequestEventAsync(
+                        integration.ProjectId, integration.Id, integration.Provider, prEvent);
+                    break;
+
+                default:
+                    return IgnoreEvent(integration.Id, parser.Provider, eventHeader);
             }
 
+            //Az első sikeresen feldolgozott esemény verifikálja az integrációt.
+            if (!integration.IsVerified)
+                await _integrationService.VerifyIntegrationAsync(integration.Id);
+
             return Ok("Webhook processed!");
+        }
+
+        /// <summary>
+        /// Nem kezelt vagy értelmezhetetlen esemény. Amely szándékos 200 OK: 
+        /// A szolgáltatók a hibakódokat megjegyzik, és ismétlődő hiba után maguktól kikapcsolják a webhookot.
+        /// Egy általunk figyelmen kívül hagyott esemény pedig nem hiba.
+        /// </summary>
+        private IActionResult IgnoreEvent(Guid integrationId, string provider, string eventHeader)
+        {
+            _logger.LogInformation(
+                "Webhook esemény feldolgozás nélkül átugorva | Provider: {Provider} | Event: {Event} | IntegrationId: {IntegrationId}",
+                provider, eventHeader, integrationId);
+
+            return Ok("Event ignored");
         }
     }
 }

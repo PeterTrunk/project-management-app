@@ -63,7 +63,6 @@ namespace ProjectManager.API.Services.IntegrationService
                 ProjectId = projectId,
                 Provider = dto.Provider,
                 RepoFullName = dto.RepoFullName,
-                AccessToken = dto.AccessToken,
                 WebhookSecret = _encryptionService.Encrypt(dto.WebhookSecret),
                 WebhookToken = Guid.NewGuid().ToString("N"),
                 IsEnabled = true,
@@ -208,11 +207,12 @@ namespace ProjectManager.API.Services.IntegrationService
             }
         }
 
+        // Az integráció a webhook tokenje alapján, a letiltottat is beleértve.
         public async Task<Integration?> GetByWebhookTokenAsync(string webhookToken)
         {
             return await _context.Integrations
                 .Include(i => i.Project)
-                .FirstOrDefaultAsync(i => i.WebhookToken == webhookToken && i.IsEnabled);
+                .FirstOrDefaultAsync(i => i.WebhookToken == webhookToken);
         }
 
         public async Task<List<IntegrationResponseDto>> GetIntegrationsAsync(Guid projectId)
@@ -309,6 +309,10 @@ namespace ProjectManager.API.Services.IntegrationService
             if (integration == null)
                 throw new NotFoundException("Integráció nem található!");
 
+            //A hívó minden sikeresen feldolgozott eseményre meghívhatja:
+            //enélkül a második webhooktól kezdve fölösleges mentés és tevékenység-bejegyzés keletkezne
+            if (integration.IsVerified) return;
+
             integration.IsVerified = true;
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -337,7 +341,8 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     "Verified",
-                    $"GitHub webhook sikeresen verifikálva: {integration.RepoFullName}"
+                    //Korábban itt "GitHub" volt beégetve, tehát egy GitLab integrációról is azt írta volna ki
+                    $"{integration.Provider} webhook sikeresen verifikálva: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{integration.ProjectId}")
@@ -360,7 +365,6 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
                 IsVerified = integration.IsVerified,
-                HasAccessToken = !string.IsNullOrEmpty(integration.AccessToken),
                 CreatedAt = integration.CreatedAt,
                 UpdatedAt = integration.UpdatedAt
             };

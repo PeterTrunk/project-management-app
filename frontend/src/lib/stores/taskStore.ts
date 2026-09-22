@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+﻿import { writable, get } from 'svelte/store';
 import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
 
@@ -193,37 +193,67 @@ export function handleTaskLabelRemoved(payload: { taskId: string; labelId: strin
     });
 }
 
-export function handleCommitLinked(payload: {
-    taskId: string;
-    commitId: string;
-    commitSha: string;
-}) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, commitLinks: [...t.commitLinks, payload as unknown as CommitLinkResponse] }
-                : t
-        )
-    }));
+/**
+ * Beszúrás vagy felülírás azonosító szerint.
+ *
+ * Azért nem egyszerű hozzáfűzés, mert ugyanaz a hivatkozás többször is megérkezhet: 
+ * a pull request állapota megváltozik (megnyitás, szerkesztés, lezárás, merge), 
+ * és a backend mindannyiszor elküldi a friss sort. 
+ * Vak hozzáfűzéssel ugyanaz a kártya többször jelenne meg,
+ * ráadásul azonos kulccsal - amitől a Svelte kulcsolt each blokkja hibát dob.
+ */
+function upsertById<T extends { id: string }>(links: T[], incoming: T): T[] {
+    const index = links.findIndex(l => l.id === incoming.id);
+    if (index === -1) return [...links, incoming];
+
+    const next = [...links];
+    next[index] = incoming;
+    return next;
 }
 
-export function handlePrLinked(payload: {
-    taskId: string;
-    prId: string;
-    prNumber: number;
-    title?: string;
-    state?: string;
-    authorName?: string;
-}) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, prLinks: [...t.prLinks, payload as unknown as PrLinkResponse] }
-                : t
-        )
-    }));
+/**
+ * A megnyitott részletnézet külön hivatkozáson ül,
+ * ezért a frissített listából kell újraolvasni, akkor is ha a hivatkozás épp ELKERÜLT róla.
+ */
+function syncActiveTask(state: TaskState, tasks: TaskResponse[]): TaskResponse | null {
+    if (!state.activeTask) return null;
+    return tasks.find(t => t.id === state.activeTask!.id) ?? state.activeTask;
+}
+
+/**
+ * Egy commit vagy PR hivatkozás EGYETLEN taskhoz tartozik: az adatbázisban egy sor, egy TaskId-vel.
+ * Ezért az esemény nem csak hozzáad, hanem áthelyez is, a többi taskról leszedjük ugyanazt az azonosítót.
+ *
+ * Enélkül egy átrendelt commit a régi task alatt is ott maradna az oldal újratöltéséig,
+ * vagyis a javítás úgy nézne ki, mintha duplikálta volna az elemet.
+ */
+export function handleCommitLinked(payload: CommitLinkResponse & { taskId: string }) {
+    const { taskId, ...commit } = payload;
+
+    taskStore.update(state => {
+        const tasks = state.tasks.map(t => {
+            if (t.id === taskId) return { ...t, commitLinks: upsertById(t.commitLinks, commit) };
+            if (!t.commitLinks.some(l => l.id === commit.id)) return t;
+            return { ...t, commitLinks: t.commitLinks.filter(l => l.id !== commit.id) };
+        });
+
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
+    });
+}
+
+/** @see handleCommitLinked */
+export function handlePrLinked(payload: PrLinkResponse & { taskId: string }) {
+    const { taskId, ...pr } = payload;
+
+    taskStore.update(state => {
+        const tasks = state.tasks.map(t => {
+            if (t.id === taskId) return { ...t, prLinks: upsertById(t.prLinks, pr) };
+            if (!t.prLinks.some(l => l.id === pr.id)) return t;
+            return { ...t, prLinks: t.prLinks.filter(l => l.id !== pr.id) };
+        });
+
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
+    });
 }
 
 export function handleAttachmentUploaded(payload: {

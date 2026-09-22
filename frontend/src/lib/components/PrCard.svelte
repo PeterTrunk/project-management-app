@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import type { PrLinkResponse } from '../api/taskApi';
 
     import { CircleDot, GitMerge, CircleX, Circle } from 'lucide-svelte';
@@ -55,6 +55,9 @@
             {/if}
         </div>
     </div>
+    <div class="card-actions">
+        <slot name="actions" />
+    </div>
 </div>
 
 <style>
@@ -69,7 +72,7 @@
         align-items: center;
         flex-shrink: 0;
         margin-top: 0.1rem;
-        color: var(--text-muted);
+        color: var(--accent-blue);
     }
 
     .pr-info {
@@ -118,6 +121,15 @@
     .pr-open   { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
     .pr-merged { background: var(--accent-purple-bg); color: var(--accent-purple); }
     .pr-closed { background: var(--accent-red-bg);    color: var(--accent-red); }
+    
+    .card-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+        align-self: center;
+        flex-shrink: 0;
+    }
 
     .pr-meta {
         display: flex;

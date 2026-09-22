@@ -82,9 +82,9 @@
             <tr>
                 <td>Git integráció</td>
                 <td>
-                    A csatlakoztatott repository neve, a titkosítva tárolt webhook titok és
-                    hozzáférési token, valamint a beérkező commitok és pull requestek
-                    szerzőjének neve és e-mail címe
+                    A csatlakoztatott repository neve, a titkosítva tárolt webhook titok,
+                    valamint a beérkező commitok és pull requestek szerzőjének neve és
+                    e-mail címe
                 </td>
                 <td>A commitok és pull requestek feladatokhoz rendelése</td>
                 <td>Jogos érdek &mdash; 6. cikk (1) f)</td>
@@ -299,8 +299,8 @@
     <ul>
         <li>a jelszavak egyirányú, sózott lenyomatként tárolódnak (bcrypt);</li>
         <li>
-            a kétfaktoros hitelesítés kulcsai és a git hozzáférési tokenek hitelesített
-            titkosítással (AES-GCM) titkosítva kerülnek az adatbázisba;
+            a kétfaktoros hitelesítés kulcsai és a git integrációk webhook titkai
+            hitelesített titkosítással (AES-GCM) titkosítva kerülnek az adatbázisba;
         </li>
         <li>választható kétfaktoros hitelesítés;</li>
         <li>

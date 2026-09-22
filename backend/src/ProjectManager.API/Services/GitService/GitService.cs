@@ -32,29 +32,34 @@ namespace ProjectManager.API.Services.GitService
             _logger = logger;
         }
 
-        public async Task<List<CommitLinkResponseDto>> GetUnmatchedCommitsAsync(Guid projectId)
+        //A hatókör az integráción át vezet: a hivatkozás a projekthez az integrációján keresztül tartozik, saját ProjectId oszlopa nincs.
+        public async Task<List<LinkedCommitResponseDto>> GetCommitLinksAsync(Guid projectId)
         {
             return await _context.CommitLinks
-                .Where(cl => cl.Integration.ProjectId == projectId && cl.TaskId == null)
+                .Where(cl => cl.Integration.ProjectId == projectId)
                 .OrderByDescending(cl => cl.CommittedAt)
-                .Select(cl => new CommitLinkResponseDto
+                .Select(cl => new LinkedCommitResponseDto
                 {
                     Id = cl.Id,
                     CommitSha = cl.CommitSha,
                     CommitUrl = cl.CommitUrl,
                     Message = cl.Message,
                     AuthorName = cl.AuthorName,
-                    CommittedAt = cl.CommittedAt
+                    CommittedAt = cl.CommittedAt,
+                    IsManuallyLinked = cl.IsManuallyLinked,
+                    TaskId = cl.TaskId,
+                    TaskKey = cl.ProjectTask!.TaskKey,
+                    TaskTitle = cl.ProjectTask.Title
                 })
                 .ToListAsync();
         }
-
-        public async Task<List<PrLinkResponseDto>> GetUnmatchedPrsAsync(Guid projectId)
+        
+        public async Task<List<LinkedPrResponseDto>> GetPrLinksAsync(Guid projectId)
         {
             return await _context.PrLinks
-                .Where(pl => pl.Integration.ProjectId == projectId && pl.TaskId == null)
+                .Where(pl => pl.Integration.ProjectId == projectId)
                 .OrderByDescending(pl => pl.CreatedAt)
-                .Select(pl => new PrLinkResponseDto
+                .Select(pl => new LinkedPrResponseDto
                 {
                     Id = pl.Id,
                     PrNumber = pl.PrNumber,
@@ -63,7 +68,11 @@ namespace ProjectManager.API.Services.GitService
                     State = pl.State,
                     AuthorName = pl.AuthorName,
                     CreatedAt = pl.CreatedAt,
-                    MergedAt = pl.MergedAt
+                    MergedAt = pl.MergedAt,
+                    IsManuallyLinked = pl.IsManuallyLinked,
+                    TaskId = pl.TaskId,
+                    TaskKey = pl.ProjectTask!.TaskKey,
+                    TaskTitle = pl.ProjectTask.Title
                 })
                 .ToListAsync();
         }
@@ -88,17 +97,30 @@ namespace ProjectManager.API.Services.GitService
                 throw new NotFoundException("Task nem található!");
 
             commit.TaskId = taskId;
+
+            //Innentől az illesztő nem nyúl ehhez a commithoz: egy újabb esemény (forcepush)
+            //különben újra megtalálná az eredeti, hibás kulcsot, és a javítás visszafordulna
+            commit.IsManuallyLinked = true;
+
             await _context.SaveChangesAsync();
 
             try
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
+                    //A payload alakja azonos a REST válasz DTO-jával,
+                    //és a taskId ugyanaz, amit a webhook küld.
+                    //Korábban a két forrás eltérő, hiányos alakot használt,
+                    //és a böngészőben azonosító nélküli kártya keletkezett.
                     .SendAsync("CommitLinked", new
                     {
                         taskId,
-                        commitId = commit.Id,
-                        commitSha = commit.CommitSha
+                        id = commit.Id,
+                        commitSha = commit.CommitSha,
+                        commitUrl = commit.CommitUrl,
+                        message = commit.Message,
+                        authorName = commit.AuthorName,
+                        committedAt = commit.CommittedAt
                     });
             }
             catch (Exception ex)
@@ -146,6 +168,11 @@ namespace ProjectManager.API.Services.GitService
                 throw new NotFoundException("Task nem található!");
 
             pr.TaskId = taskId;
+
+            //Lásd a commitnál: a pull requesteknél ez még fontosabb -
+            //mert a webhook szerkesztéskor, lezáráskor és mergeléskor is újra lefut
+            pr.IsManuallyLinked = true;
+
             await _context.SaveChangesAsync();
 
             try
@@ -155,8 +182,14 @@ namespace ProjectManager.API.Services.GitService
                     .SendAsync("PrLinked", new
                     {
                         taskId,
-                        prId = pr.Id,
-                        prNumber = pr.PrNumber
+                        id = pr.Id,
+                        prNumber = pr.PrNumber,
+                        prUrl = pr.PrUrl,
+                        title = pr.Title,
+                        state = pr.State,
+                        authorName = pr.AuthorName,
+                        createdAt = pr.CreatedAt,
+                        mergedAt = pr.MergedAt
                     });
             }
             catch (Exception ex)

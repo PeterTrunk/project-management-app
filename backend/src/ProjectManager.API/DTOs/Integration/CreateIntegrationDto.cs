@@ -11,11 +11,6 @@
         /// </summary>
         public string RepoFullName { get; set; } = string.Empty;
         /// <summary>
-        /// Opcionális GitHub/GitLab access token
-        /// </summary>
-        public string? AccessToken { get; set; }
-
-        /// <summary>
         /// Webhook secret
         /// </summary>
         public string WebhookSecret { get; set; } = string.Empty;

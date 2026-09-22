@@ -12,7 +12,10 @@ using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EmailService;
+using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.RateLimit;
+//A névtér és az osztály neve egybeesik, ezért a statikus tagokhoz alias kell
+using EncryptionSvc = ProjectManager.API.Services.EncryptionService.EncryptionService;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -26,6 +29,7 @@ namespace ProjectManager.API.Services.Auth
         private readonly ICurrentUserService _currentUserService;
         private readonly IEmailService _emailService;
         private readonly IRateLimitService _rateLimitService;
+        private readonly IEncryptionService _encryptionService;
         private readonly ILogger<AuthService> _logger;
         private readonly JwtOptions _jwtOptions;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -33,6 +37,10 @@ namespace ProjectManager.API.Services.Auth
         //Explicit work factor: enélkül a könyvtár alapértelmezettjét használnánk, amely egy csomagfrissítéssel csendben megváltozhat.
         //A Verify a hash-ből olvassa ki a faktort, ezért a korábban mentett jelszavak továbbra is érvényesek maradnak.
         private const int BcryptWorkFactor = 12;
+
+        //A bejelentkezés gyakori művelet, ezért magasabb, mint a jelszó-visszaállítás 15-ös IP-korlátja.
+        //Egy közös kijárat mögötti csapatnak bőven elég, egy címlista végigpróbálásához viszont kevés.
+        private const int LoginIpAttemptsPerWindow = 50;
 
         //Ugyanannyi, mint a jelszó-visszaállító tokené: elég idő a levél megnyitására, 
         //de a token nem marad korlátlanul érvényes. Lejárat után új link kérhető.
@@ -48,6 +56,7 @@ namespace ProjectManager.API.Services.Auth
             ICurrentUserService currentUserService, 
             IEmailService emailService,
             IRateLimitService rateLimitService,
+            IEncryptionService encryptionService,
             ILogger<AuthService> logger,
             IOptions<JwtOptions> jwtOptions,
             IHttpContextAccessor httpContextAccessor)
@@ -56,6 +65,7 @@ namespace ProjectManager.API.Services.Auth
             _currentUserService = currentUserService;
             _emailService = emailService;
             _rateLimitService = rateLimitService;
+            _encryptionService = encryptionService;
             _logger = logger;
             _jwtOptions = jwtOptions.Value;
             _httpContextAccessor = httpContextAccessor;
@@ -86,6 +96,18 @@ namespace ProjectManager.API.Services.Auth
             {
                 _logger.LogWarning("Rate limit elérve bejelentkezésnél | EmailRef: {EmailRef}", EmailRef(dto.Email));
                 throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
+            }
+
+            //Tágabb, csak IP-alapú korlát. A fenti kulcs az e-mail címet is tartalmazza, tehát
+            //minden új címhez ÚJ vödör tartozik - egyetlen gépről így korlátlanul lehetne
+            //végigpróbálni egy címlistát. A szűkebb kulcs mégis kell: önmagában az IP-alapú
+            //korlát egy megosztott kijáratról kizárná a jóhiszemű felhasználókat.
+            var (isIpLimited, ipRetryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"login_ip:{ipAddress}", LoginIpAttemptsPerWindow, TimeSpan.FromMinutes(15));
+            if (isIpLimited)
+            {
+                _logger.LogWarning("IP szintű rate limit elérve bejelentkezésnél | IP: {IpAddress}", ipAddress);
+                throw new RateLimitException($"Túl sok kérés. Próbáld újra {ipRetryAfter} másodperc múlva!");
             }
 
             //DB ellenörzése
@@ -277,7 +299,7 @@ namespace ProjectManager.API.Services.Auth
 
             if (rowsAffected == 0)
             {
-                _logger.LogWarning("Visszavont vagy nem létező refresh token használata");
+                await HandleFailedRotationAsync(refreshToken);
                 throw new ValidationException("Token nem található vagy már felhasználva!");
             }
 
@@ -341,7 +363,12 @@ namespace ProjectManager.API.Services.Auth
                 throw new ValidationException("Token nem található!");
             }
 
-            refreshTokenEntry.IsRevoked = true;
+            //Törlés, nem visszavonás. Enélkül a kijelentkezett token megkülönböztethetetlen
+            //lenne a rotáció során visszavonttól, és egy ártatlan versenyhelyzet - a háttérfül
+            //még egyszer megpróbálja - a visszajátszás-riasztást váltaná ki, ami MINDEN
+            //eszközről kiléptetné a felhasználót. A naplózási érték elhanyagolható:
+            //a TokenCleanupJob amúgy is takarítja ezeket a sorokat.
+            _context.RefreshTokens.Remove(refreshTokenEntry);
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Sikeres kijelentkezés | UserId: {UserId}", refreshTokenEntry.UserId);
@@ -411,7 +438,7 @@ namespace ProjectManager.API.Services.Auth
                 if (string.IsNullOrEmpty(user.TotpSecret))
                     throw new ValidationException("TOTP nincs beállítva!");
 
-                var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
+                var totp = new Totp(Base32Encoding.ToBytes(ReadTotpSecret(user.TotpSecret)));
                 if (!totp.VerifyTotp(dto.TotpToken, out _, VerificationWindow.RfcSpecifiedNetworkDelay))
                 {
                     _logger.LogWarning("Sikertelen fióktörlés - érvénytelen TOTP | UserId: {UserId}", userId);
@@ -511,6 +538,53 @@ namespace ProjectManager.API.Services.Auth
                     a => a.Description,
                     a => a.Description.Replace(oldDisplayName, UserAnonymization.DisplayName)));
         }
+        
+        /// <summary>
+        /// A tárolt TOTP titok nyers base32 alakja.
+        ///
+        /// Megengedő olvasás: a titkosítás bevezetése előtt mentett értékek prefix nélkül, nyersen állnak az adatbázisban,
+        /// és azokat NEM szabad megpróbálni visszafejteni - a base32 szöveg átmegy a base64 dekódoláson,
+        /// a Decrypt szeletelése viszont már kivétellel szállna el, vagyis a felhasználó nem tudna bejelentkezni.
+        ///
+        /// Az induláskor futó EncryptExistingTotpSecretsAsync ezeket fokozatosan felszámolja;
+        /// az ág addig marad, amíg biztosan nincs prefix nélküli sor.
+        /// </summary>
+        private string ReadTotpSecret(string storedSecret) =>
+            EncryptionSvc.IsEncrypted(storedSecret)
+                ? _encryptionService.Decrypt(storedSecret)
+                : storedSecret;
+
+        /// <summary>
+        /// Sikertelen token-rotáció: a feltételes UPDATE nem talált visszavonatlan sort.
+        ///
+        /// Két eset lehet. Ha a sor NEM létezik, találgatásról van szó - nincs mit tenni.
+        /// Ha viszont LÉTEZIK és visszavont, akkor egy már elhasznált tokent játszottak vissza,
+        /// és ez lopott token jele: valaki más már rotált vele, vagy épp most rotál.
+        ///
+        /// A válasz a felhasználó ÖSSZES tokenjének visszavonása. 
+        /// Enélkül a támadó tokenje érvényben maradna, a jogos felhasználó pedig csak annyit látna,
+        /// hogy ki kellett jelentkeznie - a hozzáférés a támadónál maradna.
+        ///
+        /// A kijelentkezés ezért TÖRLI a sort, nem visszavonja: különben minden kijelentkezés
+        /// utáni késői kérés ide futna be.
+        /// </summary>
+        private async Task HandleFailedRotationAsync(string refreshToken)
+        {
+            var replayed = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rf => rf.Token == refreshToken);
+
+            if (replayed == null)
+            {
+                _logger.LogWarning("Nem létező refresh token használata");
+                return;
+            }
+
+            var revokedCount = await RevokeAllRefreshTokensAsync(replayed.UserId);
+
+            _logger.LogWarning(
+                "Refresh token visszajátszás - minden munkamenet visszavonva | UserId: {UserId} | Visszavont tokenek: {RevokedCount}",
+                replayed.UserId, revokedCount);
+        }
 
         //Egy felhasználó összes nem revoked refresh tokenjének revoke-olja.
         //Jelszóváltás, jelszó-visszaállítás és 2FA módosítás után kinyirja a munkameneteket.
@@ -558,8 +632,10 @@ namespace ProjectManager.API.Services.Auth
             var secretKey = KeyGeneration.GenerateRandomKey(20);
             var base32Secret = Base32Encoding.ToString(secretKey);
 
-            //Ideiglenesen tároljuk (még nincs aktiválva)
-            user.TotpSecret = base32Secret;
+            //Ideiglenesen tároljuk (még nincs aktiválva). Titkosítva: a titok állandó és a
+            //jelszótól független, tehát egy adatbázis-szivárgás után is ez az egyetlen dolog,
+            //ami a második faktort még megvédi. A kulcs környezeti változóban él, nem a DB-ben.
+            user.TotpSecret = _encryptionService.Encrypt(base32Secret);
             await _context.SaveChangesAsync();
 
             //otpauth:// URI generálás Google Authenticator számára
@@ -583,7 +659,7 @@ namespace ProjectManager.API.Services.Auth
             if (string.IsNullOrEmpty(user.TotpSecret))
                 throw new ValidationException("TOTP nincs beállítva!");
 
-            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var secretKey = Base32Encoding.ToBytes(ReadTotpSecret(user.TotpSecret));
             var totp = new Totp(secretKey);
 
             var isValid = totp.VerifyTotp(
@@ -649,6 +725,17 @@ namespace ProjectManager.API.Services.Auth
                 throw new RateLimitException($"Meghaladtad a maximális bejelentkezési kísérletek számát! Próbáld újra {retryAfter} másodperc múlva!");
             }
 
+            //Tágabb, csak IP-alapú korlát. A fenti kulcs az e-mail címet is tartalmazza,
+            //tehát minden új címhez ÚJ vödör tartozik - egyetlen gépről így korlátlanul lehetne végigpróbálni egy címlistát.
+            //A szűkebb kulcs mégis kell: önmagában az IP-alapú korlát egy megosztott kijáratról kizárná a jóhiszemű felhasználókat.
+            var (isIpLimited, ipRetryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"login_ip:{ipAddress}", LoginIpAttemptsPerWindow, TimeSpan.FromMinutes(15));
+            if (isIpLimited)
+            {
+                _logger.LogWarning("IP szintű rate limit elérve bejelentkezésnél | IP: {IpAddress}", ipAddress);
+                throw new RateLimitException($"Túl sok kérés. Próbáld újra {ipRetryAfter} másodperc múlva!");
+            }
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
 
             var isPasswordValid = BCrypt.Net.BCrypt.Verify(
@@ -670,7 +757,7 @@ namespace ProjectManager.API.Services.Auth
             if (!user.IsTotpEnabled || string.IsNullOrEmpty(user.TotpSecret))
                 throw new ValidationException("TOTP nincs bekapcsolva ennél a felhasználónál!");
 
-            var secretKey = Base32Encoding.ToBytes(user.TotpSecret);
+            var secretKey = Base32Encoding.ToBytes(ReadTotpSecret(user.TotpSecret));
             var totp = new Totp(secretKey);
 
             var isValid = totp.VerifyTotp(
@@ -712,12 +799,6 @@ namespace ProjectManager.API.Services.Auth
             };
         }
 
-        public async Task<bool> IsTotpRequiredAsync(string email)
-        {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            return user?.IsTotpEnabled ?? false;
-        }
-        
         public async Task VerifyEmailAsync(string token)
         {
             var user = await _context.Users
@@ -755,6 +836,14 @@ namespace ProjectManager.API.Services.Auth
             {
                 _logger.LogWarning("Rate limit elérve verifikációs email újraküldésnél | EmailRef: {EmailRef}", EmailRef(email));
                 throw new RateLimitException($"Túl sok kérés. Próbáld újra {retryAfter} másodperc múlva!");
+            }
+            
+            var (isIpLimited, ipRetryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"resend_verification_ip:{ipAddress}", 15, TimeSpan.FromHours(1));
+            if (isIpLimited)
+            {
+                _logger.LogWarning("IP szintű rate limit elérve verifikációs email újraküldésnél | IP: {IpAddress}", ipAddress);
+                throw new RateLimitException($"Túl sok kérés. Próbáld újra {ipRetryAfter} másodperc múlva!");
             }
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);

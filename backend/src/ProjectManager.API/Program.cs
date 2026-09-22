@@ -215,6 +215,7 @@ try
     // DB migráció + webhook secret migráció
     await app.RunMigrationsAsync();
     await app.MigrateWebhookSecretsAsync();
+    await app.EncryptExistingTotpSecretsAsync();
 
     //A regisztráció ehhez a sorhoz köti az elfogadást, ezért a migráció után azonnal fut
     await app.SeedTermsVersionAsync();
