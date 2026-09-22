@@ -6,7 +6,6 @@
         public Guid ProjectId { get; set; }
         public string Provider { get; set; } = string.Empty;
         public string RepoFullName { get; set; } = string.Empty;
-        public string? AccessToken { get; set; }
         public string WebhookSecret { get; set; } = string.Empty;
         public string WebhookToken { get; set; } = string.Empty;
         public bool IsEnabled { get; set; } = true;

@@ -59,7 +59,6 @@ export function handleIntegrationCreated(payload: {
             ...payload,
             id: payload.integrationId,
             webhookToken: '',
-            hasAccessToken: false,
             updatedAt: payload.createdAt
         } as unknown as IntegrationResponse]
     }));

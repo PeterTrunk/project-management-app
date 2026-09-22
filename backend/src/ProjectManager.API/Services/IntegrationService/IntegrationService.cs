@@ -63,7 +63,6 @@ namespace ProjectManager.API.Services.IntegrationService
                 ProjectId = projectId,
                 Provider = dto.Provider,
                 RepoFullName = dto.RepoFullName,
-                AccessToken = dto.AccessToken,
                 WebhookSecret = _encryptionService.Encrypt(dto.WebhookSecret),
                 WebhookToken = Guid.NewGuid().ToString("N"),
                 IsEnabled = true,
@@ -360,7 +359,6 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
                 IsVerified = integration.IsVerified,
-                HasAccessToken = !string.IsNullOrEmpty(integration.AccessToken),
                 CreatedAt = integration.CreatedAt,
                 UpdatedAt = integration.UpdatedAt
             };

@@ -675,9 +675,6 @@ public class AppDbContext : DbContext
                   .HasMaxLength(200)
                   .IsRequired();
 
-            entity.Property(i => i.AccessToken)
-                  .IsRequired(false);
-
             entity.Property(i => i.WebhookSecret)
                   .IsRequired();
 

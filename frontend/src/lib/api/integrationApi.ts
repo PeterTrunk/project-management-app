@@ -9,7 +9,6 @@ export interface IntegrationResponse {
     webhookUrl: string;
     isEnabled: boolean;
     isVerified: boolean;
-    hasAccessToken: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -18,7 +17,6 @@ export interface CreateIntegrationRequest {
     provider: string;
     repoFullName: string;
     webhookSecret: string;
-    accessToken?: string | null;
     authorityConfirmed: boolean;
 }
 
