@@ -27,22 +27,23 @@ namespace ProjectManager.API.Controllers
             _gitService = gitService;
             _logger = logger;
         }
-        
-        [HttpGet("unmatched-commits")]
+
+        //Korábban két külön "unmatched-*" végpont. Azok a hozzárendeletlen sorokra szűrtek.
+        [HttpGet("commits")]
         [Authorize(Policy = PolicyNames.ProjectViewer)]
-        [ProducesResponseType(typeof(List<CommitLinkResponseDto>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<List<CommitLinkResponseDto>>> GetUnmatchedCommitsAsync(Guid projectId)
+        [ProducesResponseType(typeof(List<LinkedCommitResponseDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<List<LinkedCommitResponseDto>>> GetCommitLinksAsync(Guid projectId)
         {
-            var response = await _gitService.GetUnmatchedCommitsAsync(projectId);
+            var response = await _gitService.GetCommitLinksAsync(projectId);
             return Ok(response);
         }
-        
-        [HttpGet("unmatched-prs")]
+
+        [HttpGet("prs")]
         [Authorize(Policy = PolicyNames.ProjectViewer)]
-        [ProducesResponseType(typeof(List<PrLinkResponseDto>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<List<PrLinkResponseDto>>> GetUnmatchedPrsAsync(Guid projectId)
+        [ProducesResponseType(typeof(List<LinkedPrResponseDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<List<LinkedPrResponseDto>>> GetPrLinksAsync(Guid projectId)
         {
-            var response = await _gitService.GetUnmatchedPrsAsync(projectId);
+            var response = await _gitService.GetPrLinksAsync(projectId);
             return Ok(response);
         }
         

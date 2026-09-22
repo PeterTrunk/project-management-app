@@ -3,8 +3,8 @@
     import { signalRService } from '../services/signalRService';
     import { integrationStore } from '../stores/integrationStore';
     import { taskStore } from '../stores/taskStore';
-    import { getUnmatchedCommitsAsync, getUnmatchedPrsAsync, assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
-    import type { CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
+    import { getCommitLinksAsync, getPrLinksAsync, assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
+    import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
     import type { IntegrationResponse } from '../api/integrationApi';
     import type { TaskResponse } from '../api/taskApi';
     import CommitCard from './CommitCard.svelte';
@@ -17,8 +17,12 @@
 
     export let projectId: string;
 
-    let unmatchedCommits: CommitLinkResponse[] = [];
-    let unmatchedPrs: PrLinkResponse[] = [];
+    //A teljes lista jön le; a hozzárendeletlen nézet ebből szűrés, nem külön lekérés
+    let commitLinks: LinkedCommitResponse[] = [];
+    let prLinks: LinkedPrResponse[] = [];
+
+    $: unmatchedCommits = commitLinks.filter(c => c.taskId === null);
+    $: unmatchedPrs = prLinks.filter(p => p.taskId === null);
     let integrations: IntegrationResponse[] = [];
     let tasks: TaskResponse[] = [];
     let loading = true;
@@ -47,19 +51,19 @@
         signalRService.off('PrLinked');
 
         signalRService.on('CommitLinked', async () => {
-            unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
+            commitLinks = await getCommitLinksAsync(projectId);
         });
 
         signalRService.on('PrLinked', async () => {
-            unmatchedPrs = await getUnmatchedPrsAsync(projectId);
+            prLinks = await getPrLinksAsync(projectId);
         });
     });
 
     async function loadAll() {
         loading = true;
         try {
-            unmatchedCommits = await getUnmatchedCommitsAsync(projectId);
-            unmatchedPrs = await getUnmatchedPrsAsync(projectId);
+            commitLinks = await getCommitLinksAsync(projectId);
+            prLinks = await getPrLinksAsync(projectId);
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
         } finally {

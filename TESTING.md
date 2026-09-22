@@ -67,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **98 teszt** (97 aktív, 1 szándékosan kihagyott), futásidő ~22 másodperc.
+Összesen **107 teszt** (106 aktív, 1 szándékosan kihagyott), futásidő ~24 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
@@ -101,6 +101,15 @@ függvény tesztje ezt nem tudná megfogni.
 
 A külső hatások (levélküldés, Redis) kézzel írt duplát kapnak; a jelszóhash, a JWT
 előállítás, a titkosítás és a token rotáció valódi — ezek adják a teszt értelmét.
+
+**Projekt szintű hivatkozás-lista** — `GitLinkQueryTests`:
+- a hozzárendeletlen sor task adat nélkül, a kapcsolt task kulccsal és címmel — **egy listában**
+- **egy lezárt sprintben lévő task hivatkozása is szerepel.** Ez a lekérdezés létjogosultsága:
+  a korábbi tervváltozat a task store-ból építette volna a listát, az viszont csak a backlog
+  és a nyitott sprintek taskjait tartalmazza, tehát a régebbi munkák hivatkozásai némán
+  kimaradtak volna
+- másik projekt hivatkozása nem szivárog át
+- a kézi jelölő és a sorrend (legfrissebb elöl) is utazik
 
 **Kézi átrendelés** — `ManualLinkTests`:
 - a kézi hozzárendelés megjelöli a sort, az illesztőtől származó nem
