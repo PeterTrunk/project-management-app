@@ -2,29 +2,30 @@
     import { onMount, onDestroy } from 'svelte';
     import { signalRService } from '../services/signalRService';
     import { integrationStore } from '../stores/integrationStore';
-    import { taskStore } from '../stores/taskStore';
     import { getCommitLinksAsync, getPrLinksAsync, assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
     import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
-    import type { IntegrationResponse } from '../api/integrationApi';
-    import type { TaskResponse } from '../api/taskApi';
+    import { filterCommitLinks, filterPrLinks } from '../utils/gitLinks';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
     import TaskPickerModal from '../components/TaskPickerModal.svelte';
 
-    import { GitBranch, CircleCheck, X, Plus, ToggleLeft, ToggleRight } from 'lucide-svelte';
+    import { GitBranch, CircleCheck, ToggleLeft, ToggleRight, Search, CornerUpRight } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
 
     export let projectId: string;
 
-    //A teljes lista jön le; a hozzárendeletlen nézet ebből szűrés, nem külön lekérés
+    //A projekt ÖSSZES hivatkozása egy listában. A "hozzárendeletlen" nézet ebből szűrés,
+    //nem külön lekérés - ugyanaz a feltétel, ami az adatbázisban is (TaskId == null).
+    //
+    //Szándékosan NEM a taskStore-ból: az csak a backlog és a nyitott sprintek taskjait
+    //tartalmazza, tehát egy lezárt sprintben lévő task hivatkozása némán kimaradna.
     let commitLinks: LinkedCommitResponse[] = [];
     let prLinks: LinkedPrResponse[] = [];
 
-    $: unmatchedCommits = commitLinks.filter(c => c.taskId === null);
-    $: unmatchedPrs = prLinks.filter(p => p.taskId === null);
-    let integrations: IntegrationResponse[] = [];
-    let tasks: TaskResponse[] = [];
+    let activeTab: 'unmatched' | 'linked' = 'unmatched';
+    let searchQuery = '';
+
     let loading = true;
     let error = '';
 
@@ -32,81 +33,56 @@
     let pendingCommitId = '';
     let pendingPrId = '';
 
-    // Task selector state
-    let selectedCommitId: string | null = null;
-    let selectedPrId: string | null = null;
-    let selectedTaskId: string = '';
+    $: unmatchedCommits = commitLinks.filter(c => c.taskId === null);
+    $: unmatchedPrs = prLinks.filter(p => p.taskId === null);
 
-    integrationStore.subscribe(state => {
-        integrations = state.integrations;
-    });
+    $: linkedCommits = filterCommitLinks(commitLinks.filter(c => c.taskId !== null), searchQuery);
+    $: linkedPrs = filterPrLinks(prLinks.filter(p => p.taskId !== null), searchQuery);
 
-    taskStore.subscribe(state => {
-        tasks = state.tasks;
-    });
+    $: linkedTotal = commitLinks.filter(c => c.taskId !== null).length
+        + prLinks.filter(p => p.taskId !== null).length;
 
     onMount(async () => {
         await loadAll();
         signalRService.off('CommitLinked');
         signalRService.off('PrLinked');
 
-        signalRService.on('CommitLinked', async () => {
-            commitLinks = await getCommitLinksAsync(projectId);
-        });
-
-        signalRService.on('PrLinked', async () => {
-            prLinks = await getPrLinksAsync(projectId);
-        });
+        signalRService.on('CommitLinked', refresh);
+        signalRService.on('PrLinked', refresh);
     });
 
     async function loadAll() {
         loading = true;
         try {
-            commitLinks = await getCommitLinksAsync(projectId);
-            prLinks = await getPrLinksAsync(projectId);
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
+            await refresh();
         } finally {
             loading = false;
         }
     }
 
-    async function handleAssignCommit(commitId: string) {
-        if (!selectedTaskId) return;
+    //Betöltésjelző nélkül: a SignalR eseményre és a hozzárendelés után is ez fut,
+    //és ott a lista villanása zavaróbb lenne, mint hasznos
+    async function refresh() {
         try {
-            await assignCommitToTaskAsync(projectId, commitId, selectedTaskId);
-            unmatchedCommits = unmatchedCommits.filter(c => c.id !== commitId);
-            selectedCommitId = null;
-            selectedTaskId = '';
-            notify.success('Commit hozzárendelve!');
+            [commitLinks, prLinks] = await Promise.all([
+                getCommitLinksAsync(projectId),
+                getPrLinksAsync(projectId)
+            ]);
         } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
+            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
         }
     }
 
-    async function handleAssignPr(prId: string) {
-        if (!selectedTaskId) return;
-        try {
-            await assignPrToTaskAsync(projectId, prId, selectedTaskId);
-            unmatchedPrs = unmatchedPrs.filter(p => p.id !== prId);
-            selectedPrId = null;
-            selectedTaskId = '';
-            notify.success('PR hozzárendelve!');
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a hozzárendeléskor!');
-        }
-    }
-
-    function openTaskPickerForCommit(commitId: string) {
-        pendingCommitId = commitId;
-        pendingPrId = '';
+    function openTaskPicker(kind: 'commit' | 'pr', linkId: string) {
+        pendingCommitId = kind === 'commit' ? linkId : '';
+        pendingPrId = kind === 'pr' ? linkId : '';
         isTaskPickerOpen = true;
     }
 
-    function openTaskPickerForPr(prId: string) {
-        pendingPrId = prId;
+    function closeTaskPicker() {
+        isTaskPickerOpen = false;
         pendingCommitId = '';
-        isTaskPickerOpen = true;
+        pendingPrId = '';
     }
 
     async function handleTaskSelected(taskId: string) {
@@ -114,21 +90,21 @@
             if (pendingCommitId) {
                 await assignCommitToTaskAsync(projectId, pendingCommitId, taskId);
                 notify.success('Commit hozzárendelve!');
-                unmatchedCommits = unmatchedCommits.filter(c => c.id !== pendingCommitId);
             } else if (pendingPrId) {
                 await assignPrToTaskAsync(projectId, pendingPrId, taskId);
-                notify.success('PR hozzárendelve!');
-                unmatchedPrs = unmatchedPrs.filter(p => p.id !== pendingPrId);
+                notify.success('Pull request hozzárendelve!');
             }
+
+            //A SignalR esemény is újratölt, de arra nem támaszkodunk: egy szétesett
+            //kapcsolat mellett a felhasználó a saját műveletének eredményét ne veszítse el
+            await refresh();
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a hozzárendeléskor!');
         } finally {
-            isTaskPickerOpen = false;
-            pendingCommitId = '';
-            pendingPrId = '';
+            closeTaskPicker();
         }
     }
-    
+
     onDestroy(() => {
         signalRService.off('CommitLinked');
         signalRService.off('PrLinked');
@@ -147,14 +123,14 @@
         {:else if error}
             <p class="error">{error}</p>
         {:else}
-            <!-- Integrációk -->
+            <!-- Integrációk: a füleken kívül, mert mindkét nézetre vonatkozik -->
             <div class="section">
                 <h3>Integrációk</h3>
-                {#if integrations.length === 0}
+                {#if $integrationStore.integrations.length === 0}
                     <p class="empty">Nincs integráció — add hozzá a Project Settings-ben!</p>
                 {:else}
                     <div class="integrations-list">
-                        {#each integrations as integration (integration.id)}
+                        {#each $integrationStore.integrations as integration (integration.id)}
                             <div class="integration-item">
                                 <span class="provider-icon"><GitBranch size={16} /></span>
                                 <span class="repo truncate">{integration.repoFullName}</span>
@@ -176,47 +152,131 @@
                 {/if}
             </div>
 
-            <!-- Unmatched Commitok -->
-            <div class="section">
-                <h3>Hozzárendeletlen Commitok ({unmatchedCommits.length})</h3>
-                {#if unmatchedCommits.length === 0}
-                    <p class="empty">Minden commit hozzá van rendelve taskhoz!</p>
-                {:else}
-                    <div class="git-list">
-                        {#each unmatchedCommits as commit (commit.id)}
-                            <div class="unmatched-item">
-                                <CommitCard {commit} />
-                                <div class="assign-row">
-                                    <button class="assign-btn" on:click={() => openTaskPickerForCommit(commit.id)}>
-                                        Hozzárendelés
-                                    </button>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
+            <div class="git-tabs">
+                <button class="tab-btn" class:active={activeTab === 'unmatched'}
+                    on:click={() => activeTab = 'unmatched'}>
+                    Hozzárendeletlen
+                    {#if unmatchedCommits.length + unmatchedPrs.length > 0}
+                        <span class="tab-badge">{unmatchedCommits.length + unmatchedPrs.length}</span>
+                    {/if}
+                </button>
+                <button class="tab-btn" class:active={activeTab === 'linked'}
+                    on:click={() => activeTab = 'linked'}>
+                    Kapcsolt
+                    {#if linkedTotal > 0}
+                        <span class="tab-badge">{linkedTotal}</span>
+                    {/if}
+                </button>
             </div>
 
-            <!-- Unmatched PR-ok -->
-            <div class="section">
-                <h3>Hozzárendeletlen Pull Requestek ({unmatchedPrs.length})</h3>
-                {#if unmatchedPrs.length === 0}
-                    <p class="empty">Minden PR hozzá van rendelve taskhoz!</p>
-                {:else}
-                    <div class="git-list">
-                        {#each unmatchedPrs as pr (pr.id)}
-                            <div class="unmatched-item">
-                                <PrCard {pr} />
-                                <div class="assign-row">
-                                    <button class="assign-btn" on:click={() => openTaskPickerForPr(pr.id)}>
-                                        Hozzárendelés
-                                    </button>
+            {#if activeTab === 'unmatched'}
+                <div class="section">
+                    <h3>Hozzárendeletlen Commitok ({unmatchedCommits.length})</h3>
+                    {#if unmatchedCommits.length === 0}
+                        <p class="empty">Minden commit hozzá van rendelve taskhoz!</p>
+                    {:else}
+                        <div class="git-list">
+                            {#each unmatchedCommits as commit (commit.id)}
+                                <div class="unmatched-item">
+                                    <CommitCard {commit} />
+                                    <div class="assign-row">
+                                        <button class="assign-btn" on:click={() => openTaskPicker('commit', commit.id)}>
+                                            Hozzárendelés
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
-            </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+
+                <div class="section">
+                    <h3>Hozzárendeletlen Pull Requestek ({unmatchedPrs.length})</h3>
+                    {#if unmatchedPrs.length === 0}
+                        <p class="empty">Minden PR hozzá van rendelve taskhoz!</p>
+                    {:else}
+                        <div class="git-list">
+                            {#each unmatchedPrs as pr (pr.id)}
+                                <div class="unmatched-item">
+                                    <PrCard {pr} />
+                                    <div class="assign-row">
+                                        <button class="assign-btn" on:click={() => openTaskPicker('pr', pr.id)}>
+                                            Hozzárendelés
+                                        </button>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+            {:else}
+                <!-- A kapcsolt elemek: ide eddig nem volt út a felületen, ezért egy rossz
+                     task kulccsal beillesztett commit elérhetetlen volt -->
+                <div class="search-row">
+                    <span class="search-icon"><Search size={14} /></span>
+                    <input
+                        type="text"
+                        placeholder="Keresés sha, üzenet, szerző, PR-szám vagy task kulcs szerint"
+                        bind:value={searchQuery}
+                    />
+                </div>
+
+                <div class="section">
+                    <h3>Kapcsolt Commitok ({linkedCommits.length})</h3>
+                    {#if linkedCommits.length === 0}
+                        <p class="empty">
+                            {searchQuery.trim() === ''
+                                ? 'Még nincs taskhoz kapcsolt commit.'
+                                : 'Nincs találat erre a keresésre.'}
+                        </p>
+                    {:else}
+                        <div class="git-list">
+                            {#each linkedCommits as commit (commit.id)}
+                                <div class="unmatched-item">
+                                    <CommitCard {commit} />
+                                    <div class="assign-row">
+                                        <span class="task-chip" title={commit.taskTitle ?? ''}>{commit.taskKey}</span>
+                                        {#if commit.isManuallyLinked}
+                                            <span class="manual-chip" title="Ezt a hozzárendelést ember állította be">kézi</span>
+                                        {/if}
+                                        <button class="assign-btn" on:click={() => openTaskPicker('commit', commit.id)}>
+                                            <CornerUpRight size={13} /> Áthelyezés
+                                        </button>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+
+                <div class="section">
+                    <h3>Kapcsolt Pull Requestek ({linkedPrs.length})</h3>
+                    {#if linkedPrs.length === 0}
+                        <p class="empty">
+                            {searchQuery.trim() === ''
+                                ? 'Még nincs taskhoz kapcsolt pull request.'
+                                : 'Nincs találat erre a keresésre.'}
+                        </p>
+                    {:else}
+                        <div class="git-list">
+                            {#each linkedPrs as pr (pr.id)}
+                                <div class="unmatched-item">
+                                    <PrCard {pr} />
+                                    <div class="assign-row">
+                                        <span class="task-chip" title={pr.taskTitle ?? ''}>{pr.taskKey}</span>
+                                        {#if pr.isManuallyLinked}
+                                            <span class="manual-chip" title="Ezt a hozzárendelést ember állította be">kézi</span>
+                                        {/if}
+                                        <button class="assign-btn" on:click={() => openTaskPicker('pr', pr.id)}>
+                                            <CornerUpRight size={13} /> Áthelyezés
+                                        </button>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+            {/if}
         {/if}
     </div>
 </div>
@@ -225,7 +285,7 @@
     isOpen={isTaskPickerOpen}
     {projectId}
     onSelect={handleTaskSelected}
-    onClose={() => { isTaskPickerOpen = false; pendingCommitId = ''; pendingPrId = ''; }}
+    onClose={closeTaskPicker}
 />
 
 <style>
@@ -311,6 +371,96 @@
     }
 
     .disabled { background: var(--bg-hover);        color: var(--text-muted); }
+
+    /* Fulek - ugyanaz az idioma, mint a TaskDetailModal reszletnezetenel */
+    .git-tabs {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .tab-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.65rem 0.85rem;
+        border: none;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+        margin-bottom: -1px;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+        white-space: nowrap;
+    }
+
+    .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+    .tab-btn.active {
+        color: var(--accent-blue);
+        border-bottom-color: var(--accent-blue);
+        background: transparent;
+    }
+
+    .tab-badge {
+        background: var(--bg-hover);
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 10px;
+    }
+
+    .search-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 1rem 1rem 0;
+        padding: 0.4rem 0.6rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+    }
+
+    .search-icon {
+        display: flex;
+        align-items: center;
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+
+    .search-row input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text-primary);
+        font-size: 0.85rem;
+    }
+
+    /* A task kulcsa a kapcsolt kartyan: enelkul nem derulne ki, hova kerult az elem */
+    .task-chip {
+        padding: 0.1rem 0.45rem;
+        border-radius: 4px;
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .manual-chip {
+        padding: 0.1rem 0.45rem;
+        border-radius: 4px;
+        background: var(--bg-hover);
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
 
     .git-list {
         display: flex;
