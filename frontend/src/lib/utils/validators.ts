@@ -277,8 +277,9 @@ export function validateCreateIntegration(provider: string, repoFullName: string
     else {
         const repoMax = maxLength(repoFullName, 200, 'Repository');
         if (repoMax) errors.push(repoMax);
-        if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoFullName))
-            errors.push('Érvénytelen repository formátum! (owner/repo)');
+        //Legalább két szegmens, de lehet több: a GitLab enged alcsoportokat
+        if (!/^[a-zA-Z0-9_.-]+(\/[a-zA-Z0-9_.-]+)+$/.test(repoFullName))
+            errors.push('Érvénytelen repository formátum! (tulajdonos/repository)');
     }
     
     const secretReq = required(webhookSecret, 'Webhook secret');

@@ -19,8 +19,9 @@ namespace ProjectManager.API.Validators.IntegrationValidators
                 .WithMessage("Repository neve kötelező!")
                 .MaximumLength(200)
                 .WithMessage("A repository neve maximum 200 karakter lehet!")
-                .Matches(@"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
-                .WithMessage("Érvénytelen repository formátum! Helyes formátum: owner/repo");
+                //Legalább két szegmens, de lehet több: a GitLab enged alcsoportokat (csoport/alcsoport/projekt)
+                .Matches(@"^[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)+$")
+                .WithMessage("Érvénytelen repository formátum! Helyes formátum: tulajdonos/repository (GitLab alcsoportnál több szint is lehet)");
 
             RuleFor(x => x.WebhookSecret)
                 .NotEmpty()

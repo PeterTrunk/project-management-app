@@ -308,6 +308,10 @@ namespace ProjectManager.API.Services.IntegrationService
             if (integration == null)
                 throw new NotFoundException("Integráció nem található!");
 
+            //A hívó minden sikeresen feldolgozott eseményre meghívhatja:
+            //enélkül a második webhooktól kezdve fölösleges mentés és tevékenység-bejegyzés keletkezne
+            if (integration.IsVerified) return;
+
             integration.IsVerified = true;
             integration.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -336,7 +340,8 @@ namespace ProjectManager.API.Services.IntegrationService
                     "Integration",
                     integration.Id,
                     "Verified",
-                    $"GitHub webhook sikeresen verifikálva: {integration.RepoFullName}"
+                    //Korábban itt "GitHub" volt beégetve, tehát egy GitLab integrációról is azt írta volna ki
+                    $"{integration.Provider} webhook sikeresen verifikálva: {integration.RepoFullName}"
                 );
                 await _hubContext.Clients
                     .Group($"project-{integration.ProjectId}")

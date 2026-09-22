@@ -37,7 +37,9 @@
             </div>
         </div>
     </div>
-    <slot name="actions" />
+    <div class="card-actions">
+        <slot name="actions" />
+    </div>
 </div>
 
 <style>
@@ -45,6 +47,14 @@
         display: flex;
         align-items: flex-start;
         gap: 0.5rem;
+    }
+
+    .commit-main-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        flex: 1;
+        min-width: 0;
     }
 
     .commit-icon {
@@ -90,6 +100,15 @@
         min-width: 0;
     }
 
+    .card-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+        align-self: center;
+        flex-shrink: 0;
+    }
+    
     .commit-meta {
         display: flex;
         gap: 0.4rem;

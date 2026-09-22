@@ -161,6 +161,10 @@ namespace ProjectManager.API.Controllers
                     return IgnoreEvent(integration.Id, parser.Provider, eventHeader);
             }
 
+            //Az első sikeresen feldolgozott esemény verifikálja az integrációt.
+            if (!integration.IsVerified)
+                await _integrationService.VerifyIntegrationAsync(integration.Id);
+
             return Ok("Webhook processed!");
         }
 

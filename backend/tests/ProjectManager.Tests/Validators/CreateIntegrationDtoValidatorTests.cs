@@ -88,6 +88,35 @@ namespace ProjectManager.Tests.Validators
             result.ShouldNotHaveValidationErrorFor(x => x.RepoFullName);
         }
 
+        /// <summary>
+        /// A GitLab enged alcsoportokat, és ott a projekt útvonala kettőnél több szegmensből
+        /// áll. A mező CÍMKE - a webhookot az URL-beli token azonosítja, a titok hitelesíti -,
+        /// tehát a kétszegmenses korlát nem védett semmit, csak arra kényszerítette a
+        /// felhasználót, hogy pontatlan nevet írjon be.
+        /// </summary>
+        [Theory]
+        [InlineData("csoport/alcsoport/projekt")]
+        [InlineData("cegnev/csapat/alcsapat/repo")]
+        public void RepoFullName_GitLabSubgroupPath_ShouldNotHaveError(string repoFullName)
+        {
+            var dto = new CreateIntegrationDto { Provider = "GitLab", RepoFullName = repoFullName, WebhookSecret = "mysecret12345678" };
+            var result = _validator.TestValidate(dto);
+            result.ShouldNotHaveValidationErrorFor(x => x.RepoFullName);
+        }
+
+        //A lazítás nem nyithatja meg a nyilvánvalóan hibás alakokat
+        [Theory]
+        [InlineData("owner/")]
+        [InlineData("/repo")]
+        [InlineData("owner//repo")]
+        [InlineData("owner/repo/")]
+        public void RepoFullName_MalformedPath_ShouldHaveError(string repoFullName)
+        {
+            var dto = new CreateIntegrationDto { Provider = "GitLab", RepoFullName = repoFullName, WebhookSecret = "mysecret12345678" };
+            var result = _validator.TestValidate(dto);
+            result.ShouldHaveValidationErrorFor(x => x.RepoFullName);
+        }
+
         //WebhookSecret
 
         [Fact]

@@ -165,21 +165,44 @@
         <div class="guide word-break">
             {#if integration.provider === 'GitHub'}
                 <ol>
-                    <li>Menj a repo <strong>Settings/Webhooks/Add webhook</strong> menüjébe</li>
+                    <li>Menj a repo <strong>Settings &rarr; Webhooks &rarr; Add webhook</strong> menüjébe</li>
                     <li>Payload URL: <code>{integration.webhookUrl}</code></li>
                     <li>Content type: <code>application/json</code></li>
                     <li>Secret: <strong>a létrehozáskor megadott webhook secret</strong></li>
-                    <li>Events: <strong>Pushes</strong> és <strong>Pull requests</strong></li>
+                    <li>
+                        Which events: <strong>Let me select individual events</strong>, majd
+                        <strong>Pushes</strong> és <strong>Pull requests</strong>
+                    </li>
                     <li>Kattints az <strong>Add webhook</strong> gombra</li>
                 </ol>
+                <p class="guide-note">
+                    A GitHub a secretből <strong>aláírást</strong> számol, és azt küldi
+                    (<code>X-Hub-Signature-256</code>) &mdash; maga a titok nem megy át a
+                    hálózaton. Felvétel után azonnal küld egy <code>ping</code> eseményt, amitől
+                    az integráció <strong>Verified</strong> állapotba kerül.
+                </p>
             {:else if integration.provider === 'GitLab'}
                 <ol>
-                    <li>Menj a repo <strong>Settings → Webhooks</strong></li>
+                    <li>Menj a projekt <strong>Settings &rarr; Webhooks &rarr; Add new webhook</strong> menüjébe</li>
                     <li>URL: <code>{integration.webhookUrl}</code></li>
                     <li>Secret token: <strong>a létrehozáskor megadott webhook secret</strong></li>
-                    <li>Triggers: <strong>Push events</strong> és <strong>Merge request events</strong></li>
+                    <li>
+                        Trigger: <strong>Push events</strong> (az ág-szűrőt hagyd üresen)
+                        <strong>és Merge request events</strong> &mdash; a többit ne pipáld be
+                    </li>
+                    <li><strong>SSL verification</strong>: maradjon bekapcsolva</li>
                     <li>Kattints az <strong>Add webhook</strong> gombra</li>
                 </ol>
+                <p class="guide-note">
+                    A GitLab &mdash; a GitHubbal ellentétben &mdash; a <strong>titkot magát</strong>
+                    küldi el (<code>X-Gitlab-Token</code>), nem aláírást. Ezért a secret inkább
+                    jelszó: kezeld annak megfelelően.
+                </p>
+                <p class="guide-note">
+                    A GitLabnak <strong>nincs ping eseménye</strong>: a <strong>Test &rarr; Push
+                    events</strong> gomb valódi push eseményt küld. Az integráció ettől is
+                    <strong>Verified</strong> állapotba kerül.
+                </p>
             {/if}
         </div>
     {/if}
@@ -368,6 +391,16 @@
     }
 
     .guide-toggle:hover { text-decoration: underline; }
+
+    .guide-note {
+        margin: 0.5rem 0 0;
+        padding: 0.5rem 0.6rem;
+        background: var(--bg-hover);
+        border-radius: 6px;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        line-height: 1.45;
+    }
 
     .guide {
         background: var(--bg-hover);

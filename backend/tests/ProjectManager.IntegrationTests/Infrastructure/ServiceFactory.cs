@@ -12,6 +12,7 @@ using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.GitService;
+using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.LabelService;
 using ProjectManager.API.Services.LexorankService;
@@ -149,6 +150,30 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 hub,
                 user,
                 NullLogger<GitService>.Instance);
+
+            return (sut, new ServiceContext(context, hub));
+        }
+
+        /// <summary>
+        /// Az integrációk kezelése. Az EncryptionService valódi: a webhook titok titkosítása
+        /// része a viselkedésnek, nem külső hatás.
+        /// </summary>
+        public static (IntegrationService Sut, ServiceContext Ctx) CreateIntegrationService(
+            AppDbContext context, Guid currentUserId, string currentUserDisplayName = "Teszt Elek")
+        {
+            var (user, hub, activity) = Common(context, currentUserId, currentUserDisplayName);
+
+            var encryption = new EncryptionService(
+                Options.Create(new EncryptionOptions { Key = TestEncryptionKey }));
+
+            var sut = new IntegrationService(
+                context,
+                user,
+                activity,
+                hub,
+                encryption,
+                Options.Create(new ApiOptions { BaseUrl = "https://teszt.local" }),
+                NullLogger<IntegrationService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
         }
