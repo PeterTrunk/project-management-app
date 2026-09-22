@@ -145,12 +145,12 @@ irányítható. Ide soha ne a fejlesztői adatbázis kerüljön — a Respawn mi
 
 ## Frontend tesztek (vitest)
 
-1. `cd frontend && npm test` — **52 teszt**, ~0,4 másodperc
+1. `cd frontend && npm test` — **79 teszt**, ~1 másodperc
 2. `cd frontend && npm run check` — típusellenőrzés, 0 hiba
 
-Nem kell hozzá Docker és böngésző: a tesztelt store-ok tiszta függvények, `node` környezetben
-futnak. jsdom sincs, mert egyikük sem nyúl `window`-hoz, `document`-hez vagy
-`localStorage`-hoz.
+Nem kell hozzá Docker és böngésző: a tesztelt store-ok és segédfüggvények tiszta függvények,
+`node` környezetben futnak. jsdom sincs, mert egyikük sem nyúl `window`-hoz, `document`-hez
+vagy `localStorage`-hoz.
 
 **Mit fed le:** mind a **23 SignalR store handler** (`taskStore` 13, `boardStore` 7,
 `sprintStore` 3). Ezeknél nincs backend háló — ha egy handler rossz sorra ír, a szerver adata
@@ -162,6 +162,14 @@ A tesztek a triviális eseteken túl ezeket rögzítik:
 - a board törlése az oszlopait is viszi
 - az oszlop-átrendezés rendez is, nem csak frissít
 - az aktív sprint származtatott állapot, a `state` mezőből következik
+- egy git hivatkozás **áthelyeződik**, nem csak hozzáadódik: ha megjelenik az egyik task
+  alatt, a többiről el kell tűnnie
+
+**Git hivatkozások keresése** — `gitLinks.test.ts`. A keresés fő használati esete az, hogy egy
+rossz kulccsal beillesztett commitot keresünk, és tudjuk, hova került tévedésből — ezért a
+**task kulcs** ugyanolyan fontos keresési mező, mint a sha vagy az üzenet. A tesztek rögzítik
+azt is, hogy a `#42` alakú PR-szám működik (a felületen így látszik, a felhasználó ezt másolja
+vissza), a magányos `#` viszont **nem** ad találatot — különben minden PR-t visszaadna.
 
 A tesztfájlok a vizsgált kód mellett élnek (`lib/stores/taskStore.test.ts`), így a
 `npm run check` **őket is típusellenőrzi**.

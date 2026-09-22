@@ -2518,6 +2518,31 @@ accessTokenFactory: () => tokenStore.get() ?? token
 ## General Improvements & Fixes
 Kisebb javítások és fejlesztések amelyek nem illeszkednek egy specifikus fejezetbe.
 
+### Ismert szerkezeti adósság: a taskStore mérete
+
+**Nem hiba, csak feljegyzés** - hogy ne kelljen újra felfedezni.
+
+A frontend store-ok felosztása domain-entitásonként koherens (`auth`, `board`, `integration`,
+`project`, `sprint`, `task`, `team`, plusz három segéd és az `activity`). Egy kivétel van:
+
+| Store | Sor | Feladat |
+|---|---|---|
+| `taskStore.ts` | ~340 | taskok, felelősök, címkék, git hivatkozások, csatolmányok - **öt** |
+| `boardStore.ts` | 131 | board + oszlop |
+| a többi | 7-105 | egy-egy |
+
+A szétbontása tisztán refaktor lenne, felhasználói haszon nélkül, és ez az egyetlen store,
+amire teszt van. Ezért **tudatosan nem történt meg**. Ha a projekt folytatódik, a természetes
+törésvonalak: a git hivatkozások és a csatolmányok kezelése.
+
+Ugyanitt egy elvarratlan szál: a git hivatkozások két helyen is elérhetők - a
+`TaskResponse.commitLinks`-ben (task részletnézet) és a projekt szintű végponton (git nézet).
+Ez két **projekció** ugyanarra a táblára, nem két igazságforrás: a git nézet nem gyorsítótáraz,
+minden belépéskor frissen kér. Ez szándékos - a git hivatkozás az egyetlen adat az
+alkalmazásban, aminek KÜLSŐ írója van (a webhook), tehát egy kliensoldali gyorsítótár itt
+hajlamosabb elavulni, mint bárhol máshol.
+
+
 ### A TOTP titok titkosítása nyugalmi állapotban
 
 **Probléma:**
@@ -4873,8 +4898,30 @@ A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két
 Így az eltérés fordításkor derül ki, nem élesben.
 
 ## Git Webhook Enhancements
-PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern (IGitProvider interface, GitHubProvider, GitLabProvider) for easy extension with new providers (Bitbucket, Gitea etc.).
-Webhook endpoint hardening: IP whitelist for known Git provider IP ranges, rate limiting to prevent spam/abuse despite existing HMAC signature validation.
+PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern for easy extension with new providers. Webhook endpoint hardening: rate limiting to prevent spam/abuse despite existing HMAC signature validation.
+
+**Elvégzett munkák**
+- **Payload normalizálás szolgáltatók között** - provider-független rekordok az `IGitPayloadParser`
+  mögött. Ez volt a fejezet legsúlyosabb tétele: a GitLab merge request eseményeket addig
+  GitHub-specifikus kód olvasta, ami kivétellel szállt el
+- **Illesztés a PR leírásából**, nem csak a címből
+- **Minden hivatkozás szinkronban tartása** - újraillesztés szerkesztéskor, állapotfrissítés
+  az összes kapcsolódó soron, és a séma javítása, ami eddig 500-zal buktatta a többtaskos
+  commitokat
+- **Kézi átrendelés** és a védelme: az `IsManuallyLinked` jelző miatt egy későbbi webhook
+  esemény nem írja felül az ember döntését
+- **A kapcsolt elemek megtalálhatósága** - a git nézet Kapcsolt füle kereséssel és
+  áthelyezéssel
+
+**Kihagyott elemek (tudatos döntés)**
+- **IP allowlist a webhook végponton.** A HMAC aláírás már kriptográfiailag hitelesíti a
+  payloadot, és a kérésszám-korlátozás is megvan. Cserébe: a szolgáltatók IP tartományai
+  változnak, tehát a lista karbantartás nélkül némán elromló webhookot jelentene; a Traefik
+  mögött az `X-Forwarded-For` helytelen kezelése önmagában sebezhetőség; self-hosted GitLabnál
+  pedig az egész értelmezhetetlen, mert a cím a repót üzemeltetőtől függ. Rossz csereüzlet
+- **Bitbucket és Gitea támogatás.** A provider absztrakció készen áll rá, de nincs rá igény
+- **Aszinkron, sorbaállított feldolgozás.** A webhook ma a kérésben fut; egy nagy push lassú
+  lehet, de a jelenlegi terheléssel ez nem probléma
 
 ### Webhook payloadok normalizálása szolgáltatók között
 
@@ -5046,10 +5093,50 @@ Két javítás kellett hozzá:
 - `taskStore.test.ts` - az áthelyezés szemantikája, beleértve azt, hogy az érintetlen taskok objektuma nem íródik újra
 
 
+### A kapcsolt commitok és pull requestek megtalálhatósága
+
+**Probléma:**
+Az átrendelés elkészült, de a *megtalálás* nem. Egy rossz task kulccsal **hibás taskhoz**
+kapcsolt commit gyakorlatilag elérhetetlen volt: a git nézet kizárólag a hozzárendeletlen
+listákat mutatta, a task részletnézete pedig csak akkor segít, ha már tudod, melyik taskra
+ment. Vagyis épp az a forgatókönyv maradt lefedetlen, amiért az átrendelés készült - nem
+elhagytuk a task kulcsot, hanem rosszat adtunk meg.
+
+**Megoldás:**
+
+*Backend* - a két `unmatched-*` végpont helyére `GET .../git/commits` és `GET .../git/prs`
+lépett, ami a projekt ÖSSZES hivatkozását adja, mindegyiken a task adatával (`TaskId`,
+`TaskKey`, `TaskTitle`) és a kézi jelölővel. A task mezők nullozhatók: a hozzárendeletlen
+hivatkozás pontosan az, ahol nincs task. A „hozzárendeletlen" fogalom így kliensoldali
+szűréssé vált - ugyanaz a feltétel, ami az adatbázisban is. A végpontok száma nem nőtt.
+
+*Felület* - a git nézet két fülre bomlott (Hozzárendeletlen és Kapcsolt). A Kapcsolt fülön
+keresés sha, üzenet, szerző, PR-szám és **task kulcs** szerint, minden kártyán a task kulcsa
+és egy áthelyezés gomb, ami a meglévő `TaskPickerModal`-t nyitja. Új komponens nem kellett.
+
+**Egy zsákutca, ami tanulságos.** Az első tervváltozat a `taskStore`-ból akarta építeni a
+listát - hiszen a hivatkozások már megérkeznek a `TaskResponse`-ban. Ez két okból hibás volt:
+
+1. A store csak a backlog és a nyitott sprintek taskjait tartalmazza (`TaskService`,
+   `scope == "initial"`), tehát egy **lezárt sprintben lévő task hivatkozása némán kimaradt
+   volna** - pedig épp a régebbi munkákhoz tartozik a legtöbb commit.
+2. A `BoardView` **lecseréli** a store-t egyetlen board nyitott taskjaira, tehát a lista
+   tartalma attól függött volna, honnan navigált oda a felhasználó.
+
+A végpont mindkettőt a gyökerénél oldja meg: a lekérdezés nem tud sprintről, és nem függ a
+kliens állapotától. Erre külön integrációs teszt is van.
+
+**Ami tudatosan kimaradt:** a leválasztás (`TaskId` → `null`). A meglévő `Assign*` végpontok
+kötelező `taskId`-t várnak, és a következő webhook esemény úgyis visszakapcsolná - ehhez egy
+külön „elutasítva" fogalom kellene.
+
+
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
-**Megjegyzés:** a "Manual commit/PR reassignment between tasks" tétel a Git Webhook fejezetben elkészült - lásd *Összekapcsolt commit vagy pull request áthelyezése*. Az áthelyezés a task részletnézetéből érhető el; ami ebből a fejezetből hátravan, az a sprint szerinti csoportosítás és a sprint szűrő.
+**Megjegyzés:** a "Manual commit/PR reassignment between tasks" tétel a Git Webhook fejezetben **elkészült** - lásd *Összekapcsolt commit vagy pull request áthelyezése* és *A kapcsolt commitok és pull requestek megtalálhatósága*. Az áthelyezés a task részletnézetéből ÉS a git nézet Kapcsolt füléből is elérhető, kereséssel együtt.
+
+Ami ebből a fejezetből hátravan: a **sprint szerinti csoportosítás** és a **sprint szűrő**. A "no new backend endpoints required" feltevés menet közben megdőlt: a kapcsolt elemek listájához végpont kellett, mert a `TaskResponse.commitLinks` csak a betöltött taskokat fedi - a lezárt sprintekét nem.
 
 ## Git Intelligence – Branches & Insights
 Extended Git integration providing branch tracking, developer activity insights, and sprint-level git analytics. All data derived exclusively from incoming webhook payloads - no access token required.
