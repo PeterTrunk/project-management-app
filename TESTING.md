@@ -67,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **83 teszt** (82 aktív, 1 szándékosan kihagyott), futásidő ~11 másodperc.
+Összesen **98 teszt** (97 aktív, 1 szándékosan kihagyott), futásidő ~22 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő
@@ -87,6 +87,20 @@ A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden tes
 
 Ezek adatbázist igényelnek, mert a mért viselkedés maga a **több sor** kezelése — egy tiszta
 függvény tesztje ezt nem tudná megfogni.
+
+**Hitelesítés** — `TotpSecretEncryptionTests`, `RefreshTokenRotationTests`:
+- a TOTP titok titkosítva kerül az adatbázisba, és a bekapcsolás, a bejelentkezés és a
+  fióktörlés is működik vele
+- a titkosítás bevezetése előtt mentett, **nyers** titokkal is lehet bejelentkezni
+- a refresh token rotációja új tokent ad, a régit visszavonja
+- egy már elhasznált token visszajátszása **minden** munkamenetet visszavon
+- egy kijelentkezett token késői bemutatása **nem** vált ki riasztást, és a többi eszközt
+  nem érinti
+- a bejelentkezés és a megerősítő levél újraküldése a szűkebb és a tágabb rate limit kulcsot
+  is megkérdezi
+
+A külső hatások (levélküldés, Redis) kézzel írt duplát kapnak; a jelszóhash, a JWT
+előállítás, a titkosítás és a token rotáció valódi — ezek adják a teszt értelmét.
 
 **Kézi átrendelés** — `ManualLinkTests`:
 - a kézi hozzárendelés megjelöli a sort, az illesztőtől származó nem

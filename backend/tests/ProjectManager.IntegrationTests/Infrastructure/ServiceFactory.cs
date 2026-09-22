@@ -1,11 +1,16 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.CurrentUserService;
+using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.LabelService;
@@ -35,6 +40,20 @@ namespace ProjectManager.IntegrationTests.Infrastructure
     /// Egyedül az IHubContext kap duplát (RecordingHubContext), mert valódi implementációhoz
     /// futó SignalR szerver kellene.
     /// </summary>
+    /// <summary>
+    /// Amit az AuthService a teszt alatt kap. Külön a ServiceContext-től, mert itt nem
+    /// SignalR hívásokat vizsgálunk, hanem a kiküldött leveleket és a rate limit kulcsokat.
+    /// </summary>
+    /// <param name="Db">Ugyanaz a context, amit a szolgáltatás használ.</param>
+    /// <param name="RateLimit">A megkérdezett kulcsok, és a korlátozás kikapcsolója.</param>
+    /// <param name="Email">A kiküldött levelek, a bennük szereplő tokenekkel.</param>
+    /// <param name="IpAddress">A hívó IP-je, ahogy a rate limit kulcsokban szerepel.</param>
+    public sealed record AuthContext(
+        AppDbContext Db,
+        FakeRateLimitService RateLimit,
+        RecordingEmailService Email,
+        string IpAddress);
+
     public static class ServiceFactory
     {
         private static (FakeCurrentUserService User, RecordingHubContext Hub, ActivityService Activity) Common(
@@ -59,6 +78,60 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 NullLogger<TaskService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
+        }
+
+        //Determinisztikus kulcs a titkosításhoz: 32 bájt, 0..31 értékekkel.
+        //Ugyanaz a minta, mint az EncryptionServiceTests-ben.
+        private static readonly string TestEncryptionKey =
+            Convert.ToBase64String(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+
+        //A hívó IP-je: a rate limit kulcsok ezt tartalmazzák, tehát rögzítettnek kell lennie
+        public const string TestIpAddress = "203.0.113.5";
+
+        /// <summary>
+        /// Az AuthService valódi adatbázissal.
+        ///
+        /// Dupla csak ott van, ahol külső hatás lenne: a levélküldésnél és a Redisre épülő
+        /// rate limitnél. A jelszóhash, a JWT előállítás, a token rotáció és a TOTP
+        /// ellenőrzés mind valódi - ezek adják a teszt értelmét.
+        ///
+        /// Az IHttpContextAccessor azért kell, mert a GetIpAddress a kapcsolat IP-jéből
+        /// építi a rate limit kulcsokat; kézi HttpContext nélkül minden kulcs "unknown" lenne.
+        /// </summary>
+        public static (AuthService Sut, AuthContext Ctx) CreateAuthService(
+            AppDbContext context, Guid currentUserId = default)
+        {
+            var rateLimit = new FakeRateLimitService();
+            var email = new RecordingEmailService();
+
+            var httpContext = new DefaultHttpContext();
+            httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(TestIpAddress);
+            var accessor = new HttpContextAccessor { HttpContext = httpContext };
+
+            var jwtOptions = Options.Create(new JwtOptions
+            {
+                //Legalább 32 bájt: a Program.cs élesben ezt ki is kényszeríti
+                Secret = "teszt-jwt-titok-legalabb-harminckettő-bájt-hosszú-legyen!",
+                Issuer = "ProjectManager.Tests",
+                Audience = "ProjectManager.Tests",
+                ExpiryMinutes = 15,
+                RefreshTokenLifetimeMinutes = 10080
+            });
+
+            var encryption = new EncryptionService(
+                Options.Create(new EncryptionOptions { Key = TestEncryptionKey }));
+
+            var sut = new AuthService(
+                context,
+                new FakeCurrentUserService(currentUserId),
+                email,
+                rateLimit,
+                encryption,
+                NullLogger<AuthService>.Instance,
+                jwtOptions,
+                accessor);
+
+            return (sut, new AuthContext(context, rateLimit, email, TestIpAddress));
         }
 
         /// <summary>

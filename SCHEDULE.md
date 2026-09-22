@@ -2516,8 +2516,113 @@ accessTokenFactory: () => tokenStore.get() ?? token
 ---
 
 ## General Improvements & Fixes
-Kisebb javítások és fejlesztések amelyek nem illeszkednek 
-egy specifikus fejezetbe.
+Kisebb javítások és fejlesztések amelyek nem illeszkednek egy specifikus fejezetbe.
+
+### A TOTP titok titkosítása nyugalmi állapotban
+
+**Probléma:**
+A `User.TotpSecret` nyers base32 alakban állt az adatbázisban: nem volt rá value converter, és az `AuthService` sehol nem hívta az `EncryptionService`-t. Eközben az adatkezelési tájékoztató - egy élő, GDPR 13. cikkes dokumentum - három helyen állította, hogy a kétfaktoros hitelesítés kulcsa titkosítva van, a 32. cikk szerinti intézkedések felsorolásában is.
+
+Miért épp ez a titok számít: az `ENCRYPTION_KEY` környezeti változóban él, nem az adatbázisban, tehát egy adatbázis-oldali szivárgás (kiszivárgott mentés, ellopott dump, csak olvasó SQL injection) nem adja meg. A TOTP titok pedig az egyetlen olyan érték a táblában, ami ÁLLANDÓ - sosem jár le, nincs rotáció - és a JELSZÓTÓL FÜGGETLEN: pont az a dolga, hogy túlélje a jelszó kompromittálódását. Plaintextben tárolva egy szivárgás a 2FA-t nullára csökkenti.
+
+**Megoldás:**
+A `SetupTotpAsync` titkosítva menti a titkot. Az olvasás mind a négy helyen egy privát
+`ReadTotpSecret` helperen át megy, ami MEGENGEDŐ: `IsEncrypted(x) ? Decrypt(x) : x`.
+
+Ez nem óvatoskodás. A titkosítás bevezetése előtt mentett értékek prefix nélkül, nyersen
+álltak az adatbázisban, és azokat nem szabad megpróbálni visszafejteni: a base32 szöveg
+átmegy a base64 dekódoláson, a `Decrypt` szeletelése viszont kivétellel szállna el - vagyis a
+meglévő 2FA-felhasználók nem tudnának bejelentkezni.
+
+A régi sorokat egy induláskor futó `EncryptExistingTotpSecretsAsync` számolja fel, a meglévő
+`MigrateWebhookSecretsAsync` mintájára. Idempotens: a már jelölt (`enc:v1:`) sorokhoz hozzá sem
+nyúl, így minden indulásnál lefuthat, és egy régi mentésből visszaállított sort is rendbe tesz.
+
+A tájékoztató 32. cikkes mondata ezzel pontossá vált.
+
+### Refresh token visszajátszás felismerése
+
+**Probléma:**
+A feltételes `ExecuteUpdateAsync` miatt egy már felhasznált token `rowsAffected == 0`-t adott,
+és a kód ezt naplózta is - a REAKCIÓ viszont hiányzott. A forgatókönyv: a támadó megszerez egy
+refresh tokent és rotál vele. A jogos felhasználó következő megújítása elbukik, de csak annyit
+vesz észre, hogy ki kellett jelentkeznie - a támadó tokenje viszont érvényben marad.
+
+**Megoldás:**
+`rowsAffected == 0` esetén a kód megkeresi a sort. Ha létezik és visszavont, akkor
+visszajátszásról van szó, és a felhasználó ÖSSZES tokenje visszavonódik. Ha nem létezik, az
+találgatás - marad a korábbi viselkedés.
+
+A nem nyilvánvaló rész: a `LogoutAsync` eddig szintén `IsRevoked = true`-t állított, tehát egy
+kijelentkezés utáni ártatlan versenyhelyzet - a háttérfül még egyszer megpróbálja - riasztást
+váltott volna ki, és a felhasználót minden eszközről kilépteti. Ezért a kijelentkezés mostantól
+TÖRLI a sort. Így az `IsRevoked == true` egyértelműen azt jelenti, hogy rotáció miatt vonódott
+vissza. Séma-változtatás nem kellett.
+
+Ugyanitt törlésre került a halott `IsTotpRequiredAsync`: nem tartozott hozzá végpont, és a
+frontend sem hívta sehol. Kiaknázható nem volt, de egy későbbi "bekötöm, hiszen ott van"
+reflex valódi 2FA-állapot szivárgást csinált volna belőle.
+
+### IP-szintű rate limit a bejelentkezésen és a megerősítő levél újraküldésén
+
+**Probléma:**
+A `login:{ip}:{email}` és a `resend_verification:{ip}:{email}` kulcs az e-mail címet is
+tartalmazza, tehát minden új címhez ÚJ vödör tartozik - egyetlen gépről korlátlanul végig
+lehetett próbálni egy címlistát. A jelszó-visszaállításnál ez már orvosolva volt egy tágabb
+`forgot_password_ip:{ip}` korláttal, a másik két végponton viszont nem.
+
+**Megoldás:**
+`login_ip:{ip}` (50 kísérlet / 15 perc) és `resend_verification_ip:{ip}` (15 / óra) társkorlát.
+A szűkebb kulcs marad: önmagában az IP-alapú korlát egy megosztott kijáratról kizárná a
+jóhiszemű felhasználókat. A bejelentkezés küszöbe azért magasabb a jelszó-visszaállításénál,
+mert gyakoribb művelet.
+
+### Az AuthService tesztelése valódi adatbázissal
+
+**Probléma:**
+Az `AuthService` a projekt legbiztonság-érzékenyebb szolgáltatása, és NULLA tesztje volt. A
+fenti három javítás egyike sem lett volna ellenőrizhető.
+
+**Megoldás:**
+Két kézzel írt dupla a meglévő `FakeCurrentUserService` / `RecordingHubContext` mintájára, mock
+könyvtár nélkül:
+- `FakeRateLimitService` - rögzíti a megkérdezett kulcsokat, és kérésre bármelyiket
+  korlátozottnak jelöli. A tesztek nem azt mérik, hogy a Redis jól számol, hanem hogy a
+  szolgáltatás a HELYES kulcsokra kérdez rá
+- `RecordingEmailService` - listába gyűjti a kiküldött leveleket. A tesztek a levélbe került
+  tokent olvassák, nem az adatbázisból másolják: a kettő eltérhet, és ezt csak így lehet mérni
+
+Plusz `ServiceFactory.CreateAuthService`: valódi `AppDbContext`, valódi BCrypt, valódi JWT
+előállítás és valódi titkosítás. Dupla csak ott van, ahol külső hatás lenne. Az
+`IHttpContextAccessor` kézi `DefaultHttpContext`-et kap rögzített IP-vel, különben minden rate
+limit kulcs "unknown" lenne.
+
+15 új teszt: `TotpSecretEncryptionTests` (5) és `RefreshTokenRotationTests` (10).
+
+### A használaton kívüli git access token eltávolítása
+
+**Probléma:**
+Az `Integration.AccessToken` oszlop egy hitelesítő adatot tárolt, amit **semmi nem olvasott**.
+A teljes lábnyoma a modell, a `CreateIntegrationDto`, egy `HasAccessToken` bool a válaszban,
+és két leképezés az `IntegrationService`-ben. A git integráció kizárólag a beérkező webhook
+payloadból dolgozik, tehát a token sosem került felhasználásra; a `HasAccessToken` a
+frontenden sem volt sehol megjelenítve, csak a típusban és egy store alapértékben élt.
+
+Ráadásul plaintextként tárolódott (`IntegrationService.cs:66`), miközben mellette a
+`WebhookSecret` AES-GCM-mel titkosítva ment be - az adatkezelési tájékoztató pedig mindkettőt
+titkosítottnak nevezte.
+
+**Megoldás:**
+Az oszlop és a hozzá tartozó DTO mezők törlése, `RemoveUnusedIntegrationAccessToken`
+migrációval. A felületről eltűnt az "Access Token (opcionális)" űrlapmező is.
+
+Egy sosem használt hitelesítő adat **törlése jobb, mint a titkosítása**: így a kockázat nem
+csökken, hanem megszűnik. Ez a döntés abban tér el az `AuthorEmail` kezelésétől, hogy ott az
+oszlopnak van tervezett célja (a commit-szerző összekapcsolása), csak a megjelenítése szűnt
+meg - itt viszont nincs mire várni.
+
+A tájékoztató git integrációs sorából ezzel kikerült a "hozzáférési token" említése.
+
 
 ### Validátor átnézés és javítás
 
