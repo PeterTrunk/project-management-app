@@ -207,11 +207,12 @@ namespace ProjectManager.API.Services.IntegrationService
             }
         }
 
+        // Az integráció a webhook tokenje alapján, a letiltottat is beleértve.
         public async Task<Integration?> GetByWebhookTokenAsync(string webhookToken)
         {
             return await _context.Integrations
                 .Include(i => i.Project)
-                .FirstOrDefaultAsync(i => i.WebhookToken == webhookToken && i.IsEnabled);
+                .FirstOrDefaultAsync(i => i.WebhookToken == webhookToken);
         }
 
         public async Task<List<IntegrationResponseDto>> GetIntegrationsAsync(Guid projectId)

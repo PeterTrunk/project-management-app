@@ -67,7 +67,7 @@ teszt, ami nem néz oda.
 A tesztek elválasztását a **Respawn** adja: `TRUNCATE ... CASCADE` minden teszt **előtt**
 (nem utána — így egy elszállt teszt állapota megvizsgálható marad).
 
-Összesen **107 teszt** (106 aktív, 1 szándékosan kihagyott), futásidő ~24 másodperc.
+Összesen **115 teszt** (114 aktív, 1 szándékosan kihagyott), futásidő ~20 másodperc.
 
 **Füstteszt** — az infrastruktúra maga:
 - a migrációk lefutottak, nincs függőben lévő

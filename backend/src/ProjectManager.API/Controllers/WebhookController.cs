@@ -67,10 +67,23 @@ namespace ProjectManager.API.Controllers
             var payload = await reader.ReadToEndAsync();
             Request.Body.Position = 0;
 
-            //Token alapján integráció keresése
+            //Token alapján integráció keresése.
+            //Maga a token nem kerül a naplóba: hitelesítő adat.
             var integration = await _integrationService.GetByWebhookTokenAsync(webhookToken);
+
             if (integration == null)
+            {
+                _logger.LogWarning("Webhook ismeretlen tokennel - nincs ilyen integráció");
                 return Unauthorized("Érvénytelen webhook token!");
+            }
+
+            if (!integration.IsEnabled)
+            {
+                _logger.LogWarning(
+                    "Webhook letiltott integrációhoz | IntegrationId: {IntegrationId} | ProjectId: {ProjectId}",
+                    integration.Id, integration.ProjectId);
+                return Unauthorized("Érvénytelen webhook token!");
+            }
 
             //Provider alapján validáció
             if (integration.Provider == GitProviders.GitHub)
