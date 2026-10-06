@@ -397,7 +397,7 @@ A teljes infrastruktúra-döntésekről, gotchákról és implementációs sorre
 
 Az alkalmazás **nincs a Dokployhoz kötve**. Az alkalmazáskódban nincs platformspecifikus rész: minden konfiguráció környezeti változóból érkezik, a komponensek szabványos Docker konténerek, a `replicas: 2` is sima Compose.
 
-A platformhoz kötődő rész a **fordított proxy routing deklarációja**, Traefik címkék három szolgáltatás `labels:` blokkjában. Másik környezetben ennek a megfelelőjét kell megírni:
+A platformhoz kötődő rész a **Reverse proxy routing deklarációja**, Traefik címkék három szolgáltatás `labels:` blokkjában. Másik környezetben ennek a megfelelőjét kell megírni:
 
 | Cél | Mit kell átírni |
 |---|---|
