@@ -34,22 +34,31 @@ services:
     networks:
       - pma-internal
 
-  minio:
-    image: minio/minio
+  seaweedfs:
+    # Konkret verzio, ne latest - ez a MinIO-s tanulsag. A 4.46 a legujabb olyan stabil
+    # kiadas, amely megfelel a 30 napos fuggoseg-szabalynak (2026-09-08).
+    image: chrislusf/seaweedfs:4.46
     container_name: pm-file-storage
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_URL}
-      MINIO_SERVER_URL: ${MINIO_PUBLIC_URL}
-    ports:
-      - "127.0.0.1:9001:9001"
+      # Ezekbol lesz az S3 hozzaferes. HA HIANYOZNAK, az S3 API HITELESITES NELKUL fut -
+      # leellenorizve: kulcsokkal minden hitelesites nelkuli keres 403-at kap.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+    # A mini mod egyetlen folyamatban inditja a mastert, a volume servert, a filert es az
+    # S3 gateway-t. Az -s3.allowedOrigins megadasa KOTELEZO: az alapertelmezes csillag,
+    # vagyis minden origin szamara engedne a bongeszobol erkezo feltoltest.
+    command: >
+      mini -dir=/data -s3
+      -s3.autoCreateBucket
+      -s3.allowedOrigins=${FRONTEND_URL}
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
+      - seaweed_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # Az S3 gateway sajat allapot-vegpontja a 8333-on (leellenorizve: 200).
+      # Szandekosan NEM a master vagy a filer healthz-je: az S3 API-t akarjuk ellenorizni,
+      # mert a pm-api erre var a depends_on-ban.
+      test: ["CMD", "curl", "-f", "http://localhost:8333/status"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,23 +67,33 @@ services:
       - dokploy-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.minio.rule=Host(`${MINIO_DOMAIN}`)"
-      - "traefik.http.routers.minio.entrypoints=websecure"
-      - "traefik.http.routers.minio.tls=true"
-      - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
-      - "traefik.http.services.minio.loadbalancer.server.port=9000"
+      - "traefik.http.routers.storage.rule=Host(`${S3_DOMAIN}`)"
+      - "traefik.http.routers.storage.entrypoints=websecure"
+      - "traefik.http.routers.storage.tls=true"
+      - "traefik.http.routers.storage.tls.certresolver=letsencrypt"
+      - "traefik.http.services.storage.loadbalancer.server.port=8333"
 
-  seq:
-    image: datalust/seq
-    container_name: pm-seq
+  openobserve:
+    # Konkret verzio, ne latest - egy image-frissites ne hozzon nema viselkedesvaltozast.
+    image: openobserve/openobserve:v1.0.0
+    container_name: pm-openobserve
     restart: unless-stopped
     environment:
-      ACCEPT_EULA: Y
-      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_ADMIN_PASSWORD}
+      ZO_ROOT_USER_EMAIL: ${OO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OO_ROOT_USER_PASSWORD}
+      ZO_DATA_DIR: /data
+      # A megorzesi ido NEM szabadon valaszthato. Ket oldalrol kotott:
+      #   - az adatkezelesi tajekoztato 30 napot igér a technikai naplokra (jogi vallalas),
+      #   - az OPERATIONS.md legalabb ennyit ker, hogy a mentesek 7 napja fole erjen.
+      # Az OpenObserve alapertelmezese 3650 nap lenne, tehat ennek a kihagyasa csendben
+      # megsertene a sajat tajekoztatonkat. Lasd OPERATIONS.md.
+      ZO_COMPACT_DATA_RETENTION_DAYS: 30
     ports:
-      - "127.0.0.1:5341:80"
+      # Csak loopback, ahogy a Seq is volt: a naplo erzekeny adatot tartalmazhat.
+      # Tobb felhasznalos eleressel kapcsolatban lasd OPERATIONS.md.
+      - "127.0.0.1:5080:5080"
     volumes:
-      - seq_data:/data
+      - openobserve_data:/data
     networks:
       - pma-internal
 
@@ -89,7 +108,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      seaweedfs:
         condition: service_healthy
       redis:
         condition: service_started
@@ -106,11 +125,11 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       DATABASE_URL: ${DATABASE_URL}
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_USE_SSL: ${MINIO_USE_SSL}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+      S3_ENDPOINT: seaweedfs:8333
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_USE_SSL: ${S3_USE_SSL}
+      S3_BUCKET: ${S3_BUCKET}
       API_BASE_URL: ${API_BASE_URL}
       FRONTEND_URL: ${FRONTEND_URL}
       REDIS_CONNECTION: ${REDIS_CONNECTION}
@@ -119,12 +138,14 @@ services:
       EMAIL_FROM: ${EMAIL_FROM}
       JWT_REFRESH_TOKEN_LIFETIME: ${JWT_REFRESH_TOKEN_LIFETIME}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
       ORPHAN_CLEANUP_INTERVAL_HOURS: ${ORPHAN_CLEANUP_INTERVAL_HOURS}
       TOKEN_CLEANUP_INTERVAL_HOURS: ${TOKEN_CLEANUP_INTERVAL_HOURS}
       REFRESH_TOKEN_RETENTION_DAYS: ${REFRESH_TOKEN_RETENTION_DAYS}
       CONFIRMED_UPLOAD_LOG_RETENTION_DAYS: ${CONFIRMED_UPLOAD_LOG_RETENTION_DAYS}
-      SEQ_URL: ${SEQ_URL}
+      OTLP_LOGS_ENDPOINT: ${OTLP_LOGS_ENDPOINT}
+      OO_INGEST_USER: ${OO_INGEST_USER}
+      OO_INGEST_TOKEN: ${OO_INGEST_TOKEN}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
     networks:
       - dokploy-network
@@ -202,6 +223,6 @@ networks:
 
 volumes:
   postgres_data:
-  minio_data:
+  seaweed_data:
   redis_data:
-  seq_data:
+  openobserve_data:

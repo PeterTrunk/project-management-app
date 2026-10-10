@@ -189,7 +189,7 @@ namespace ProjectManager.API.Extensions
         {
             //Singleton service-ek
             services.AddSingleton<ILexorankService, LexorankService>();
-            services.AddSingleton<IFileStorageService, MinIOFileStorageService>();
+            services.AddSingleton<IFileStorageService, S3FileStorageService>();
             services.AddSingleton<IEncryptionService, EncryptionService>();
             //A payload parserek függőség nélküli, állapotmentes fordítók, ezért singletonok.
             //A WebhookController IEnumerable<IGitPayloadParser>-t kap,
@@ -218,7 +218,7 @@ namespace ProjectManager.API.Extensions
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<ProjectNotArchivedFilter>();
 
-            //OrphanCleanupJob - MiniO filestorage Orphan file cleaning job
+            //OrphanCleanupJob - az objektumtárolóban Orphan file cleaning job
             services.AddHostedService<OrphanCleanupJob>();
 
             //TokenCleanupJob - lejárt hitelesítési tokenek és elévült feltöltés-naplósorok

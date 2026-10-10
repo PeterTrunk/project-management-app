@@ -496,9 +496,9 @@ namespace ProjectManager.API.Services.Auth
             await transaction.CommitAsync();
             
             _logger.LogInformation(
-                "UserErasure | UserId: {UserId} | ErasedAt: {ErasedAt} | Törölt refresh tokenek: {RefreshCount} | "
+                "{EventType} | UserId: {UserId} | ErasedAt: {ErasedAt} | Törölt refresh tokenek: {RefreshCount} | "
                 + "Törölt jelszó-tokenek: {ResetCount} | Átírt activity sorok: {ActivityCount}",
-                userId, user.DeletedAt, refreshDeleted, resetDeleted, activitiesUpdated);
+                "UserErasure", userId, user.DeletedAt, refreshDeleted, resetDeleted, activitiesUpdated);
         }
 
         /// <summary>

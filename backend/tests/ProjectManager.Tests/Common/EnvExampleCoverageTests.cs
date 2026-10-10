@@ -40,6 +40,16 @@ namespace ProjectManager.Tests.Common
                 .ToHashSet();
 
         /// <summary>
+        /// Amit NEM a telepítő állít be, hanem a futtatókörnyezet ad.
+        ///
+        /// Az <c>ASPNETCORE_ENVIRONMENT</c>-et fejlesztéskor a <c>launchSettings.json</c>, élesben
+        /// pedig a <c>docker-compose.prod.yml</c> írja be közvetlen értékként - nem <c>${...}</c>
+        /// behelyettesítéssel. A `.env`-be felvenni félrevezető lenne: azt sugallná, hogy ott
+        /// kell állítani, pedig az ottani érték nem jutna el az alkalmazásig.
+        /// </summary>
+        private static readonly HashSet<string> HostProvidedKeys = ["ASPNETCORE_ENVIRONMENT"];
+
+        /// <summary>
         /// Amit a rendszer tényleg igényel, három forrásból:
         /// a compose behelyettesítései, a backend olvasásai és a frontend típusdeklarációja.
         /// </summary>
@@ -67,6 +77,8 @@ namespace ProjectManager.Tests.Common
                     ReadRepoFile("frontend", "src", "vite-env.d.ts"),
                     @"readonly (VITE_[A-Z0-9_]+)")
                     .Select(m => m.Groups[1].Value));
+
+            keys.ExceptWith(HostProvidedKeys);
 
             return keys;
         }

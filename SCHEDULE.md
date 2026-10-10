@@ -4897,6 +4897,73 @@ Ezért új `LegalVersionTests`: a teszt beolvassa a frontend `legal.ts`-ét (a f
 A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két teszt bukik el**.
 Így az eltérés fordításkor derül ki, nem élesben.
 
+### Az objektumtároló leváltása: MinIO -> SeaweedFS
+
+**Probléma:** a MinIO közösségi kiadása a fejlesztés alatt fokozatosan megszűnt. A GitHub repó
+**2026-04-25 óta archivált**, a README kimondja, hogy `THIS REPOSITORY IS NO LONGER MAINTAINED`,
+és a `latest` image egy befagyott, biztonsági javítást nem kapó verzió. Ez súlyosabb, mint
+elsőre látszik: a tároló a presigned URL-es feltöltés miatt **publikusan elérhető** Traefiken,
+tehát egy javítás nélküli szerver állt az internet felé.
+
+A választás a tervezéskor (2025. szeptember) megalapozott volt - a MinIO volt a legelterjedtebb
+self-hosted, ingyenes S3-kompatibilis tároló. A tanulság nem a választásban van, hanem abban,
+hogy **a megvalósításkor (2026. április) a függőség állapotát nem ellenőriztük újra**, pedig a
+README akkor már jelezte a helyzetet. Egy külső függőség állapotát nemcsak a kiválasztáskor,
+hanem a tényleges integráció előtt is meg kell nézni.
+
+**Megoldás:** SeaweedFS (Apache 2.0, aktívan fejlesztett, közösségi projekt - tehát épp az a
+kockázat szűnik meg, ami a MinIO-t elvitte), `chrislusf/seaweedfs:4.46` pinnelt verzióval.
+
+Az architektúra erre fel volt készítve, és ez a csere mérlege a legjobb bizonyíték rá: az S3
+SDK-t **két fájl** használta, a DI-regisztráció **egy sor**, és a 12 szolgáltatás egyike sem
+tudott a tárolóról. A `Minio` NuGet csomag maradhatott, mert szabványos S3-at beszél.
+
+A cserével együtt a konfiguráció **szolgáltató-függetlenre** került: a hét `MINIO_*` változó
+`S3_*` lett, a `MinioOptions` `ObjectStorageOptions`, a `MinIOFileStorageService`
+`S3FileStorageService`, a frontend `uploadToMinIOAsync` pedig `uploadToStorageAsync`. Így a
+következő cserénél ezekhez már nem kell hozzányúlni.
+
+**Amit a csere közben mérésből derült ki - és nem feltételezésből:**
+
+- A SeaweedFS S3 gateway-ének **saját állapot-végpontja van a 8333-on** (`/status`, 200-at ad).
+  Ez került a healthcheckbe, szándékosan nem a master vagy a filer `healthz`-je: a `pm-api`
+  `depends_on`-ja az S3 API-ra vár, nem a klaszterre.
+- Az `-s3.allowedOrigins` **alapértelmezése csillag**, nem „nincs CORS". A beállítás tehát nem
+  azért kell, mert különben nem működne, hanem mert különben **minden origin** feltölthetne.
+- Kulcsok nélkül az S3 API **hitelesítés nélkül** fut. Kulcsokkal minden hitelesítés nélküli
+  kérés 403-at kap - leellenőrizve.
+
+**A legfontosabb üzemeltetési következmény:** a mentés **egy volume nevére** van konfigurálva a
+Dokploy felületén, nem a repóban. A volume `minio_data`-ról `seaweed_data`-ra változott, tehát a
+backup jobot át kell állítani - különben a napi mentés továbbra is lefut és zöld marad, de a
+felhasználói csatolmányok kimaradnak belőle. Lásd `OPERATIONS.md`, 2. fejezet.
+
+### A presigned feltöltés aláírt Content-Type-ja nem működött
+
+**Probléma:** a tárolócsere ellenőrzése közben kiderült, hogy a presigned PUT URL **nem kötötte
+aláírásba a Content-Type-ot** - pedig a kód kommentje, a tervdokumentum és az indoklás is ezt
+állította, „valódi biztonsági javításként".
+
+A `Minio` SDK 7.0.0 `PresignedPutObjectArgs.WithHeaders(...)` hívása nem a kanonikus fejlécek
+közé teszi az értéket: a kiadott URL-ben `X-Amz-SignedHeaders=host` áll, a Content-Type pedig
+egy **query paraméterként** szivárog ki, `Minio.DataModel.Args.PresignedPutObjectArgs` értékkel
+- vagyis a .NET típus nevével.
+
+Méréssel igazolva, **MinIO és SeaweedFS ellen is**, a projekt pontos SDK-verziójával: helyes,
+eltérő és hiányzó Content-Type mellett is **mindhárom feltöltés 200-at ad**. Tehát ez nem a
+SeaweedFS-szel jött be, hanem mindig így volt.
+
+**Megoldás:** a fájltípust valójában az `AttachmentService` confirm lépése kényszeríti ki: ott a
+`StatObject`-ből olvasott tényleges Content-Type össze van vetve a presigned kéréskor
+naplózottal, és eltérés esetén nem jön létre `Attachment` rekord. **Kihasználható lyuk tehát
+nincs** - a hibás típusú fájl bekerül a tárolóba, de rekord nélkül marad, és az
+`OrphanCleanupJob` elviszi.
+
+Ami hibás volt, az az **állítás**: a védelem nem két rétegű, hanem egy. Mindkét helyen a
+kommentek javítva, a valódi működés és a mérés eredménye leírva. A presigned úton az aláírt
+fejléc kikényszerítése (presigned POST policy `content-length-range` és `Content-Type`
+feltétellel) külön munka, és nem ebbe a cserébe tartozik.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern for easy extension with new providers. Webhook endpoint hardening: rate limiting to prevent spam/abuse despite existing HMAC signature validation.
 

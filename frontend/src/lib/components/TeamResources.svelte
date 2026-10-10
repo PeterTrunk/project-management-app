@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToMinIOAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
+    import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToStorageAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
     import { getTasksAsync, type TaskResponse } from '../api/taskApi';
     import type { AttachmentResponse } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
@@ -80,8 +80,8 @@
                     }
                 );
 
-                // 2. Direkt feltöltés MinIO-ra
-                await uploadToMinIOAsync(presignedUrl, file, (progress) => {
+                // 2. Direkt feltöltés az objektumtárolóba
+                await uploadToStorageAsync(presignedUrl, file, (progress) => {
                     uploadProgress = progress;
                 });
 

@@ -14,7 +14,7 @@ A tájékoztató és a feltételek forrása: `frontend/src/routes/PrivacyPolicy.
 
 | Kérdés | Érték | Hol ígértük meg |
 |---|---|---|
-| Mit mentünk | A teljes PostgreSQL adatbázis **és** a MinIO volume (felhasználói csatolmányok) | — |
+| Mit mentünk | A teljes PostgreSQL adatbázis **és** az objektumtároló volume-ja, `seaweed_data` (felhasználói csatolmányok) | — |
 | Hova | Backblaze B2, `PMA-Backups` bucket, EU-régió | Tájékoztató, 4. pont (adatfeldolgozók) |
 | Hogyan | Dokploy beépített backup funkciója | — |
 | Megőrzési idő | **Legfeljebb 7 nap**, utána felülíródik | Tájékoztató, 5. pont |
@@ -54,12 +54,24 @@ Mivel a Backblaze anyavállalata amerikai, a maradék kockázatot a szolgáltat�
 ### A jelenlegi működés
 
 A mentés nem a repóból fut: nincs mentési szkript a kódbázisban, a Dokploy beépített backup
-funkciója végzi. A PostgreSQL automatikusan felismerhető, a MinIO pedig volume-szinten
+funkciója végzi. A PostgreSQL automatikusan felismerhető, az objektumtároló pedig volume-szinten
 mentődik - **ugyanabba a bucketbe**.
 
-Figyelem: a MinIO volume a felhasználók által feltöltött fájlokat tartalmazza, vagyis a
+Figyelem: ez a volume a felhasználók által feltöltött fájlokat tartalmazza, vagyis a
 mentés legkiszámíthatatlanabb tartalmú része. Bármi lehet benne, amit egy felhasználó egy
 taskhoz csatolt.
+
+> ### Tárolócsere után a mentési célt ÁT KELL ÁLLÍTANI
+>
+> A mentés **egy volume nevére** van konfigurálva a Dokploy felületén, nem a repóban. A
+> MinIO → SeaweedFS cserével a volume neve `minio_data`-ról **`seaweed_data`**-ra változott.
+>
+> Ha a backup job nem kerül át, a napi mentés **továbbra is lefut és zöld marad**, de a
+> felhasználói csatolmányok **kimaradnak belőle** - és ez csak egy visszaállításnál derülne ki.
+> Ugyanaz a hibaosztály, mint a naplók megőrzési ideje: a konfiguráció máshol él, mint a kód.
+>
+> Az ellenőrzés egyszerű: a csere utáni első mentés után nézd meg, hogy a csatolmányok
+> **benne vannak-e**.
 
 - Ütemezés: **naponta**, a Dokploy backup ütemezője szerint
 - A 7 napos rotáció a Dokploy backup beállításánál van megadva
@@ -93,23 +105,45 @@ időbélyege óta történtek.
 
 ### Honnan tudjuk, kit töröltek
 
-A fióktörlés strukturált naplóbejegyzést ír a Seq-be:
+A fióktörlés strukturált naplóbejegyzést ír az OpenObserve-be:
 
 ```
 UserErasure | UserId: ... | ErasedAt: ... | Törölt refresh tokenek: ... |
 Törölt jelszó-tokenek: ... | Átírt activity sorok: ...
 ```
 
-Keresés a Seq-ben:
+Az `EventType` **külön strukturált mező**, nem csak a szöveg része — ezért mezőegyezésre
+lehet keresni, nem részegyezésre. A lekérdezés az OpenObserve felületén, SQL módban:
 
+```sql
+SELECT _timestamp, userid, erasedat, refreshcount, resetcount, activitycount
+FROM default
+WHERE eventtype = 'UserErasure'
+ORDER BY _timestamp DESC
 ```
-@Message like '%UserErasure%'
-```
+
+**A mezőnevek csupa kisbetűsek, aláhúzás nélkül.** A Serilog tulajdonságneveiből az OTLP-úton
+`EventType` → `eventtype`, `UserId` → `userid` lesz — nem `event_type` és nem `attributes_`
+előtaggal. Ez a v1.0.0 image-en **méréssel ellenőrizve**, nem feltételezés.
+
+További mezők, amelyek minden sornál megvannak:
+
+| Mező | Tartalma |
+|---|---|
+| `body` | a renderelt üzenet (itt ezzel kezdődik: `UserErasure \| UserId: ...`) |
+| `message_template_text` | a Serilog message template, behelyettesítés előtt |
+| `severity` | `Information`, `Warning`, ... |
+| `service_name` | `projectmanager-api` |
+| `service_instance_id` | **melyik replika** írta a sort (a konténer azonosítója) |
+| `_timestamp` | mikroszekundumban, nem milliszekundumban |
+
+Tartalék út, ha a strukturált mező valamiért hiányzik (pl. régi, a csere előtt írt sorok):
+`WHERE body LIKE '%UserErasure%'`.
 
 ### Ellenőrzőlista visszaállítás után
 
 1. Az adatbázis visszaállt, az API elindult (a migrációk automatikusan lefutnak).
-2. Seq-ben lekérdezni az összes `UserErasure` bejegyzést a **mentés időbélyege óta**.
+2. OpenObserve-ben lekérdezni az összes `UserErasure` bejegyzést a **mentés időbélyege óta**.
 3. Minden érintett `UserId`-ra újra elvégezni az anonimizálást — a `DeleteAccountAsync`
    logikája szerint: `Email` -> `deleted-{Id}@invalid.local`, `DisplayName` ->
    `<Törölt felhasználó>`, `PasswordHash` -> új véletlen, `TotpSecret` /
@@ -123,43 +157,68 @@ Keresés a Seq-ben:
 A helyettesítő értékek egy helyen élnek a kódban:
 `backend/src/ProjectManager.API/Common/Constants/UserAnonymization.cs`.
 
-### Seq megőrzési ideje — kritikus csatolás
+### A napló megőrzési ideje — kritikus csatolás
 
-**A Seq megőrzési idejének meg kell haladnia a mentések megőrzési idejét.** Ha a napló
-hamarabb évül el, mint a legrégebbi visszaállítható mentés, elveszítjük annak a nyilvántartását,
-kit kell újra anonimizálni — és egy visszaállítás némán feltámasztana egy törölt fiókot.
+**A naplók megőrzési ideje pontosan 30 nap, és ez nem szabadon választható.** Két oldalról
+van beszorítva, alulról és felülről is:
 
-| | Érték |
-|---|---|
-| Mentés megőrzése | 7 nap |
-| Seq megőrzése | **legalább 30 nap** (a Seq alapértelmezése is ennyi, de explicit beállítandó) |
+| Korlát | Érték | Honnan |
+|---|---|---|
+| Mentés megőrzése | 7 nap | a mentési ciklus |
+| **Alsó korlát** a naplóra | legalább 30 nap | ha a napló hamarabb évül el, mint a legrégebbi visszaállítható mentés, elveszítjük annak nyilvántartását, kit kell újra anonimizálni — és egy visszaállítás némán feltámasztana egy törölt fiókot |
+| **Felső korlát** a naplóra | 30 nap | az adatkezelési tájékoztató ennyit ígér a „Technikai naplók (IP címmel)" sorban. Ez **jogi vállalás**, nem üzemeltetési preferencia |
 
-A retenció **a Seq saját beállítása**, nem a Dokployé és nem a `docker-compose.prod.yml`-é.
-A Seq webes felületén: **Data -> Storage -> Retention Policies -> Add Policy**. (Nem a
-*Settings* alatt van, ahogy több forrás állítja.)
+A két korlát egyetlen értékben találkozik, tehát **30 nap**, se több, se kevesebb.
 
-Az alapértelmezés valóban 30 nap, de explicitté kell tenni, mert egy alapértelmezés csendben
-megváltozhat egy image-frissítéssel.
+A retenció **env var**, a `docker-compose.prod.yml`-ben:
 
-- Lokális példány: **beállítva, 30 nap**
-- Éles példány: `[KITÖLTENDŐ - a PR-rel együtt beállítandó]`
+```yaml
+ZO_COMPACT_DATA_RETENTION_DAYS: 30
+```
 
-### A Seq-et NE vedd bele a mentésbe
+**Ez a csere legfontosabb részlete.** Az OpenObserve alapértelmezése **3650 nap** (~10 év),
+tehát a változó kihagyása nem „kicsit hosszabb megőrzést" jelentene, hanem azt, hogy a rendszer
+**csendben megsérti a saját adatkezelési tájékoztatóját** — tízéves naplómegőrzéssel, IP
+címekkel. A korábbi Seq alapértelmezése véletlenül pont 30 nap volt, ezért ott egy kihagyott
+beállítás nem járt következménnyel; itt jár.
 
-Ez elsőre ellentmondásosnak tűnik, de fontos: a mentés ma csak a PostgreSQL-t és a MinIO
-volume-ot viszi, a Seq-et nem — és **ez így helyes**.
+Cserébe a beállítás **verziókezelt**: a compose fájl átnézésével ellenőrizhető, nem egy webes
+felület mélyén él. Korábban ez kézi lépés volt, és az indulási ellenőrzőlistán nyitott tételként
+szerepelt.
 
-Ha a Seq volume is a mentés része lenne, egy visszaállítás a naplót is visszagörgetné
+### A naplót NE vedd bele a mentésbe
+
+Ez elsőre ellentmondásosnak tűnik, de fontos: a mentés ma csak a PostgreSQL-t és a tároló
+volume-ot viszi, a naplót nem — és **ez így helyes**.
+
+Ha a napló volume is a mentés része lenne, egy visszaállítás a naplót is visszagörgetné
 ugyanarra az időpontra, mint az adatbázist. Pontosan azok a `UserErasure` bejegyzések vesznének
-el, amelyekre a fenti ellenőrzőlista épül. A Seq értéke itt éppen az, hogy **túléli** az
+el, amelyekre a fenti ellenőrzőlista épül. Az aggregátor értéke itt éppen az, hogy **túléli** az
 adatbázis visszaállítását.
+
+### A naplófelület elérése — eldöntendő
+
+A csere oka az volt, hogy **egynél több ember is nézhesse a naplókat**. A hálózati beállítás
+viszont ezt egyelőre nem teszi lehetővé: a konténer — ahogy korábban a Seq — csak
+`127.0.0.1:5080`-on hallgat, tehát a felület kizárólag a szerverről vagy SSH-tunnelen érhető el.
+
+Ez **szándékos alapállapot**, nem feledékenység: egy naplófelület érzékeny adatot tartalmazhat,
+és a publikus kitétele önálló biztonsági döntés. Két út van:
+
+| Megoldás | Mérleg |
+|---|---|
+| **Marad loopback** | Semmi új támadási felület. Viszont minden olvasónak SSH-hozzáférés kell a VPS-hez, ami a többfelhasználós képesség nagy részét elveszi |
+| **Traefik-útvonal védett domainen** | Valódi többfelhasználós elérés. Ehhez viszont a többi szolgáltatáshoz hasonló címkék kellenek, és **az OpenObserve saját belépése lesz az egyetlen védelem** — tehát erős jelszavak kötelezőek |
+
+A nyílt kiadásban **nincs finomhangolt jogosultságkezelés**: aki belép, mindent lát. Ezt a
+döntés előtt érdemes tudni.
 
 ### Maradékkockázat
 
 | Eset | Mi történik |
 |---|---|
-| Csak az adatbázis sérül vagy romlik el | A Seq él, a törlési napló megvan, az eljárás működik. **Ez a gyakori eset.** |
-| Teljes gépvesztés | A Seq is odavész, a mentés óta történt törlésekről nincs nyilvántartás |
+| Csak az adatbázis sérül vagy romlik el | A napló él, a törlési nyilvántartás megvan, az eljárás működik. **Ez a gyakori eset.** |
+| Teljes gépvesztés | A napló is odavész, a mentés óta történt törlésekről nincs nyilvántartás |
 
 A második eset **legfeljebb 7 napnyi** törlést érinthet (a mentési ciklus hossza), és két
 valószínűtlen esemény egybeesését igényli: teljes gépvesztést **és** egy fióktörlést abban az
@@ -192,7 +251,7 @@ Ha magas kockázattal jár, az érintetteket is értesíteni kell, indokolatlan 
    (`JWT_SECRET`, `ENCRYPTION_KEY`, adatbázis-jelszó), szükség esetén a szolgáltatás
    ideiglenes leállítása.
 2. **Rögzíteni.** Mikor derült ki, mi történt, mely adatkörök érintettek, hány személy,
-   milyen következménnyel. A Seq naplók ehhez a fő forrás — ne töröld őket.
+   milyen következménnyel. Az OpenObserve naplói ehhez a fő forrás — ne töröld őket.
 3. **Értékelni.** Jár-e kockázattal az érintettekre? Ha a kiszivárgott adat titkosított volt
    és a kulcs nem érintett, a kockázat jelentősen alacsonyabb.
 4. **Bejelenteni**, ha kockázatos: NAIH, 72 órán belül. A bejelentés akkor is megtehető, ha
@@ -222,8 +281,24 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       kifejezetten **beépíti a szerződési feltételeibe**, amiket a fiók létrehozásakor
       elfogadtunk. Külön aláírni nem kell; az EGT-re vonatkozó szöveg a
       `backblaze.com/company/policy/dpa-for-eea-eu-residents` címen olvasható
-- [ ] **A Seq megőrzési ideje beállítva az ÉLES példányon** (*Data → Storage → Retention
-      Policies → Add Policy*), meghaladva a mentésekét. Lokálisan már beállítva, 30 nap
+- [ ] **A napló megőrzési ideje ellenőrizve az ÉLES példányon.** Már nem kézi beállítás: a
+      `ZO_COMPACT_DATA_RETENTION_DAYS: 30` a `docker-compose.prod.yml`-ben van, tehát
+      verziókezelt. A deploy után **egyszer** ellenőrizd, hogy tényleg érvényre jutott — az
+      alapértelmezés 3650 nap lenne, ami megsértené az adatkezelési tájékoztatót
+- [ ] **A mentés célja átállítva** a `seaweed_data` volume-ra a Dokploy felületén, és a
+      csere utáni első mentésben **ellenőrizve**, hogy a csatolmányok benne vannak. Lásd a
+      2. fejezet figyelmeztetését - ez a tárolócsere egyetlen olyan hibája, ami csendben
+      adatvesztéshez vezetne
+- [ ] **Az objektumtároló S3 kulcsai beállítva** (`S3_ACCESS_KEY` / `S3_SECRET_KEY`).
+      Hiányukban a SeaweedFS S3 API-ja **hitelesítés nélkül** futna - és a tároló a
+      presigned URL-ek miatt publikusan elérhető
+- [ ] **A naplózás betöltő felhasználója létrehozva** az OpenObserve felületén, és a tokenje
+      az `OO_INGEST_USER` / `OO_INGEST_TOKEN` változókban. Enélkül az alkalmazás elindul, de a
+      naplók **nem jutnak el** az aggregátorba — a hiba csak akkor derül ki, amikor keresni
+      próbálsz benne. Szándékosan nem a root hitelesítő adatai: azok ne kerüljenek az API
+      konténerébe
+- [ ] **A naplófelület elérése eldöntve** a többi felhasználó számára — lásd a 3. fejezet
+      végét. A konténer ma csak loopbacken hallgat, tehát SSH-tunnel nélkül senki nem éri el
 - [x] ~~**A mentés ütemezése rögzítve.**~~ Napi mentés a Dokploy ütemezőjével, 7 napos rotációval
 - [x] ~~**Az activity-leírások sablonosítása kész.**~~ Elkészült: a leírások sablont tárolnak,
       a neveket a kiolvasás helyettesíti be, így az anonimizálás magától érvényesül
