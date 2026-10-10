@@ -2,40 +2,94 @@ using ProjectManager.API.Common.Options;
 using Resend;
 using Serilog;
 using Serilog.Events;
+using Serilog.Sinks.OpenTelemetry;
 using ProjectManager.API.Extensions;
 
+// A .env betöltése MINDEN MÁS ELŐTT, a naplózás konfigurálását is megelőzve.
+// Serilog sinkje a betöltési hitelesítő adatokat környezeti változóból olvassa tehát már most szükség van az .env-re.
+var aspnetEnvironment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+
+if (!string.Equals(aspnetEnvironment, "Production", StringComparison.OrdinalIgnoreCase))
+{
+    var envFile = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", ".env");
+
+    if (File.Exists(envFile))
+    {
+        foreach (var line in File.ReadAllLines(envFile))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
+
+            var parts = line.Split('=', 2);
+            if (parts.Length == 2)
+                Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+        }
+    }
+}
+
 // Serilog konfiguráció - legelső dolog
+// A naplók az OpenObserve aggregátorba mennek, OTLP-n.
+// A csomag neve ellenére ez NEM OpenTelemetry-bevezetés. Az OTLP itt csak az szállítási formátum.
+var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_LOGS_ENDPOINT")
+    ?? "http://localhost:5080/api/default/v1/logs";
+
+// A Seq hitelesítés nélkül fogadta a logokat, az OpenObserve nem.
+// Szándékosan külön betöltő felhasználó, nem a root: így az aggregátor admin jelszava nem kerül ebbe a konténerbe.
+var ingestUser = Environment.GetEnvironmentVariable("OO_INGEST_USER");
+var ingestToken = Environment.GetEnvironmentVariable("OO_INGEST_TOKEN");
+
+// A Serilog alapértelmezésben ELNYELI a sinkjei hibáit:
+// egy elutasított betöltés (rossz token -> HTTP 401) nyom nélkül eltűnik, és a naplók csendben elvesznek.
+// Naplózásnál ez a legrosszabb hibamód, mert pont akkor nem derül ki, amikor a naplóra szükség lenne.
+// A SelfLog ezért a sink saját hibáit a hibakimenetre írja.
+Serilog.Debugging.SelfLog.Enable(Console.Error);
+
 Serilog.Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
     .WriteTo.Console()
-    .WriteTo.Seq(Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://localhost:5341")
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = otlpEndpoint;
+        options.Protocol = OtlpProtocol.HttpProtobuf;
+
+        // Hitelesítő adat nélkül is elindulunk, és a hiány nem állítja meg az alkalmazást:
+        // a konzolos log ilyenkor is megvan (azt a Dokploy felülete is mutatja).
+        if (!string.IsNullOrWhiteSpace(ingestUser) && !string.IsNullOrWhiteSpace(ingestToken))
+        {
+            var basic = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{ingestUser}:{ingestToken}"));
+
+            options.Headers = new Dictionary<string, string>
+            {
+                ["Authorization"] = $"Basic {basic}"
+            };
+        }
+
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = "projectmanager-api",
+
+            // Két replikával enélkül nem lenne megállapítható, melyik példány írta a sort.
+            // Konténerben a MachineName a konténer azonosítója.
+            ["service.instance.id"] = Environment.MachineName
+        };
+    })
     .CreateLogger();
+
+// Hitelesítő adat nélkül az OpenObserve 401-et ad, tehát a naplók NEM jutnak el hozzá.
+// Ezt induláskor ki kell mondani: a konzolos log működik, így a figyelmeztetés látszik.
+if (string.IsNullOrWhiteSpace(ingestUser) || string.IsNullOrWhiteSpace(ingestToken))
+{
+    Serilog.Log.Warning(
+        "A naplo-aggregator hitelesito adatai nincsenek beallitva (OO_INGEST_USER / "
+        + "OO_INGEST_TOKEN), ezert a naplok CSAK a konzolra kerulnek - az OpenObserve "
+        + "a hitelesites nelkuli betoltest elutasitja. Vegpont: {Endpoint}", otlpEndpoint);
+}
 
 try
 {
     var builder = WebApplication.CreateBuilder(args);
-
-    // .env fájl betöltése CSAK development-ben
-    if (!builder.Environment.IsProduction())
-    {
-        var envFile = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..", "..", "..",
-            ".env"
-        );
-        if (File.Exists(envFile))
-        {
-            foreach (var line in File.ReadAllLines(envFile))
-            {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
-                var parts = line.Split('=', 2);
-                if (parts.Length == 2)
-                    Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
-            }
-        }
-    }
 
     builder.Configuration.AddEnvironmentVariables();
 

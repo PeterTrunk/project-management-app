@@ -35,21 +35,31 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
   
-  seq:
-    image: datalust/seq
-    container_name: pm-seq
+  openobserve:
+    # Konkret verzio, ne latest - ugyanaz az elv, mint a postgres:17-nel.
+    image: openobserve/openobserve:v1.0.0
+    container_name: pm-openobserve
     restart: unless-stopped
     ports:
-      - "5341:5341"
-      - "8080:80"
+      # 5080 egyszerre a webes felulet es az OTLP betoltes portja
+      - "5080:5080"
     environment:
-      ACCEPT_EULA: Y
-      SEQ_FIRSTRUN_NOAUTHENTICATION: true
+      # A Seq hitelesites nelkul fogadta a logokat; az OpenObserve-hoz lokalisan is kell
+      # root felhasznalo. Ezek fejlesztoi ertekek, NEM titkok - elesben env varbol jonnek.
+      #
+      # MINDKETTO ERTEKE KOTOTT, es az OpenObserve indulaskor PANIKOL, ha nem felel meg
+      # (leellenorizve, nem feltetelezes):
+      #   - az e-mail cimnek rendes domaint kell tartalmaznia; a "dev@localhost" ELUTASITVA,
+      #   - a jelszo 8-128 karakter, es kell bele kisbetu, NAGYBETU, szam ES specialis karakter.
+      ZO_ROOT_USER_EMAIL: dev@example.com
+      ZO_ROOT_USER_PASSWORD: DevPass123!
+      ZO_DATA_DIR: /data
+      ZO_COMPACT_DATA_RETENTION_DAYS: 30
     volumes:
-      - seq_data:/data
+      - openobserve_data:/data
 
 volumes:
   postgres_data:
   minio_data:
   redis_data:
-  seq_data:
+  openobserve_data:

@@ -64,17 +64,27 @@ services:
       - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
       - "traefik.http.services.minio.loadbalancer.server.port=9000"
 
-  seq:
-    image: datalust/seq
-    container_name: pm-seq
+  openobserve:
+    # Konkret verzio, ne latest - egy image-frissites ne hozzon nema viselkedesvaltozast.
+    image: openobserve/openobserve:v1.0.0
+    container_name: pm-openobserve
     restart: unless-stopped
     environment:
-      ACCEPT_EULA: Y
-      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_ADMIN_PASSWORD}
+      ZO_ROOT_USER_EMAIL: ${OO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OO_ROOT_USER_PASSWORD}
+      ZO_DATA_DIR: /data
+      # A megorzesi ido NEM szabadon valaszthato. Ket oldalrol kotott:
+      #   - az adatkezelesi tajekoztato 30 napot igér a technikai naplokra (jogi vallalas),
+      #   - az OPERATIONS.md legalabb ennyit ker, hogy a mentesek 7 napja fole erjen.
+      # Az OpenObserve alapertelmezese 3650 nap lenne, tehat ennek a kihagyasa csendben
+      # megsertene a sajat tajekoztatonkat. Lasd OPERATIONS.md.
+      ZO_COMPACT_DATA_RETENTION_DAYS: 30
     ports:
-      - "127.0.0.1:5341:80"
+      # Csak loopback, ahogy a Seq is volt: a naplo erzekeny adatot tartalmazhat.
+      # Tobb felhasznalos eleressel kapcsolatban lasd OPERATIONS.md.
+      - "127.0.0.1:5080:5080"
     volumes:
-      - seq_data:/data
+      - openobserve_data:/data
     networks:
       - pma-internal
 
@@ -124,7 +134,9 @@ services:
       TOKEN_CLEANUP_INTERVAL_HOURS: ${TOKEN_CLEANUP_INTERVAL_HOURS}
       REFRESH_TOKEN_RETENTION_DAYS: ${REFRESH_TOKEN_RETENTION_DAYS}
       CONFIRMED_UPLOAD_LOG_RETENTION_DAYS: ${CONFIRMED_UPLOAD_LOG_RETENTION_DAYS}
-      SEQ_URL: ${SEQ_URL}
+      OTLP_LOGS_ENDPOINT: ${OTLP_LOGS_ENDPOINT}
+      OO_INGEST_USER: ${OO_INGEST_USER}
+      OO_INGEST_TOKEN: ${OO_INGEST_TOKEN}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
     networks:
       - dokploy-network
@@ -204,4 +216,4 @@ volumes:
   postgres_data:
   minio_data:
   redis_data:
-  seq_data:
+  openobserve_data:

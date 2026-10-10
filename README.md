@@ -49,7 +49,7 @@ Az alkalmazás **önhosztolható**: minden konfiguráció környezeti változób
 
 ### Megfelelés és üzemeltetés
 - **Adatvédelem** – adatkezelési tájékoztató, ÁSZF, elfogadás verziózott rögzítése, anonimizáló fióktörlés
-- **Strukturált naplózás** – Serilog + Seq, személyes adat nélkül
+- **Strukturált naplózás** – Serilog + OpenObserve, személyes adat nélkül
 - **Automatizált tesztkör** – 884 teszt, CI/CD
 
 ### Felület
@@ -93,7 +93,7 @@ project-management-app/
 | **JWT + BCrypt** | Autentikáció és jelszó hash-elés |
 | **Otp.NET** | TOTP kétfaktoros hitelesítés |
 | **FluentValidation** | Input validáció |
-| **Serilog + Seq** | Strukturált naplózás |
+| **Serilog + OpenObserve** | Strukturált naplózás (OTLP-n) |
 | **Resend** | Tranzakciós e-mail küldés |
 | **Swagger / OpenAPI** | API dokumentáció *(csak fejlesztői környezetben)* |
 
@@ -300,7 +300,7 @@ Ez négy konténert indít (fejlesztői konfiguráció):
 | PostgreSQL 17 | `5432` | Database: `projectmanager`, User: `pmuser` / `pmpassword` |
 | Redis | `6379` | SignalR backplane és rate limiting |
 | MinIO | `9000` / `9001` | API / Console – `minioadmin` / `minioadmin` |
-| Seq | `5341` / `8080` | Napló-fogadás / webes felület |
+| OpenObserve | `5080` | Napló-fogadás (OTLP) és webes felület egy porton |
 
 ### 3. Backend indítása
 
@@ -371,7 +371,7 @@ Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS
 4. **Environment Variables** beállítása a Dokploy UI-ban. A teljes lista a [`.env.example`](./.env.example)-ben van, minden változónál leírva, mi történik nélküle. Éles környezetben a fejlesztői beállításon túl ezek is kellenek:
    - `REDIS_PASSWORD`, `REDIS_CONNECTION` – a rate limiting és a SignalR backplane
    - `RESEND_API_KEY`, `EMAIL_FROM` – tranzakciós e-mailek
-   - `SEQ_URL`, `SEQ_ADMIN_PASSWORD` – naplózás
+   - `OTLP_LOGS_ENDPOINT`, `OO_INGEST_USER`, `OO_INGEST_TOKEN`, `OO_ROOT_USER_EMAIL`, `OO_ROOT_USER_PASSWORD` – naplózás
    - `DOMAIN`, `FRONTEND_DOMAIN`, `MINIO_DOMAIN`, `COOKIE_DOMAIN`, `MINIO_PUBLIC_URL` – routing és sütik
    - a négy `VITE_LEGAL_*` változó – az adatkezelő adatai a jogi dokumentumokban
 
