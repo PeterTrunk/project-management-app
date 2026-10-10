@@ -79,8 +79,12 @@ services:
     container_name: pm-openobserve
     restart: unless-stopped
     environment:
-      ZO_ROOT_USER_EMAIL: ${OO_ROOT_USER_EMAIL}
-      ZO_ROOT_USER_PASSWORD: ${OO_ROOT_USER_PASSWORD}
+      # Szandekosan ugyanaz a nev kint es bent: ezek az OpenObserve SAJAT valtozoi, es a
+      # dokumentacioja is ezen a neven hivatkozik rajuk. Egy elteo kulso nev (pl. OO_*) csak
+      # annyit ad, hogy a telepito a belso nevet allitja be, a behelyettesites uresre oldodik,
+      # es a kontener "password is too weak" hibaval meg sem indul.
+      ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD}
       ZO_DATA_DIR: /data
       # A megorzesi ido NEM szabadon valaszthato. Ket oldalrol kotott:
       #   - az adatkezelesi tajekoztato 30 napot igér a technikai naplokra (jogi vallalas),
