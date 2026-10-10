@@ -92,6 +92,11 @@ services:
       # Az OpenObserve alapertelmezese 3650 nap lenne, tehat ennek a kihagyasa csendben
       # megsertene a sajat tajekoztatonkat. Lasd OPERATIONS.md.
       ZO_COMPACT_DATA_RETENTION_DAYS: 30
+      # Az OpenObserve alapbol telemetriat kuld a gyartonak (ZO_TELEMETRY alapertelmezese
+      # true) - a naploban ez a "sending a track event" sor. Egy olyan projektben, amely
+      # tetelesen felsorolja az adatfeldolgozoit az adatkezelesi tajekoztatoban, egy
+      # nem nevesitett kimeno adatforgalom nem kivanatos, ezert kikapcsoljuk.
+      ZO_TELEMETRY: false
     ports:
       # Csak loopback, ahogy a Seq is volt: a naplo erzekeny adatot tartalmazhat.
       # Tobb felhasznalos eleressel kapcsolatban lasd OPERATIONS.md.
