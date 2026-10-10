@@ -371,7 +371,7 @@ Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS
 4. **Environment Variables** beállítása a Dokploy UI-ban. A teljes lista a [`.env.example`](./.env.example)-ben van, minden változónál leírva, mi történik nélküle. Éles környezetben a fejlesztői beállításon túl ezek is kellenek:
    - `REDIS_PASSWORD`, `REDIS_CONNECTION` – a rate limiting és a SignalR backplane
    - `RESEND_API_KEY`, `EMAIL_FROM` – tranzakciós e-mailek
-   - `OTLP_LOGS_ENDPOINT`, `OO_INGEST_USER`, `OO_INGEST_TOKEN`, `OO_ROOT_USER_EMAIL`, `OO_ROOT_USER_PASSWORD` – naplózás
+   - `OTLP_LOGS_ENDPOINT`, `OO_INGEST_USER`, `OO_INGEST_TOKEN`, `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` – naplózás
    - `DOMAIN`, `FRONTEND_DOMAIN`, `S3_DOMAIN`, `COOKIE_DOMAIN`, `S3_PUBLIC_URL` – routing és sütik
    - a négy `VITE_LEGAL_*` változó – az adatkezelő adatai a jogi dokumentumokban
 
