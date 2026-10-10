@@ -57,9 +57,17 @@ namespace ProjectManager.Tests.Common
         {
             var keys = new HashSet<string>();
 
-            //A compose ${...} behelyettesítései - ezek nélkül a konténerek hibásan indulnak
+            //A compose ${...} behelyettesítései - ezek nélkül a konténerek hibásan indulnak.
+            //
+            //A minta a név után BÁRMIT megenged a záró kapcsos zárójelig, mert a Compose
+            //több alakot ismer, és nem csak a csupaszt:
+            //  ${VAR}            egyszerű behelyettesítés
+            //  ${VAR:?üzenet}    kötelező - a deploy elbukik, ha nincs beállítva
+            //  ${VAR:-alapérték} alapértékkel
+            //A szűkebb @"\$\{([A-Z0-9_]+)\}" minta a kötelező alakot NEM vette észre, és így
+            //egy valóban használt változót "dokumentált, de nem hivatkozott"-ként jelzett.
             keys.UnionWith(
-                Regex.Matches(ReadRepoFile("docker-compose.prod.yml"), @"\$\{([A-Z0-9_]+)\}")
+                Regex.Matches(ReadRepoFile("docker-compose.prod.yml"), @"\$\{([A-Z0-9_]+)[^}]*\}")
                     .Select(m => m.Groups[1].Value));
 
             //A backend olvasásai. A Program.cs fail-fast ága ezek egy részét kötelezővé teszi.

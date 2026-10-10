@@ -43,12 +43,13 @@ services:
     environment:
       # Ezekbol lesz az S3 hozzaferes. HA HIANYOZNAK, az S3 API HITELESITES NELKUL fut -
       # leellenorizve: kulcsokkal minden hitelesites nelkuli keres 403-at kap.
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?S3_ACCESS_KEY kotelezo - nelkule az S3 API hitelesites nelkul fut}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY kotelezo - nelkule az S3 API hitelesites nelkul fut}
     # A mini mod egyetlen folyamatban inditja a mastert, a volume servert, a filert es az
     # S3 gateway-t. Az -s3.allowedOrigins megadasa KOTELEZO: az alapertelmezes csillag,
     # vagyis minden origin szamara engedne a bongeszobol erkezo feltoltest.
-    # Az admin felulet jelszava: HA URES, a SeaweedFS HITELESITES NELKUL szolgalja ki
+    # Az admin felulet jelszava. A ":?" alak miatt a deploy ELBUKIK, ha nincs beallitva -
+    # szandekosan, mert URES ertek eseten a SeaweedFS HITELESITES NELKUL szolgalja ki
     # (a -admin.password flag dokumentacioja szerint "if empty, auth is disabled").
     # A felulet csak loopbacken hallgat, tehat SSH-tunnel nelkul elerhetetlen - de egy
     # jelszo nelkuli admin panel a felhasznaloi fajlok felett rossz csere, meg SSH mogott is.
@@ -56,7 +57,7 @@ services:
       mini -dir=/data -s3
       -s3.autoCreateBucket
       -s3.allowedOrigins=${FRONTEND_URL}
-      -admin.password=${S3_ADMIN_PASSWORD}
+      -admin.password=${S3_ADMIN_PASSWORD:?S3_ADMIN_PASSWORD kotelezo - ures ertek eseten az admin felulet hitelesites nelkul fut}
     ports:
       # Csak loopback, ahogy a MinIO konzol is volt: az admin felulet SSH-tunnelen
       # erheto el. Az S3 API (8333) NEM itt, hanem Traefiken keresztul publikus.
