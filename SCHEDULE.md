@@ -4964,6 +4964,66 @@ kommentek javítva, a valódi működés és a mérés eredménye leírva. A pre
 fejléc kikényszerítése (presigned POST policy `content-length-range` és `Content-Type`
 feltétellel) külön munka, és nem ebbe a cserébe tartozik.
 
+### Az éles üzembe állítás tanulságai: ami csendben elromlott
+
+Mindkét csere kódszinten elsőre zöld volt, az éles beállítás viszont **öt** olyan hibát
+termelt, amelyek közül négy **némán** jelentkezett. Mindegyik ugyanabba a mintába tartozik:
+egy üres vagy félreértett konfigurációs érték nem hibát ad, hanem rosszabb viselkedést.
+
+**1. A `.env` betöltése a naplózás konfigurálása UTÁN futott.** A Serilog sink a környezetből
+olvassa a betöltési hitelesítő adatokat, tehát fejlesztői környezetben MINDIG üresek voltak,
+bármi is volt a fájlban - és minden napló 401-gyel elakadt. A Seq-nél ez rejtve maradt, mert
+az nem igényelt hitelesítést. Javítva: a betöltés a fájl elejére került, indoklással.
+
+**2. A sink hibái el voltak nyelve.** A Serilog alapértelmezésben nem jelzi, ha egy köteg
+elbukik. Javítva: `SelfLog` a hibakimenetre, plusz indulási figyelmeztetés hiányzó hitelesítő
+adatra. Ez a figyelmeztetés az élesben is azonnal megmutatta, mi a baj.
+
+**3. Két különböző név ugyanarra az értékre.** A compose `ZO_ROOT_USER_PASSWORD:
+${OO_ROOT_USER_PASSWORD}` alakja miatt a telepítő a gyártó által dokumentált `ZO_` nevet
+állította be, a behelyettesítés üresre oldódott, és a konténer "password is too weak" hibával
+meg sem indult. Javítva: ahol a változó a szolgáltatóé, ott a neve is a szolgáltatóé
+(`ZO_*`); ahol a miénk, ott `OO_*`.
+
+**4. Az admin felület jelszó nélkül futott.** A SeaweedFS `-admin.password` flagje üres
+értéknél **kikapcsolja a hitelesítést** ("if empty, auth is disabled"), és a konténer
+elindul. Ugyanez igaz az `AWS_*` kulcsokra az S3 API-n, amely a presigned URL-ek miatt
+publikusan elérhető.
+
+Javítva, és ez a legfontosabb: a három hitelesítési változó a Compose **kötelező-változó**
+alakját kapta (`${VAR:?üzenet}`), tehát egy hiányzó érték mellett a **deploy elbukik** egy
+olvasható hibaüzenettel, nem pedig egy bárkit beengedő szolgáltatás indul el.
+
+**5. YAML blokk-skalárba tett komment.** A `command: >` blokkban a `#` nem komment, hanem
+szöveg: egy magyarázat 23 hamis argumentumként került a parancsba, és mivel a Go
+flag-feldolgozó az első nem-flag argumentumnál leáll, az utána jövő `-admin.password` **soha
+nem érvényesült**. Minden magyarázat a blokk ELÉ tartozik.
+
+#### Két viselkedés, amit érdemes megjegyezni - mindkettő mérve
+
+| | Hogyan működik | Változtatható utólag? |
+|---|---|---|
+| `ZO_ROOT_USER_*` (OpenObserve) | adatbázis-sort hoz létre az első inicializáláskor | **Nem** - a kötet törlése kell hozzá |
+| `-admin.password` (SeaweedFS) | folyamat-argumentum, minden induláskor újraolvasódik | **Igen** - elég egy újraindítás |
+
+Az elsőnél a kötettörlés külön csapdát hozott: a `docker volume rm` **leállított** konténer
+mellett is "volume is in use" hibát ad - a konténert **törölni** kell, nem leállítani.
+
+#### Egy hibakeresési tanulság az SSH-tunnelről
+
+A tároló admin felülete `ERR_CONNECTION_RESET`-tel jött, és a helyi reprodukció is ugyanezt
+adta - miközben a helyi konténer rendben futott. Az ok: a nyitott SSH-tunnel a `127.0.0.1`-en
+**elfedte** a helyi portot, tehát a kérés az éles szerverre ment, ahol nem volt publikált
+port. Két következménye van: a tunnelt érdemes eltérő helyi portra irányítani, és a
+fejlesztői alkalmazás nyitott tunnel mellett az **éles** aggregátorba küldi a naplóit.
+
+#### Az ellenőrző teszt is kapott egy javítást
+
+Az `EnvExampleCoverageTests` mintája csak a csupasz `${VAR}` alakot ismerte, a kötelező
+`${VAR:?...}`-t nem - így egy valóban használt változót "dokumentált, de nem hivatkozott"-ként
+jelzett. Kiterjesztve a Compose mindhárom alakjára. A háló egyébként a csere alatt **négyszer**
+fogott hibát, ezért érte meg megírni.
+
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern for easy extension with new providers. Webhook endpoint hardening: rate limiting to prevent spam/abuse despite existing HMAC signature validation.
 

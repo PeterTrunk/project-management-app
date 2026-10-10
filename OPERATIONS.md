@@ -285,20 +285,27 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       `ZO_COMPACT_DATA_RETENTION_DAYS: 30` a `docker-compose.prod.yml`-ben van, tehát
       verziókezelt. A deploy után **egyszer** ellenőrizd, hogy tényleg érvényre jutott — az
       alapértelmezés 3650 nap lenne, ami megsértené az adatkezelési tájékoztatót
-- [ ] **A mentés célja átállítva** a `seaweed_data` volume-ra a Dokploy felületén, és a
-      csere utáni első mentésben **ellenőrizve**, hogy a csatolmányok benne vannak. Lásd a
-      2. fejezet figyelmeztetését - ez a tárolócsere egyetlen olyan hibája, ami csendben
-      adatvesztéshez vezetne
-- [ ] **Az objektumtároló S3 kulcsai beállítva** (`S3_ACCESS_KEY` / `S3_SECRET_KEY`).
-      Hiányukban a SeaweedFS S3 API-ja **hitelesítés nélkül** futna - és a tároló a
-      presigned URL-ek miatt publikusan elérhető
-- [ ] **A naplózás betöltő felhasználója létrehozva** az OpenObserve felületén, és a tokenje
-      az `OO_INGEST_USER` / `OO_INGEST_TOKEN` változókban. Enélkül az alkalmazás elindul, de a
-      naplók **nem jutnak el** az aggregátorba — a hiba csak akkor derül ki, amikor keresni
-      próbálsz benne. Szándékosan nem a root hitelesítő adatai: azok ne kerüljenek az API
-      konténerébe
-- [ ] **A naplófelület elérése eldöntve** a többi felhasználó számára — lásd a 3. fejezet
-      végét. A konténer ma csak loopbacken hallgat, tehát SSH-tunnel nélkül senki nem éri el
+- [x] ~~**A mentés célja átállítva** a `seaweed_data` volume-ra.~~ Elvégezve, és a következő
+      mentés **ellenőrizve a Backblaze-en** - a csatolmányok benne vannak. Ez volt a
+      tárolócsere egyetlen olyan hibája, ami csendben adatvesztéshez vezetett volna
+- [x] ~~**Az objektumtároló S3 kulcsai beállítva**~~ (`S3_ACCESS_KEY` / `S3_SECRET_KEY`),
+      és a `${VAR:?}` alak miatt a deploy **elbukna** nélkülük. Hiányukban a SeaweedFS S3
+      API-ja hitelesítés nélkül futna - és a tároló a presigned URL-ek miatt publikusan elérhető
+- [x] ~~**Az admin felület jelszava beállítva**~~ (`S3_ADMIN_PASSWORD`, felhasználónév: `admin`).
+      Üres értéknél a SeaweedFS **hitelesítés nélkül** szolgálná ki az admin felületet, és ez
+      csendben történik. A `${VAR:?}` alak miatt a deploy most elbukik, ha kimarad
+- [ ] **KÜLÖN betöltő felhasználó** az OpenObserve felületén, az `OO_INGEST_USER` /
+      `OO_INGEST_TOKEN` változókhoz. **A naplózás már működik** - jelenleg a root hitelesítő
+      adataival -, tehát ez nem hiba, hanem higiénia: az admin jelszava ne üljön az API
+      konténerében, és a token önállóan rotálható legyen.
+      Megjegyzés: a nyílt kiadás **csak `admin` szerepkört** engedélyez (mérve), tehát ez nem
+      jogosultság-szűkítés. Lépések: belépés → *Management → Users* → új felhasználó → a két
+      változó átírása → **csak a `pm-api`** redeploy (az aggregátort nem kell újraindítani)
+- [x] ~~**A naplófelület elérése eldöntve.**~~ Marad **loopback + SSH-tunnel**, Traefik-útvonal
+      nélkül - ez a biztonságosabb választás, és a gyakorlatban megoldott. Ugyanígy a
+      tárolóé is (`127.0.0.1:23646`). Figyelem: a tunnel **elfedi a helyi portokat**, ezért
+      érdemes eltérő helyi portra irányítani (pl. `-L 23647:localhost:23646`), különben a
+      fejlesztői példány és az éles összekeveredik
 - [x] ~~**A mentés ütemezése rögzítve.**~~ Napi mentés a Dokploy ütemezőjével, 7 napos rotációval
 - [x] ~~**Az activity-leírások sablonosítása kész.**~~ Elkészült: a leírások sablont tárolnak,
       a neveket a kiolvasás helyettesíti be, így az anonimizálás magától érvényesül
