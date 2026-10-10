@@ -12,6 +12,7 @@
     import { X, Plus } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
+    import { fromDateTimeLocalValue } from '../utils/dates';
 
     export let isTaskCreationOpen = false;
     export let isBacklogMode: boolean = false;
@@ -70,7 +71,7 @@
                 description,
                 priority: priority !== '' ? priority : null,
                 estimateInMinutes,
-                dueDate: dueDate ? new Date(dueDate) : null
+                dueDate: fromDateTimeLocalValue(dueDate)
             });
             success = 'Task létrehozva!';
             notify.success('Task létrehozva!');

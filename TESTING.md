@@ -145,7 +145,7 @@ irányítható. Ide soha ne a fejlesztői adatbázis kerüljön — a Respawn mi
 
 ## Frontend tesztek (vitest)
 
-1. `cd frontend && npm test` — **79 teszt**, ~1 másodperc
+1. `cd frontend && npm test` — **100 teszt**, ~1 másodperc
 2. `cd frontend && npm run check` — típusellenőrzés, 0 hiba
 
 Nem kell hozzá Docker és böngésző: a tesztelt store-ok és segédfüggvények tiszta függvények,
@@ -170,6 +170,23 @@ rossz kulccsal beillesztett commitot keresünk, és tudjuk, hova került téved�
 **task kulcs** ugyanolyan fontos keresési mező, mint a sha vagy az üzenet. A tesztek rögzítik
 azt is, hogy a `#42` alakú PR-szám működik (a felületen így látszik, a felhasználó ezt másolja
 vissza), a magányos `#` viszont **nem** ad találatot — különben minden PR-t visszaadna.
+
+**Dátumkezelés** — `dates.test.ts`. Ez a fájl a JavaScript dátum-értelmezés aszimmetriáját
+köti le, ami a felületen három valódi hibát okozott:
+
+```
+new Date("2026-10-15T14:30")  ->  2026-10-15T12:30:00.000Z   LOKÁLIS-ként
+new Date("2026-10-15")        ->  2026-10-15T00:00:00.000Z   UTC-ként
+```
+
+A szerver kizárólag UTC-t küld és fogad, a felhasználó a saját időzónájában gondolkodik — az
+átváltás egyetlen helye a `dates.ts`. A tesztek többsége **oda-vissza utat** mér, nem konkrét
+időzónához kötött szöveget, így bármelyik gépen és CI-ban is érvényes; ahol eltolásra van
+szükség, azt a teszt maga számolja ki.
+
+A háló ki lett próbálva: a `toDateTimeLocalValue`-t a hibás `toISOString().slice(0, 16)`
+változatra cserélve **4 teszt**, a `toLocalDateKey`-t a `toISOString().split('T')[0]`-ra
+cserélve **2 teszt** bukik el.
 
 A tesztfájlok a vizsgált kód mellett élnek (`lib/stores/taskStore.test.ts`), így a
 `npm run check` **őket is típusellenőrzi**.
