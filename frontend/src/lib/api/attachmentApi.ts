@@ -59,8 +59,9 @@ export async function getProjectPresignedUrlAsync(projectId: string, data: Presi
     return response.data;
 }
 
-// MinIO-ra közvetlen feltöltés
-export async function uploadToMinIOAsync(presignedUrl: string, file: File, onProgress?: (progress: number) => void): Promise<void> {
+// Közvetlen feltöltés az objektumtárolóba, a backend által kiadott presigned URL-re.
+// A függvény szolgáltató-független: csak egy PUT-ot küld az aláírt címre.
+export async function uploadToStorageAsync(presignedUrl: string, file: File, onProgress?: (progress: number) => void): Promise<void> {
     await axios.put(presignedUrl, file, {
         headers: { 'Content-Type': file.type },
         onUploadProgress: (e) => {

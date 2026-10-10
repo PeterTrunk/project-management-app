@@ -21,19 +21,26 @@ services:
     volumes:
       - redis_data:/data
 
-  minio:
-    image: minio/minio
+  seaweedfs:
+    # Konkret verzio, ne latest - ugyanaz az elv, mint a postgres:17-nel.
+    image: chrislusf/seaweedfs:4.46
     container_name: pm-file-storage
     restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # 8333: S3 API (ez kell a backendnek es a bongeszonek)
+      # 23646: admin feluelet - a MinIO kozossegi verziojabol ez mar kikerult
+      - "8333:8333"
+      - "23646:23646"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+    # Az -s3.allowedOrigins alapertelmezese csillag, ezert fejlesztoin is explicit.
+    command: >
+      mini -dir=/data -s3
+      -s3.autoCreateBucket
+      -s3.allowedOrigins=http://localhost:5173
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
+      - seaweed_data:/data
   
   openobserve:
     # Konkret verzio, ne latest - ugyanaz az elv, mint a postgres:17-nel.
@@ -60,6 +67,6 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  seaweed_data:
   redis_data:
   openobserve_data:

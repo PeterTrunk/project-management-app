@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
@@ -79,7 +79,7 @@ namespace ProjectManager.API.Services.BackgroundJobs
                 .ExecuteDeleteAsync(cancellationToken);
 
             //Csak a megerősítettek: a meg nem erősítetteket az OrphanCleanupJob viszi el a
-            //hozzájuk tartozó MinIO-fájllal együtt, jóval hamarabb.
+            //hozzájuk tartozó tárolt fájllal együtt, jóval hamarabb.
             var uploadLogCutoff = now.AddDays(-_cleanupOptions.ConfirmedUploadLogRetentionDays);
             var uploadLogsDeleted = await context.PresignedUrlLogs
                 .Where(p => p.Confirmed && p.CreatedAt < uploadLogCutoff)

@@ -296,7 +296,7 @@ namespace ProjectManager.API.Services.AttachmentService
             if (await _context.Attachments.AnyAsync(a => a.StorageKey == dto.StorageKey))
                 throw new ConflictException("Ez a fájl már fel lett töltve!");
 
-            //MinIO-ban létezik-e ténylegesen?
+            //A tárolóban létezik-e ténylegesen?
             var objectInfo = await _fileStorageService.GetObjectInfoAsync(dto.StorageKey);
             if (objectInfo == null)
                 throw new NotFoundException("A fájl nem található a tárolóban!");
@@ -305,9 +305,13 @@ namespace ProjectManager.API.Services.AttachmentService
             if (objectInfo.Size > log.SizeBytes * 1.1) // 10% tolerancia
                 throw new ValidationException("A fájl mérete nem egyezik!");
 
-            //A ténylegesen feltöltött objektum típusa is egyezzen a bejelentettel.
-            //A presigned URL már aláírásba kötötte a Content-Type-ot, ez a második
-            //védelmi réteg - és ez kerül az adatbázisba, nem a kliens bejelentése.
+            //A ténylegesen feltöltött objektum típusa egyezzen a bejelentettel.
+            //
+            //Ez NEM második védelmi réteg, hanem AZ EGYETLEN: a presigned URL aláírása
+            //- méréssel ellenőrizve - nem tartalmazza a Content-Type-ot,
+            //tehát a tároló bármilyen típust elfogad a feltöltéskor.
+            //A hibás típusú fájl így bekerül a tárolóba, de Attachment rekord nem jön létre hozzá,
+            //és az árva objektumot az OrphanCleanupJob viszi el. Lásd S3FileStorageService.GeneratePresignedPutUrlAsync.
             var storedContentType = objectInfo.ContentType;
             if (!string.IsNullOrEmpty(storedContentType)
                 && !string.Equals(storedContentType, log.ContentType, StringComparison.OrdinalIgnoreCase))

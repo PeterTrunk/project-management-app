@@ -10,7 +10,7 @@ namespace ProjectManager.Tests.Middleware
 {
     /// <summary>
     /// A middleware a hibaüzenet-szivárgás utolsó védvonala: ami nem AppException, annak az
-    /// üzenete (EF Core, Npgsql, MinIO SDK) sosem hagyhatja el a szervert.
+    /// üzenete (EF Core, Npgsql, tárolókliens) sosem hagyhatja el a szervert.
     /// </summary>
     public class GlobalExceptionHandlerMiddlewareTests
     {

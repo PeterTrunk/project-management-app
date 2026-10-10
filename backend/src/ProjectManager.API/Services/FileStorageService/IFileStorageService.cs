@@ -1,5 +1,4 @@
-﻿using Minio.DataModel.Args;
-
+﻿
 namespace ProjectManager.API.Services.FileStorageService
 {
     public interface IFileStorageService

@@ -122,17 +122,17 @@ try
     var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
     var apiBaseUrl = Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5178";
 
-    // MinIO
-    var minioEndpoint = Environment.GetEnvironmentVariable("MINIO_ENDPOINT")
-        ?? throw new InvalidOperationException("MINIO_ENDPOINT nincs beállítva!");
-    var minioAccessKey = Environment.GetEnvironmentVariable("MINIO_ACCESS_KEY")
-        ?? throw new InvalidOperationException("MINIO_ACCESS_KEY nincs beállítva!");
-    var minioSecretKey = Environment.GetEnvironmentVariable("MINIO_SECRET_KEY")
-        ?? throw new InvalidOperationException("MINIO_SECRET_KEY nincs beállítva!");
-    var minioBucket = Environment.GetEnvironmentVariable("MINIO_BUCKET")
-        ?? throw new InvalidOperationException("MINIO_BUCKET nincs beállítva!");
-    var minioUseSSL = Environment.GetEnvironmentVariable("MINIO_USE_SSL") == "true";
-    var minioPublicUrl = Environment.GetEnvironmentVariable("MINIO_PUBLIC_URL");
+    // Objektumtarolas (S3-kompatibilis)
+    var storageEndpoint = Environment.GetEnvironmentVariable("S3_ENDPOINT")
+        ?? throw new InvalidOperationException("S3_ENDPOINT nincs beállítva!");
+    var storageAccessKey = Environment.GetEnvironmentVariable("S3_ACCESS_KEY")
+        ?? throw new InvalidOperationException("S3_ACCESS_KEY nincs beállítva!");
+    var storageSecretKey = Environment.GetEnvironmentVariable("S3_SECRET_KEY")
+        ?? throw new InvalidOperationException("S3_SECRET_KEY nincs beállítva!");
+    var storageBucket = Environment.GetEnvironmentVariable("S3_BUCKET")
+        ?? throw new InvalidOperationException("S3_BUCKET nincs beállítva!");
+    var storageUseSSL = Environment.GetEnvironmentVariable("S3_USE_SSL") == "true";
+    var storagePublicUrl = Environment.GetEnvironmentVariable("S3_PUBLIC_URL");
 
     // Attachment
     var maxUploadSizeMb = int.Parse(
@@ -188,15 +188,15 @@ try
         options.FrontendUrl = frontendUrl;
     });
 
-    //MiniO
-    builder.Services.Configure<MinioOptions>(options =>
+    //Objektumtarolas
+    builder.Services.Configure<ObjectStorageOptions>(options =>
     {
-        options.Endpoint = minioEndpoint;
-        options.AccessKey = minioAccessKey;
-        options.SecretKey = minioSecretKey;
-        options.Bucket = minioBucket;
-        options.UseSSL = minioUseSSL;
-        options.PublicUrl = minioPublicUrl;
+        options.Endpoint = storageEndpoint;
+        options.AccessKey = storageAccessKey;
+        options.SecretKey = storageSecretKey;
+        options.Bucket = storageBucket;
+        options.UseSSL = storageUseSSL;
+        options.PublicUrl = storagePublicUrl;
     });
 
     //Redis

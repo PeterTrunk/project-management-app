@@ -43,7 +43,7 @@ namespace ProjectManager.API.Services.ProjectService
             if (project == null)
                 throw new NotFoundException("Projekt nem található!");
 
-            //MinIO cleanup: összes attachment törlése
+            //Tároló-takaritás: összes attachment törlése
             var attachments = await _context.Attachments
                 .Where(a => a.ProjectId == projectId)
                 .ToListAsync();
@@ -54,10 +54,10 @@ namespace ProjectManager.API.Services.ProjectService
                 {
                     await _fileStorageService.DeleteFileAsync(attachment.StorageKey);
                 }
-                catch { } //Ha már nem létezik MinIO-ban, nem gond
+                catch { } //Ha már nem létezik a tárolóban, nem gond
             }
 
-            //Nem confirmed presigned URL-ek MinIO cleanup-ja
+            //Nem confirmed presigned URL-ek tároló-takaritása
             var unconfirmedLogs = await _context.PresignedUrlLogs
                 .Where(p => p.ProjectId == projectId && !p.Confirmed)
                 .ToListAsync();

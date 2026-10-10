@@ -15,7 +15,7 @@
     import type { SprintResponse } from '../api/sprintApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
-    import { type AttachmentResponse, getTaskPresignedUrlAsync, uploadToMinIOAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
+    import { type AttachmentResponse, getTaskPresignedUrlAsync, uploadToStorageAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -286,8 +286,8 @@
                     }
                 );
 
-                // 2. Direkt feltöltés MinIO-ra
-                await uploadToMinIOAsync(presignedUrl, file, (progress) => {
+                // 2. Direkt feltöltés az objektumtárolóba
+                await uploadToStorageAsync(presignedUrl, file, (progress) => {
                     uploadProgress = progress;
                 });
 

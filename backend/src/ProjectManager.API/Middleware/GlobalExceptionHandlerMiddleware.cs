@@ -1,4 +1,4 @@
-using ProjectManager.API.Common.Exceptions;
+﻿using ProjectManager.API.Common.Exceptions;
 using System.Text.Json;
 
 namespace ProjectManager.API.Middleware
@@ -36,7 +36,7 @@ namespace ProjectManager.API.Middleware
             }
             catch (Exception ex)
             {
-                //Minden más: a részletek CSAK a naplóba mennek. Az ex.Message ilyenkor EF Core / Npgsql / MinIO belső szövege lehet,
+                //Minden más: a részletek CSAK a naplóba mennek. Az ex.Message ilyenkor EF Core / Npgsql / tárolókliens belső szövege lehet,
                 //ami a séma és az infrastruktúra részleteit adná ki
                 _logger.LogError(ex,
                     "Kezeletlen kivétel | Method: {Method} | Path: {Path} | Type: {ExceptionType} | Message: {Message}",

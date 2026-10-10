@@ -1,18 +1,25 @@
 ﻿using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
-using OtpNet;
 using ProjectManager.API.Common.Options;
 
 namespace ProjectManager.API.Services.FileStorageService
 {
-    public class MinIOFileStorageService : IFileStorageService
+    /// <summary>
+    /// Fájltárolás S3-kompatibilis objektumtárolóban.
+    ///
+    /// Szándékosan NEM a szolgáltató nevét viseli. 
+    /// A MinIO leváltásakor kiderült, hogy ez a kód egyetlen MinIO-specifikus elemet sem tartalmaz: 
+    /// a Minio NuGet csomag szabványos S3 API-t beszél, tehát ugyanez az implementáció szolgálja ki a SeaweedFS-t is.
+    /// Csak az endpoint és a kulcsok változnak, konfigurációból.
+    /// </summary>
+    public class S3FileStorageService : IFileStorageService
     {
-        private readonly IMinioClient _minioClient;
-        private readonly IMinioClient _presignedMinioClient;
+        private readonly IMinioClient _storageClient;
+        private readonly IMinioClient _presignedClient;
         private readonly string _bucketName;
 
-        public MinIOFileStorageService(IOptions<MinioOptions> options)
+        public S3FileStorageService(IOptions<ObjectStorageOptions> options)
         {
             var opt = options.Value;
 
@@ -24,16 +31,20 @@ namespace ProjectManager.API.Services.FileStorageService
             var presignedUseSSL = !string.IsNullOrEmpty(opt.PublicUrl)
                 && opt.PublicUrl.StartsWith("https://");
 
-            //Két kliens:
-            //1. Belső műveletek (upload, download, delete) ez lesz a belső endpoint
-            _minioClient = new MinioClient()
+            //Két kliens kell, és ez minden S3-tárolónál így van:
+            //a SigV4 aláírás tartalmazza a Host fejlécet, ezért a presigned URL-t a PUBLIKUS címmel kell aláírni
+            //- különben a böngészőből érkező kérés aláírása nem egyezne.
+            //A belső műveletek közben a konténerhálózaton maradnak.
+            //
+            //1. Belső műveletek (upload, download, delete) - belső endpoint
+            _storageClient = new MinioClient()
                 .WithEndpoint(opt.Endpoint)
                 .WithCredentials(opt.AccessKey, opt.SecretKey)
                 .WithSSL(opt.UseSSL)
                 .Build();
 
-            //2. Presigned URL generálás ez lesz a publikus endpoint
-            _presignedMinioClient = new MinioClient()
+            //2. Presigned URL generálás - publikus endpoint
+            _presignedClient = new MinioClient()
                 .WithEndpoint(presignedEndpoint)
                 .WithCredentials(opt.AccessKey, opt.SecretKey)
                 .WithSSL(presignedUseSSL)
@@ -47,16 +58,16 @@ namespace ProjectManager.API.Services.FileStorageService
             string storageKey)
         {
             // Bucket létrehozása ha nem létezik
-            var bucketExists = await _minioClient.BucketExistsAsync(
+            var bucketExists = await _storageClient.BucketExistsAsync(
                 new BucketExistsArgs().WithBucket(_bucketName));
 
             if (!bucketExists)
             {
-                await _minioClient.MakeBucketAsync(
+                await _storageClient.MakeBucketAsync(
                     new MakeBucketArgs().WithBucket(_bucketName));
             }
 
-            await _minioClient.PutObjectAsync(new PutObjectArgs()
+            await _storageClient.PutObjectAsync(new PutObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
                 .WithStreamData(fileStream)
@@ -70,7 +81,7 @@ namespace ProjectManager.API.Services.FileStorageService
         {
             var memoryStream = new MemoryStream();
 
-            await _minioClient.GetObjectAsync(new GetObjectArgs()
+            await _storageClient.GetObjectAsync(new GetObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
                 .WithCallbackStream(async (stream, ct)=>
@@ -84,7 +95,7 @@ namespace ProjectManager.API.Services.FileStorageService
 
         public async Task DeleteFileAsync(string storageKey)
         {
-            await _minioClient.RemoveObjectAsync(new RemoveObjectArgs()
+            await _storageClient.RemoveObjectAsync(new RemoveObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey));
         }
@@ -106,7 +117,7 @@ namespace ProjectManager.API.Services.FileStorageService
         
         public async Task StreamFileAsync(string storageKey, Stream destination, CancellationToken ct = default)
         {
-            await _minioClient.GetObjectAsync(new GetObjectArgs()
+            await _storageClient.GetObjectAsync(new GetObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
                 .WithCallbackStream(async (stream, cancellationToken) =>
@@ -117,9 +128,17 @@ namespace ProjectManager.API.Services.FileStorageService
 
         public async Task<string> GeneratePresignedPutUrlAsync(string storageKey, string contentType, int expirySeconds = 120)
         {
-            //A Content-Type bekerül az aláírásba: a MinIO elutasítja azt a PUT-ot, ahol eltérő Content-Type fejléccel érkezik. 
-            //Enélkül a whitelist a presigned úton csak formalitás volt:
-            //Ha kliens image/png-t jelentett be, és bármit feltölthetett.
+            //FIGYELEM - a WithHeaders itt NEM teszi az aláírásba a Content-Type-ot.
+            //
+            //Méréssel ellenőrizve a Minio SDK 7.0.0-val, MinIO és SeaweedFS ellen is:
+            //a kiadott URL-ben "X-Amz-SignedHeaders=host" áll, a fejléc pedig egy query paraméterként szivárog ki,
+            //a .NET típusnév értékével. Vagyis a tároló NEM utasítja el az eltérő
+            //Content-Type-pal érkező PUT-ot - mindhárom eset (helyes, eltérő, hiányzó) 200-at ad.
+            //
+            //Ezért a fájltípust az AttachmentService confirm lépése kényszeríti ki: ott a
+            //StatObject-ből olvasott tényleges típus össze van vetve a bejelentettel, és eltérés
+            //esetén nem jön létre Attachment rekord. A hívás itt azért marad, mert a szándékot
+            //kifejezi és költsége nincs - de védelemnek NEM tekinthető.
             var args = new PresignedPutObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
@@ -129,14 +148,14 @@ namespace ProjectManager.API.Services.FileStorageService
                 })
                 .WithExpiry(expirySeconds);
 
-            return await _presignedMinioClient.PresignedPutObjectAsync(args);
+            return await _presignedClient.PresignedPutObjectAsync(args);
         }
 
         public async Task<ObjectInfo?> GetObjectInfoAsync(string storageKey)
         {
             try
             {
-                var stat = await _minioClient.StatObjectAsync(new StatObjectArgs()
+                var stat = await _storageClient.StatObjectAsync(new StatObjectArgs()
                     .WithBucket(_bucketName)
                     .WithObject(storageKey));
 

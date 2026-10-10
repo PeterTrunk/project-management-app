@@ -14,7 +14,7 @@ A tájékoztató és a feltételek forrása: `frontend/src/routes/PrivacyPolicy.
 
 | Kérdés | Érték | Hol ígértük meg |
 |---|---|---|
-| Mit mentünk | A teljes PostgreSQL adatbázis **és** a MinIO volume (felhasználói csatolmányok) | — |
+| Mit mentünk | A teljes PostgreSQL adatbázis **és** az objektumtároló volume-ja, `seaweed_data` (felhasználói csatolmányok) | — |
 | Hova | Backblaze B2, `PMA-Backups` bucket, EU-régió | Tájékoztató, 4. pont (adatfeldolgozók) |
 | Hogyan | Dokploy beépített backup funkciója | — |
 | Megőrzési idő | **Legfeljebb 7 nap**, utána felülíródik | Tájékoztató, 5. pont |
@@ -54,12 +54,24 @@ Mivel a Backblaze anyavállalata amerikai, a maradék kockázatot a szolgáltat�
 ### A jelenlegi működés
 
 A mentés nem a repóból fut: nincs mentési szkript a kódbázisban, a Dokploy beépített backup
-funkciója végzi. A PostgreSQL automatikusan felismerhető, a MinIO pedig volume-szinten
+funkciója végzi. A PostgreSQL automatikusan felismerhető, az objektumtároló pedig volume-szinten
 mentődik - **ugyanabba a bucketbe**.
 
-Figyelem: a MinIO volume a felhasználók által feltöltött fájlokat tartalmazza, vagyis a
+Figyelem: ez a volume a felhasználók által feltöltött fájlokat tartalmazza, vagyis a
 mentés legkiszámíthatatlanabb tartalmú része. Bármi lehet benne, amit egy felhasználó egy
 taskhoz csatolt.
+
+> ### Tárolócsere után a mentési célt ÁT KELL ÁLLÍTANI
+>
+> A mentés **egy volume nevére** van konfigurálva a Dokploy felületén, nem a repóban. A
+> MinIO → SeaweedFS cserével a volume neve `minio_data`-ról **`seaweed_data`**-ra változott.
+>
+> Ha a backup job nem kerül át, a napi mentés **továbbra is lefut és zöld marad**, de a
+> felhasználói csatolmányok **kimaradnak belőle** - és ez csak egy visszaállításnál derülne ki.
+> Ugyanaz a hibaosztály, mint a naplók megőrzési ideje: a konfiguráció máshol él, mint a kód.
+>
+> Az ellenőrzés egyszerű: a csere utáni első mentés után nézd meg, hogy a csatolmányok
+> **benne vannak-e**.
 
 - Ütemezés: **naponta**, a Dokploy backup ütemezője szerint
 - A 7 napos rotáció a Dokploy backup beállításánál van megadva
@@ -176,7 +188,7 @@ szerepelt.
 
 ### A naplót NE vedd bele a mentésbe
 
-Ez elsőre ellentmondásosnak tűnik, de fontos: a mentés ma csak a PostgreSQL-t és a MinIO
+Ez elsőre ellentmondásosnak tűnik, de fontos: a mentés ma csak a PostgreSQL-t és a tároló
 volume-ot viszi, a naplót nem — és **ez így helyes**.
 
 Ha a napló volume is a mentés része lenne, egy visszaállítás a naplót is visszagörgetné
@@ -273,6 +285,13 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       `ZO_COMPACT_DATA_RETENTION_DAYS: 30` a `docker-compose.prod.yml`-ben van, tehát
       verziókezelt. A deploy után **egyszer** ellenőrizd, hogy tényleg érvényre jutott — az
       alapértelmezés 3650 nap lenne, ami megsértené az adatkezelési tájékoztatót
+- [ ] **A mentés célja átállítva** a `seaweed_data` volume-ra a Dokploy felületén, és a
+      csere utáni első mentésben **ellenőrizve**, hogy a csatolmányok benne vannak. Lásd a
+      2. fejezet figyelmeztetését - ez a tárolócsere egyetlen olyan hibája, ami csendben
+      adatvesztéshez vezetne
+- [ ] **Az objektumtároló S3 kulcsai beállítva** (`S3_ACCESS_KEY` / `S3_SECRET_KEY`).
+      Hiányukban a SeaweedFS S3 API-ja **hitelesítés nélkül** futna - és a tároló a
+      presigned URL-ek miatt publikusan elérhető
 - [ ] **A naplózás betöltő felhasználója létrehozva** az OpenObserve felületén, és a tokenje
       az `OO_INGEST_USER` / `OO_INGEST_TOKEN` változókban. Enélkül az alkalmazás elindul, de a
       naplók **nem jutnak el** az aggregátorba — a hiba csak akkor derül ki, amikor keresni
