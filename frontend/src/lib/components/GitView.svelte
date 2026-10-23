@@ -44,9 +44,10 @@
 
     onMount(async () => {
         await loadAll();
-        signalRService.off('CommitLinked');
-        signalRService.off('PrLinked');
 
+        //A kezelő a KÖZPONTI mellé kerül, nem helyette: a taskStore-nak is tudnia kell
+        //az új hivatkozásról. Korábban itt egy off() hívás állt, ami a központi kezelőt
+        //levette - és a kilépéskori off() a sajátunkat is, tehát nem maradt semmi.
         signalRService.on('CommitLinked', refresh);
         signalRService.on('PrLinked', refresh);
     });
@@ -106,8 +107,9 @@
     }
 
     onDestroy(() => {
-        signalRService.off('CommitLinked');
-        signalRService.off('PrLinked');
+        //Kezelővel: csak a sajátunkat vesszük le, a központi marad
+        signalRService.off('CommitLinked', refresh);
+        signalRService.off('PrLinked', refresh);
     });
 </script>
 

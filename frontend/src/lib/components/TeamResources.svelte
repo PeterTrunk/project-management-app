@@ -20,14 +20,15 @@
     onMount(async () => {
         await loadAttachments();
 
-        signalRService.on('AttachmentUploaded', (data) => {
-            if (data.projectId === projectId) loadAttachments();
-        });
-        
-        signalRService.on('AttachmentDeleted', (data) => {
-            if (data.projectId === projectId) loadAttachments();
-        });
+        signalRService.on('AttachmentUploaded', onAttachmentChanged);
+        signalRService.on('AttachmentDeleted', onAttachmentChanged);
     });
+
+    //Nevesítve, mert a leiratkozásnak hivatkoznia kell rá: kezelő nélküli off() az
+    //esemény központi kezelőjét is levenné, és kilépés után nem maradna semmi.
+    function onAttachmentChanged(data: { projectId: string }) {
+        if (data.projectId === projectId) loadAttachments();
+    }
 
     let searchQuery = '';
 
@@ -101,8 +102,8 @@
     }
 
     onDestroy(() => {
-        signalRService.off('AttachmentUploaded');
-        signalRService.off('AttachmentDeleted');
+        signalRService.off('AttachmentUploaded', onAttachmentChanged);
+        signalRService.off('AttachmentDeleted', onAttachmentChanged);
     });
 </script>
 

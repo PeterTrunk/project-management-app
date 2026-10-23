@@ -186,6 +186,15 @@ services:
       - "traefik.http.routers.api-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      # SignalR affinity. FIGYELEM: a kliens mostantol skipNegotiation + WebSockets modban
+      # kapcsolodik, tehat egyetlen keres epul fel - ennek a cookie-nak a SignalR szempontjabol
+      # NINCS dolga. Szandekosan marad: ha valaki a kliensen visszaveszi a negotiate-et vagy a
+      # transport-visszaesest, enelkul a kapcsolat ketreplikas kornyezetben idonkent nem epulne
+      # fel (a negotiate connectionToken-je a kiado peldany memoriajaban el).
+      #
+      # A maxage=30 NEM csuszo ablak: a Traefik valid cookie eseten korai visszateressel
+      # kiszolgal, Set-Cookie nelkul (ellenorizve a v3.1 forrasaban). Long polling eseten
+      # ezert 30 masodperc utan elszakadna a kapcsolat - lasd SIGNALR.md, 4. fejezet.
       - "traefik.http.services.api.loadbalancer.sticky.cookie=true"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.name=signalr_affinity"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.httponly=true"
