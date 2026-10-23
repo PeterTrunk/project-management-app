@@ -10,14 +10,10 @@ namespace ProjectManager.API.Controllers
     public class ProjectJoinController : ControllerBase
     {   
         private readonly ITeamService _teamService;
-        private readonly ILogger<ProjectJoinController> _logger;
 
-        public ProjectJoinController(
-            ITeamService teamService,
-            ILogger<ProjectJoinController> logger)
+        public ProjectJoinController(ITeamService teamService)
         {
             _teamService = teamService;
-            _logger = logger;
         }
         
         [HttpPost("join/{token}")]

@@ -12,14 +12,10 @@ namespace ProjectManager.API.Controllers
     public class ProjectController : ControllerBase
     {
         private readonly IProjectService _projectservice;
-        private readonly ILogger<ProjectController> _logger;
 
-        public ProjectController(
-            IProjectService projectservice,
-            ILogger<ProjectController> logger)
+        public ProjectController(IProjectService projectservice)
         {
             _projectservice = projectservice;
-            _logger = logger;
         }
         
         [HttpPost]

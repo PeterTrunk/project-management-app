@@ -15,14 +15,10 @@ namespace ProjectManager.API.Controllers
     public class SprintController : ControllerBase
     {
         private readonly ISprintService _sprintService;
-        private readonly ILogger<SprintController> _logger;
 
-        public SprintController(
-            ISprintService sprintService,
-            ILogger<SprintController> logger)
+        public SprintController(ISprintService sprintService)
         {
             _sprintService = sprintService;
-            _logger = logger;
         }
 
         [HttpGet]

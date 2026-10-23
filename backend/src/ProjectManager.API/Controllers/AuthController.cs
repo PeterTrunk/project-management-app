@@ -14,16 +14,13 @@ namespace ProjectManager.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
-        private readonly ILogger<AuthController> _logger;
         private readonly Common.Options.CookieOptions _cookieOptions;
 
         public AuthController(
             IAuthService authservice,
-            ILogger<AuthController> logger,
             IOptions<Common.Options.CookieOptions> cookieOptions)
         {
             _authService = authservice;
-            _logger = logger;
             _cookieOptions = cookieOptions.Value;
         }
 

@@ -13,14 +13,10 @@ namespace ProjectManager.API.Controllers
     public class TeamController : ControllerBase
     {
         private readonly ITeamService _teamService;
-        private readonly ILogger<TeamController> _logger;
 
-        public TeamController(
-            ITeamService teamService,
-            ILogger<TeamController> logger)
+        public TeamController(ITeamService teamService)
         {
             _teamService = teamService;
-            _logger = logger;
         }
 
         [HttpGet]

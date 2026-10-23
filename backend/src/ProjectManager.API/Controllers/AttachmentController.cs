@@ -13,14 +13,10 @@ namespace ProjectManager.API.Controllers
     public class AttachmentController : ControllerBase
     {
         private readonly IAttachmentService _attachmentService;
-        private readonly ILogger<AttachmentController> _logger;
 
-        public AttachmentController(
-            IAttachmentService attachmentService, 
-            ILogger<AttachmentController> logger)
+        public AttachmentController(IAttachmentService attachmentService)
         {
             _attachmentService = attachmentService;
-            _logger = logger;
         }
 
         //Projekt szintű lista

@@ -18,14 +18,10 @@ namespace ProjectManager.API.Controllers
     public class GitController : ControllerBase
     {
         private readonly IGitService _gitService;
-        private readonly ILogger<GitController> _logger;
 
-        public GitController(
-            IGitService gitService,
-            ILogger<GitController> logger)
+        public GitController(IGitService gitService)
         {
             _gitService = gitService;
-            _logger = logger;
         }
 
         //Korábban két külön "unmatched-*" végpont. Azok a hozzárendeletlen sorokra szűrtek.

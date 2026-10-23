@@ -3584,6 +3584,23 @@ a streamelt fájlletöltés közben keletkező hiba másodlagos kivételt okozot
   jogosultsági szabály (saját komment, tulajdonos védelme) -> 403; minden más üzleti szabály -> 400
 - A refactor összesen -855 / +323 sor: nagyobb részt **töröl**, mint amennyit hozzáad
 
+**Utólagos tisztítás - a visszamaradt naplózók:**
+A `catch` blokkok törlésével a controllerek `ILogger<T>`-je **használaton kívül maradt**: a
+hibanaplózás a middleware dolga lett, a controllerek pedig semmi mást nem naplóztak. A
+konstruktorokban mégis ott maradt, mert fordítási hibát nem okozott, és a C# a használaton
+kívüli, csak hozzárendelt mezőre nem ad figyelmeztetést. Mérve: **15 controllerben nulla**
+`_logger.Log*` hívás volt.
+
+Mind a 15 helyen törölve a mező, a konstruktor-paraméter és a hozzárendelés (-73 / +14 sor).
+Ahol ezzel egyetlen függőség maradt, a konstruktor egy sorba került. Két dolog **nem** változott:
+a `WebhookController` naplózója marad, mert ott 8 valódi hívás van (a webhook-elutasítások
+okának megkülönböztetése), és a szolgáltatások naplózói is maradnak - ott ellenőrizve
+mindegyik használt.
+
+Ez azért érdemel megjegyzést, mert a halott függőség nem semleges: azt sugallja a következő
+olvasónak, hogy a controllernek **dolga van** a naplózással, és a következő hibakezelés
+kísértést ad arra, hogy megint a controllerbe kerüljön, ne a middleware-be.
+
 **Két szándékosan megtartott try/catch:**
 a `WebhookController` `JsonException` ága, és az `AuthController.ResendVerification`, ami
 elnyeli a `NotFoundException`/`ValidationException`-t és egységes 200-at ad
