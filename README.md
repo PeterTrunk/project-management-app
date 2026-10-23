@@ -128,7 +128,7 @@ A séma tervrajza [dbdiagram.io](https://dbdiagram.io)-val készült.
 
 | Entitáscsoport | Táblák |
 |---|---|
-| Felhasználók | `Users`, `Roles`, `UserRoles`, `ProjectMembers`, `ProjectInvites` |
+| Felhasználók | `Users`, `ProjectMembers`, `ProjectInvites` |
 | Hitelesítés | `RefreshTokens`, `PasswordResetTokens` |
 | Projekt struktúra | `Projects`, `ProjectCounters`, `Boards`, `ColumnDefinitions`, `ProjectTasks`, `TaskAssignments` |
 | Sprint | `Sprints`, `TaskStatusHistories` |
@@ -437,6 +437,7 @@ Az MVP után következő munkák (SignalR refaktor, biztonsági megerősítés, 
 - **Funkció-szerepkör mátrix** – a jelenlegi modell szigorú rangsor (`Owner >= Admin >= Member >= Viewer`); egy jogosultság-halmaz alapú mátrix rugalmasabb lenne, de a jogosultsági modell cseréjét jelenti
 - **Nincs többbérlős (multi-tenant) architektúra** – egy telepítés egy csapatot vagy szervezetet szolgál ki; a hozzáférés projekt szinten korlátozott
 - **Nincs SSO/SAML** – vállalati bevezetéshez ez általában alapkövetelmény
+- **Globális szerepkörök** – a szerepkör ma kizárólag projekt-hatókörű (`ProjectMembers.Role`), tehát ugyanaz a felhasználó lehet `Owner` az egyik projektben és `Viewer` a másikban. Egy rendszerszintű adminisztrátor (admin panelhez) külön modellt igényelne
 
 ### Tesztelés és teljesítmény
 - **UI / E2E tesztek** – a store-ok és segédfüggvények tesztelve vannak, a DOM-szintű tesztelés nem

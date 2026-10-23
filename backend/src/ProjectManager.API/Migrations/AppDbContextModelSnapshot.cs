@@ -815,31 +815,6 @@ namespace ProjectManager.API.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
-            modelBuilder.Entity("ProjectManager.API.Model.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("Roles");
-                });
-
             modelBuilder.Entity("ProjectManager.API.Model.Sprint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1023,24 +998,6 @@ namespace ProjectManager.API.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("ProjectManager.API.Model.UserRole", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("UserId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("UserRoles");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.UserTermsAcceptance", b =>
@@ -1426,25 +1383,6 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("Task");
                 });
 
-            modelBuilder.Entity("ProjectManager.API.Model.UserRole", b =>
-                {
-                    b.HasOne("ProjectManager.API.Model.Role", "Role")
-                        .WithMany("UserRoles")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ProjectManager.API.Model.User", "User")
-                        .WithMany("UserRoles")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Role");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("ProjectManager.API.Model.UserTermsAcceptance", b =>
                 {
                     b.HasOne("ProjectManager.API.Model.TermsVersion", "TermsVersion")
@@ -1527,11 +1465,6 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("TaskAssignments");
                 });
 
-            modelBuilder.Entity("ProjectManager.API.Model.Role", b =>
-                {
-                    b.Navigation("UserRoles");
-                });
-
             modelBuilder.Entity("ProjectManager.API.Model.Sprint", b =>
                 {
                     b.Navigation("ProjectTasks");
@@ -1557,8 +1490,6 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("TermsAcceptances");
 
                     b.Navigation("UploadedFiles");
-
-                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }

@@ -4897,6 +4897,50 @@ Ezért új `LegalVersionTests`: a teszt beolvassa a frontend `legal.ts`-ét (a f
 A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két teszt bukik el**.
 Így az eltérés fordításkor derül ki, nem élesben.
 
+### A használaton kívüli globális szerepkör-táblák eltávolítása
+
+**Probléma:** a `Roles` és a `UserRoles` tábla a tervezési fázisból maradt itt - a szándék egy
+rendszerszintű `Admin` / `User` szerepkör volt, admin panellel. Az viszont sosem készült el, és
+a jogosultság-ellenőrzés teljesen máshol valósult meg: a `ProjectMembers.Role` oszlopban,
+projekt-hatókörűen, a `PolicyNames` házirendekkel.
+
+Mérve: a két tábla **kizárólag** a DbContext konfigurációjában és az induló migrációban
+szerepelt - nulla szolgáltatás, controller vagy lekérdezés használta -, és **mindkettő üres
+volt**, még seedelve sem.
+
+Ez önmagában is adósság, de az ER-diagramok elkészültével felszínre is került: egy
+szakdolgozathoz tartozó diagramon minden tábla kérdést hív, és a „mire van?" kérdésre a
+„semmire" a lehető legrosszabb válasz. Ráadásul elmosja azt, ami valódi tervezési döntés: hogy
+a szerepkör **szándékosan** projekt-hatókörű, tehát ugyanaz a felhasználó lehet `Owner` az
+egyik projektben és `Viewer` a másikban.
+
+**Megoldás:** teljes eltávolítás - a két modellosztály, a `User.UserRoles` navigáció, a két
+`DbSet`, a két konfigurációs blokk, és egy migráció, amely eldobja a táblákat. Adatvesztés
+nincs, mert üresek. Ugyanaz a logika, mint a git `AccessToken`-nél: egy tárolt, de sosem
+használt dolog **törlése jobb, mint a megtartása** - a kockázat így nem csökken, hanem megszűnik.
+
+**Amit a döntés közben mérni kellett.** Felmerült egy köztes megoldás: hagyjuk meg a
+modellosztályokat emlékeztetőnek, és csak a `DbSet`-eket vegyük ki, így a tábla nem jelenik meg
+az adatbázisban. **Ez nem működik**, és a generált migráció meg is mutatta, miért:
+
+```csharp
+migrationBuilder.RenameTable(name: "UserRoles", newName: "UserRole");
+migrationBuilder.RenameTable(name: "Roles",     newName: "Role");
+```
+
+Két mechanizmus dolgozik egyszerre. Egyrészt az EF Core a **navigációs tulajdonságokon
+keresztül** is felveszi az entitásokat a modellbe: a `User.UserRoles` miatt a `UserRole` (és
+rajta keresztül a `Role`) `DbSet` nélkül is bent marad. Másrészt a tábla **neve** a `DbSet`
+property nevéből származott - nélküle az EF az osztálynévre esik vissza, tehát egyes számra.
+
+Vagyis a köztes megoldás eredménye az lett volna, hogy a táblák **megmaradnak, átnevezve**, és
+a séma elcsúszik a többi, többes számú táblától. A modellosztályok megtartásához három
+`Ignore` hívás is kellett volna a DbContextben - halott osztályok plusz utasítás arról, hogy
+felejtsük el őket.
+
+Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
+listájába egy sor a globális szerepkörökről.
+
 ### Az objektumtároló leváltása: MinIO -> SeaweedFS
 
 **Probléma:** a MinIO közösségi kiadása a fejlesztés alatt fokozatosan megszűnt. A GitHub repó

@@ -44,8 +44,6 @@ public class AppDbContext : DbContext
     }
     
     public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
     public DbSet<Board> Boards => Set<Board>();
@@ -182,43 +180,6 @@ public class AppDbContext : DbContext
             //Indexes
             entity.HasIndex(rt => rt.Token)
                   .IsUnique();
-        });
-        
-        modelBuilder.Entity<Role>(entity =>
-        {
-            //Constraints
-            entity.Property(r => r.Name)
-                  .HasMaxLength(64)
-                  .IsRequired();
-
-            entity.Property(r => r.CreatedAt)
-                  .IsRequired();
-
-            //Indexes
-            entity.HasIndex(r => r.Name)
-                  .IsUnique();
-        });
-        
-        modelBuilder.Entity<UserRole>(entity =>
-        {
-            //Composite PK
-            entity.HasKey(ur => new { ur.UserId, ur.RoleId });
-
-            //Constraints
-            entity.Property(ur => ur.AssignedAt)
-                  .IsRequired();
-
-            //Foreign keys
-            entity.HasOne(ur => ur.User)
-                  .WithMany(u => u.UserRoles)
-                  .HasForeignKey(ur => ur.UserId);
-
-            entity.HasOne(ur => ur.Role)
-                  .WithMany(r => r.UserRoles)
-                  .HasForeignKey(ur => ur.RoleId);
-
-            //Indexes
-            entity.HasIndex(ur => ur.RoleId);
         });
         
         modelBuilder.Entity<Project>(entity =>
