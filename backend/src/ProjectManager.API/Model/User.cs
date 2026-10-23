@@ -1,4 +1,4 @@
-namespace ProjectManager.API.Model
+﻿namespace ProjectManager.API.Model
 {
     public class User
     {
@@ -16,8 +16,6 @@ namespace ProjectManager.API.Model
         public DateTime? EmailVerificationTokenExpiresAt { get; set; }
         public DateTime? DeletedAt { get; set; }
 
-        // Egy usernek sok UserRole-ja lehet
-        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
         public ICollection<ProjectMember> ProjectMemberships { get; set; } = new List<ProjectMember>();
         public ICollection<ProjectTask> CreatedTasks { get; set; } = new List<ProjectTask>();
         public ICollection<TaskAssignment> Assignments { get; set; } = new List<TaskAssignment>();

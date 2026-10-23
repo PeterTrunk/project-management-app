@@ -25,15 +25,16 @@
     import { boardStore } from '../stores/boardStore';
 
     import { notify } from '../stores/notificationStore';
+    import { toLocalDateKey } from '../utils/dates';
 
     export let projectId: string;
 
     // Szűrők
     let selectedSprintId: string = '';
     let burndownMode: 'burndown' | 'burnup' = 'burndown';
-    let dateFrom: string = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString().split('T')[0];
-    let dateTo: string = new Date().toISOString().split('T')[0];
+    //A felhasznalo szerinti napok, nem az UTC szerintiek
+    let dateFrom: string = toLocalDateKey(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    let dateTo: string = toLocalDateKey();
 
     // Adatok
     let taskStatusData: TaskStatusDistribution[] = [];

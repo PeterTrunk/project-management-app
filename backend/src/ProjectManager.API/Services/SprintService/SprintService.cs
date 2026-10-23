@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
@@ -39,6 +40,28 @@ namespace ProjectManager.API.Services.SprintService
             _currentUserService = currentUserService;
             _activityService = activityService;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// Szerializációs ütközés (40001) vagy egyediség-sértés (23505) a kivétel-láncban.
+        /// </summary>
+        /// <remarks>
+        /// A láncot végig kell járni, nem csak a legkülső kivételt nézni: az EF Core a
+        /// PostgreSQL hibáját <c>DbUpdateException</c>-be csomagolja, ha az az UPDATE-nél
+        /// keletkezik, és csak a COMMIT-nál jövő hiba érkezik nyers alakban.
+        /// </remarks>
+        private static bool IsConcurrencyConflict(Exception exception)
+        {
+            for (var current = exception; current != null; current = current.InnerException)
+            {
+                if (current is PostgresException postgres &&
+                    (postgres.SqlState == "40001" || postgres.SqlState == "23505"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public async Task<SprintResponseDto> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -126,6 +149,22 @@ namespace ProjectManager.API.Services.SprintService
                         }
                     }
                 }
+            }
+            //A tranzakción belüli ellenőrzés a versenyhelyzetet MEGELŐZI (Serializable),
+            //de a vesztes kérés eddig 500-at kapott: a szerializációs hiba a lenti generikus
+            //ágon át a middleware-be futott, ami minden nem AppException-t 500-ra képez.
+            //A felhasználó szempontjából viszont ez ugyanaz az eset, amit a fenti ellenőrzés
+            //elkap - "már van aktív sprint" -, tehát 409 a helyes válasz.
+            //
+            //Két hibaalakot kell fogni, és ez a lényegi rész: a PostgreSQL a szerializációs
+            //hibát (40001) a COMMIT-nál nyers PostgresException-ként adja, az UPDATE-nél
+            //viszont az EF Core DbUpdateException-be CSOMAGOLJA. Egy csak a nyers alakra
+            //szűrő ág a csomagolt esetet átengedné. A 23505 (egyediség-sértés) ugyanígy
+            //jöhet: azt a javított szűrt index adja, ha a két írás mégis összeérne.
+            catch (Exception ex) when (IsConcurrencyConflict(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new ConflictException("Már van Aktív sprint!");
             }
             catch (Exception)
             {
@@ -386,7 +425,11 @@ namespace ProjectManager.API.Services.SprintService
 
             var sprint = new Sprint
             {
-                ProjectId = dto.ProjectId,
+                //A ROUTE erteke, nem a kereles torzsebol jovo. A jogosultsagot a
+                //ProjectRoleHandler a route projectId-jere ellenorzi, tehat egy torzsbol
+                //atvett projektazonosito ALA iras atlepne a jogosultsagi kaput: az "A"
+                //projekt adminja a "B" projektbe tudott volna sprintet letrehozni.
+                ProjectId = projectId,
                 Name = dto.Name,
                 Goal = dto.Goal,
                 StartDate = dto.StartDate,

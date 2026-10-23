@@ -10,7 +10,6 @@ namespace ProjectManager.Tests.Validators
 
         private static CreateColumnDto Valid() => new()
         {
-            BoardId = Guid.NewGuid(),
             Name = "Folyamatban",
             MapsToStatus = "InProgress",
             Position = 1

@@ -13,14 +13,10 @@ namespace ProjectManager.API.Controllers
     public class ProjectTaskController : ControllerBase
     {
         private readonly ITaskService _taskService;
-        private readonly ILogger<ProjectTaskController> _logger;
 
-        public ProjectTaskController(
-            ITaskService taskService,
-            ILogger<ProjectTaskController> logger)
+        public ProjectTaskController(ITaskService taskService)
         {
             _taskService = taskService;
-            _logger = logger;
         }
 
         [HttpPost]

@@ -14,14 +14,10 @@ namespace ProjectManager.API.Controllers
     public class LabelController : ControllerBase
     {
         private readonly ILabelService _labelService;
-        private readonly ILogger<LabelController> _logger;
 
-        public LabelController(
-            ILabelService labelService,
-            ILogger<LabelController> logger)
+        public LabelController(ILabelService labelService)
         {
             _labelService = labelService;
-            _logger = logger;
         }
 
         [HttpGet]

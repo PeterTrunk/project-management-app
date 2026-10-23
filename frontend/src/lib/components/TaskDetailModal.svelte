@@ -25,6 +25,7 @@
     import { X, Pencil, Trash2, Info, Paperclip, GitBranch, Plus, MessageSquare, CornerUpRight } from 'lucide-svelte';
     
     import { notify } from '../stores/notificationStore';
+    import { toDateTimeLocalValue, fromDateTimeLocalValue } from '../utils/dates';
 
     let activeDetailTab: 'details' | 'attachments' | 'git' | 'comments' = 'details';
 
@@ -57,7 +58,11 @@
     let editDescription = task.description ?? '';
     let editPriority = task.priority ?? '';
     let editEstimateInMinutes = task.estimateInMinutes ?? 0;
-    let editDueDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '';
+    //A toISOString().split('T')[0] korábban eldobta az időt, 
+    //és olyan erteket adott, amit a datetime-local input nem tud megjeleníteni 
+    //- a mező üresnek látszott. Ezen felül az UTC szerinti napot adta,
+    //ami a helyi eltolás miatt az előző napra mutathatott.
+    let editDueDate = toDateTimeLocalValue(task.dueDate);
 
     let attachments: AttachmentResponse[] = [];
     $: attachments = (currentTask.attachments ?? []) as AttachmentResponse[];
@@ -152,7 +157,7 @@
                     description: editDescription, 
                     priority: editPriority !== '' ? editPriority : null, 
                     estimateInMinutes: editEstimateInMinutes ?? null,
-                    dueDate: editDueDate ? new Date(editDueDate) : null,
+                    dueDate: fromDateTimeLocalValue(editDueDate),
                     rowVersion: task.rowVersion ?? 0
                 });
             success = "Módosítva";

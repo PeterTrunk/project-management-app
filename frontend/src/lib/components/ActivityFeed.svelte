@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { getActivitiesAsync, type ActivityResponse } from '../api/activityApi';
     import { activityStore, setPagedActivities } from '../stores/activityStore';
+    import { toUtcIsoString, toLocalDateKey } from '../utils/dates';
 
     import { 
         ClipboardList, Timer, MessageSquare, Pin, 
@@ -54,8 +55,8 @@
                 pageSize: PAGE_SIZE,
                 entityType: filterEntityType || undefined,
                 actorName: filterActorName || undefined,
-                dateFrom: filterDateFrom ? toUtcString(filterDateFrom) : undefined,
-                dateTo: filterDateTo ? toUtcString(filterDateTo) : undefined,
+                dateFrom: toUtcIsoString(filterDateFrom),
+                dateTo: toUtcIsoString(filterDateTo),
             });
 
             activities = [...data];
@@ -78,8 +79,10 @@
                 pageSize: PAGE_SIZE,
                 entityType: filterEntityType || undefined,
                 actorName: filterActorName || undefined,
-                dateFrom: filterDateFrom || undefined,
-                dateTo: filterDateTo || undefined,
+                //UGYANAZ a konverzio, mint az elso lapon. Korabban itt a nyers lokalis
+                //sztring ment, tehat a lapozas mas idoszakot kert, mint a loadActivities.
+                dateFrom: toUtcIsoString(filterDateFrom),
+                dateTo: toUtcIsoString(filterDateTo),
             });
             activities = [...activities, ...data];
             hasMore = data.length === PAGE_SIZE;
@@ -94,7 +97,9 @@
     function toggleTodayFilter() {
         isTodayFilter = !isTodayFilter;
         if (isTodayFilter) {
-            const today = new Date().toISOString().split('T')[0];
+            //A felhasznalo szerinti nap, nem az UTC szerinti: ejfel es a helyi eltolas
+            //kozott a toISOString() meg az elozo napot adta.
+            const today = toLocalDateKey();
             filterDateFrom = `${today}T00:00`;
             filterDateTo = `${today}T23:59`;
         } else {
@@ -102,11 +107,6 @@
             filterDateTo = '';
         }
         loadActivities();
-    }
-
-    function toUtcString(localDateTimeString: string): string {
-        if (!localDateTimeString) return '';
-        return new Date(localDateTimeString).toISOString();
     }
 
     function clearFilters() {

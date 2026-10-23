@@ -42,6 +42,15 @@ namespace ProjectManager.API.Services.Auth
         //Egy közös kijárat mögötti csapatnak bőven elég, egy címlista végigpróbálásához viszont kevés.
         private const int LoginIpAttemptsPerWindow = 50;
 
+        //A két tokenbeváltó végpont korlátja. NEM a találgatás ellen: a tokenek 256 bitesek
+        //(SecureTokenGenerator), a brute force nem reális fenyegetés - ugyanaz az érvelés,
+        //mint a meghívó tokennél. Amit megszüntet: hitelesítés nélkül, korlátlanul indítható
+        //adatbázis-lekérdezés. Mindkettő CSAK IP-alapú, mert e-mailt nem is kapunk, csak tokent.
+        //A küszöb azért tágabb a forgot_password_ip 15-énél, mert itt a jóhiszemű használat
+        //egy megosztott kijárat mögül több kérést is jelenthet (elgépelt link újrapróbálása).
+        private const int ResetPasswordIpAttemptsPerWindow = 10;
+        private const int VerifyEmailIpAttemptsPerWindow = 20;
+
         //Ugyanannyi, mint a jelszó-visszaállító tokené: elég idő a levél megnyitására, 
         //de a token nem marad korlátlanul érvényes. Lejárat után új link kérhető.
         private static readonly TimeSpan EmailVerificationTokenLifetime = TimeSpan.FromHours(1);
@@ -801,6 +810,17 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task VerifyEmailAsync(string token)
         {
+            //A korlát a lekérdezés ELŐTT fut, különben nem védene attól, amiért van:
+            //a hitelesítés nélküli adatbázis-terheléstől. Ugyanaz a sorrend, mint a
+            //webhook végponton és a regisztráción.
+            var ipAddress = GetIpAddress();
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"verify_email_ip:{ipAddress}", VerifyEmailIpAttemptsPerWindow, TimeSpan.FromHours(1));
+
+            if (isLimited)
+                throw new RateLimitException(
+                    $"Túl sok megerősítési kísérlet! Próbáld újra {retryAfter} másodperc múlva!");
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
             if (user == null)
@@ -915,6 +935,15 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task ResetPasswordAsync(string token, string newPassword)
         {
+            //A korlát a lekérdezés ELŐTT fut - lásd a VerifyEmailAsync megjegyzését.
+            var ipAddress = GetIpAddress();
+            var (isLimited, retryAfter) = await _rateLimitService
+                .IsRateLimitedAsync($"reset_password_ip:{ipAddress}", ResetPasswordIpAttemptsPerWindow, TimeSpan.FromHours(1));
+
+            if (isLimited)
+                throw new RateLimitException(
+                    $"Túl sok jelszó-visszaállítási kísérlet! Próbáld újra {retryAfter} másodperc múlva!");
+
             var resetToken = await _context.PasswordResetTokens
                 .Include(t => t.User)
                 .FirstOrDefaultAsync(t => t.Token == token && !t.IsUsed);

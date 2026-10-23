@@ -3317,9 +3317,9 @@ Statikus kódolvasás és adatfolyam-követés két irányból:
 
 Éles rendszer ellen nem futott támadás, minden állítás kódútvonalból levezetve.
 
-**Eredmény:** 30 találat `SECURITY-AUDIT.md`-ben (2 kritikus, 3 magas, 13 közepes, 12 alacsony),
-találatonként hely, támadási forgatókönyv, enyhítő tényezők és javaslat.
-A riport nincs verziókezelve (`.gitignore`), mert éles rendszer sebezhetőségeit írja le.
+**Eredmény:** 30 találat (2 kritikus, 3 magas, 13 közepes, 12 alacsony), találatonként
+hely, támadási forgatókönyv, enyhítő tényezők és javaslat. A javítások leírása etaponként
+ebben a fejezetben szerepel.
 
 **Kivitelezés 9 etapban:**
 A javítás nem egy PR-ben ment, hanem etaponként: minden etap önállóan lefordul, egy témát fed le,
@@ -3583,6 +3583,23 @@ a streamelt fájlletöltés közben keletkező hiba másodlagos kivételt okozot
 - Besorolás: "nem található" -> 404; "időközben módosult" és duplikátumok -> 409;
   jogosultsági szabály (saját komment, tulajdonos védelme) -> 403; minden más üzleti szabály -> 400
 - A refactor összesen -855 / +323 sor: nagyobb részt **töröl**, mint amennyit hozzáad
+
+**Utólagos tisztítás - a visszamaradt naplózók:**
+A `catch` blokkok törlésével a controllerek `ILogger<T>`-je **használaton kívül maradt**: a
+hibanaplózás a middleware dolga lett, a controllerek pedig semmi mást nem naplóztak. A
+konstruktorokban mégis ott maradt, mert fordítási hibát nem okozott, és a C# a használaton
+kívüli, csak hozzárendelt mezőre nem ad figyelmeztetést. Mérve: **15 controllerben nulla**
+`_logger.Log*` hívás volt.
+
+Mind a 15 helyen törölve a mező, a konstruktor-paraméter és a hozzárendelés (-73 / +14 sor).
+Ahol ezzel egyetlen függőség maradt, a konstruktor egy sorba került. Két dolog **nem** változott:
+a `WebhookController` naplózója marad, mert ott 8 valódi hívás van (a webhook-elutasítások
+okának megkülönböztetése), és a szolgáltatások naplózói is maradnak - ott ellenőrizve
+mindegyik használt.
+
+Ez azért érdemel megjegyzést, mert a halott függőség nem semleges: azt sugallja a következő
+olvasónak, hogy a controllernek **dolga van** a naplózással, és a következő hibakezelés
+kísértést ad arra, hogy megint a controllerbe kerüljön, ne a middleware-be.
 
 **Két szándékosan megtartott try/catch:**
 a `WebhookController` `JsonException` ága, és az `AuthController.ResendVerification`, ami
@@ -4897,6 +4914,320 @@ Ezért új `LegalVersionTests`: a teszt beolvassa a frontend `legal.ts`-ét (a f
 A háló ki lett próbálva: a két értéket szándékosan elcsúsztatva **két teszt bukik el**.
 Így az eltérés fordításkor derül ki, nem élesben.
 
+### A használaton kívüli globális szerepkör-táblák eltávolítása
+
+**Probléma:** a `Roles` és a `UserRoles` tábla a tervezési fázisból maradt itt - a szándék egy
+rendszerszintű `Admin` / `User` szerepkör volt, admin panellel. Az viszont sosem készült el, és
+a jogosultság-ellenőrzés teljesen máshol valósult meg: a `ProjectMembers.Role` oszlopban,
+projekt-hatókörűen, a `PolicyNames` házirendekkel.
+
+Mérve: a két tábla **kizárólag** a DbContext konfigurációjában és az induló migrációban
+szerepelt - nulla szolgáltatás, controller vagy lekérdezés használta -, és **mindkettő üres
+volt**, még seedelve sem.
+
+Ez önmagában is adósság, de az ER-diagramok elkészültével felszínre is került: egy
+szakdolgozathoz tartozó diagramon minden tábla kérdést hív, és a „mire van?" kérdésre a
+„semmire" a lehető legrosszabb válasz. Ráadásul elmosja azt, ami valódi tervezési döntés: hogy
+a szerepkör **szándékosan** projekt-hatókörű, tehát ugyanaz a felhasználó lehet `Owner` az
+egyik projektben és `Viewer` a másikban.
+
+**Megoldás:** teljes eltávolítás - a két modellosztály, a `User.UserRoles` navigáció, a két
+`DbSet`, a két konfigurációs blokk, és egy migráció, amely eldobja a táblákat. Adatvesztés
+nincs, mert üresek. Ugyanaz a logika, mint a git `AccessToken`-nél: egy tárolt, de sosem
+használt dolog **törlése jobb, mint a megtartása** - a kockázat így nem csökken, hanem megszűnik.
+
+**Amit a döntés közben mérni kellett.** Felmerült egy köztes megoldás: hagyjuk meg a
+modellosztályokat emlékeztetőnek, és csak a `DbSet`-eket vegyük ki, így a tábla nem jelenik meg
+az adatbázisban. **Ez nem működik**, és a generált migráció meg is mutatta, miért:
+
+```csharp
+migrationBuilder.RenameTable(name: "UserRoles", newName: "UserRole");
+migrationBuilder.RenameTable(name: "Roles",     newName: "Role");
+```
+
+Két mechanizmus dolgozik egyszerre. Egyrészt az EF Core a **navigációs tulajdonságokon
+keresztül** is felveszi az entitásokat a modellbe: a `User.UserRoles` miatt a `UserRole` (és
+rajta keresztül a `Role`) `DbSet` nélkül is bent marad. Másrészt a tábla **neve** a `DbSet`
+property nevéből származott - nélküle az EF az osztálynévre esik vissza, tehát egyes számra.
+
+Vagyis a köztes megoldás eredménye az lett volna, hogy a táblák **megmaradnak, átnevezve**, és
+a séma elcsúszik a többi, többes számú táblától. A modellosztályok megtartásához három
+`Ignore` hívás is kellett volna a DbContextben - halott osztályok plusz utasítás arról, hogy
+felejtsük el őket.
+
+Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
+listájába egy sor a globális szerepkörökről.
+
+### Projekt-hatókör a kérés törzséből, és egy néma adatbázis-kényszer
+
+**Kiváltó ok:** a szakdolgozat adatmodell-fejezetéhez gyűjtött anyag összevetése a kóddal.
+Négy hiba derült ki, és egyik sem a funkció hiányából, hanem abból, hogy **egy védelem
+meglétéből nem következik a működése**.
+
+#### 1. A hatókör a törzsből jött, a jogosultság az útvonalról
+
+Három létrehozó metódus a kérés **törzséből** vett projekt-, illetve board-azonosító alá írt,
+miközben a jogosultságot a `ProjectRoleHandler` az **útvonal** `projectId`-jére ellenőrzi:
+
+| Hely | Mit írt | Ellenőrizte? |
+|---|---|---|
+| `SprintService.CreateSprintAsync` | `ProjectId = dto.ProjectId` | nem |
+| `BoardService.CreateBoardAsync` | `ProjectId = dto.ProjectId` | nem |
+| `ColumnService.CreateColumnAsync` | `BoardId = dto.BoardId` | **a route `boardId`-t igen - majd eldobta** |
+| `TaskService` (`dto.BoardId`, `dto.SprintId`) | - | **igen**, a projekthez méri (ez a helyes minta) |
+
+Következmény: az "A" projekt adminja a `POST /api/projects/A/sprints` végpontra
+`{"projectId": "B"}`-t küldve **a B projektbe írt**. Nem jogosultsági hiba a végponton
+(a sprintek kezelése az adminé), hanem a jogosultsági kapu **megkerülése**: a kapu az
+útvonalra szólt, az írás máshová ment. A `ColumnService` a legtanulságosabb - lekérdezte,
+hogy a route `boardId` a route projekthez tartozik-e, aztán a validált érték helyett a
+törzsből jövőt használta.
+
+**Megoldás:** mindhárom hely a paraméterként kapott értéket használja, **és a három DTO-mező
+törlésre került**. Ez a különbség lényegi: egy ellenőrzés elfelejthető, egy nem létező mezőt
+viszont nem lehet megadni. A törlés után a fordító mutatta meg a négy érintett tesztet -
+pontosan ezt adja a szerkezeti javítás az ellenőrzés helyett. A frontend oldalán a három
+kérés-típusból is kiesett a mező; a felület eddig is ugyanazt az értéket küldte, mint az
+útvonal, tehát ez nem viselkedésváltozás.
+
+#### 2. Amiért a cross-project tesztmátrix ezt átengedte
+
+A háló azokat a metódusokat követelte meg tesztelni, amelyeknek az első paramétere
+`Guid projectId` **és van még legalább egy nem-nullozható `Guid` paraméterük**. A
+`CreateSprintAsync(Guid, CreateSprintDto)` második paramétere DTO, nem `Guid` - kiesett a
+hálóból. A `CreateColumnAsync`-ra **volt** teszt, és **zöld volt**, mert a route-ellenőrzés
+tényleg helyes; a hiba a DTO mezőjében volt, amit a teszt nem feszített.
+
+Vagyis a háló csak a **paramétereket** nézte, a **törzset** nem.
+
+**Megoldás:** új állítás a mátrixban, a hibaalakra szabva - *egy DTO nem ismételheti meg azt
+az azonosítót, amit a metódus már paraméterként megkap.* Ilyenkor ugyanaz az érték kétszer
+érkezik: egyszer az útvonalról (amire a jogosultság szól), egyszer a törzsből (amire semmi).
+
+A szabály pontosságát egy korábbi, tompább változat mutatta meg: az minden `BoardId` mezőt
+jelzett, köztük a `CreateTaskDto.BoardId`-t is - ott viszont a board a művelet **célja**, nem
+a hatóköre, az útvonal nem hordozza, és a `TaskService` ellenőrzi. A paraméter-egyezéshez
+kötött szabály ezt helyesen átengedi. Mutációval igazolva: a mező visszatétele a tesztet
+elbuktatja, és megnevezi a metódust és a mezőt.
+
+#### 3. A szűrt egyedi index hónapokig néma volt
+
+Az adatbázisban ez állt:
+
+    WHERE (("State")::text = 'active'::text)
+
+Az index `'active'`-ra szűrt **kisbetűvel**, az alkalmazás viszont `SprintStates.Active`-ot
+ír, ami `"Active"`. A szűrő tehát **egyetlen valódi sorra sem illeszkedett**: a
+"projektenként egy aktív sprint" adatbázis szintű garancia nem létezett. A hiba a
+`20260301150700_AddConstraintsAndIndexes` migrációval, 2026 márciusában került be.
+
+Mérve, kísérlettel (tranzakcióban, visszaállítva): két `'Active'` sprint **beszúrható volt**
+ugyanabba a projektbe; `'active'`-kal viszont a második elbukott. Vagyis az index működött,
+csak egy olyan értékre, amit a rendszer soha nem állít be.
+
+**Ez a hibaosztály lényege:** egy *feltételes* kényszer sosem jelez, ha a feltétel nem
+illeszkedik. Egy sima `UNIQUE` vagy `NOT NULL` az első használatnál kiderül; egy parciális
+index csendben elfogad mindent. Ugyanaz a logika, amiért a konkurenciavezérléshez az `xmin`
+rendszeroszlop lett a választás a kézzel kezelt verzióoszlop helyett: azt minden írási úton
+növelni kell, és ha egy helyen kimarad, a védelem némán megszűnik.
+
+**Megoldás:** a szűrő literálja **a konstansból képződik**, nem kézzel beírva, így a két érték
+nem tud elcsúszni. A migráció eldobja és újraépíti az indexet, és **előtte ellenőrzi az
+előfeltételt**: mivel a kényszer eddig nem érvényesült, létezhet olyan projekt, amelyben több
+aktív sprint van - ott a `CREATE UNIQUE INDEX` elbukna egy nehezen érthető hibával. A migráció
+ezért egy `RAISE EXCEPTION`-nel kimondja, mit kell tenni, és a javítás **szándékosan nem
+automatikus**: azt, hogy a többletből melyik sprint maradjon aktív, csak a projekt tagjai
+tudják eldönteni. (Fejlesztőin mérve nincs ilyen projekt.)
+
+Plusz négy integrációs teszt, mert a kényszer **az adatbázisról** szól, nem a kódról: a szűrő
+tartalmazza-e a konstanst (a `pg_index`-ből olvasva), két aktív sprint egy projektben
+elbukik-e, két *különböző* projektben megengedett-e (ne legyen túl szigorú), és hogy egy aktív
+mellett a lezárt/tervezett sprintek megmaradnak-e.
+
+#### 4. A létrehozás megkerülte az aktiválás ellenőrzését
+
+A `CreateSprintAsync` közvetlenül a `dto.State`-et írta, a validátor pedig engedte az
+`"Active"`-ot - ellenőrzés nélkül. Vagyis két aktív sprintet nem is kellett versenyhelyzetben
+előállítani: elég volt kétszer létrehozni egyet `state: "Active"`-kal.
+
+**Megoldás:** létrehozni csak `Planning` állapotban lehet. Az állapotgép
+(`Planning -> Active -> Completed`) így nem indul középről, és az aktiválás egyetlen úton,
+az `ActivateSprintAsync`-en történik. A felület mindig `'Planning'`-ot küldött, tehát ez nem
+töréses változás.
+
+A validátor-teszt, amely addig azt állította, hogy **minden** deklarált állapot elfogadható,
+átíródott: a védő szerepe megmaradt, csak máshogy. Ha a `SprintStates` bővül, a teszt elbukik,
+és akkor el kell dönteni, hogy az új állapot létrehozható-e - enélkül egy új állapot csendben
+bekerülne anélkül, hogy bárki végiggondolta volna, honnan érhető el.
+
+#### 5. Egy pontosítás a saját elemzésünkhöz
+
+Az első átvizsgálás azt állította, hogy az `ActivateSprintAsync` ellenőrzése *olvasás-majd-írás
+tranzakció nélkül*. **Ez téves volt:** a metódus `Serializable` tranzakciót nyit, és azon belül
+ellenőriz, tehát a versenyhelyzet meg van előzve.
+
+Ami tényleg hibás volt: a vesztes kérés **500**-at kapott. A szerializációs hiba a generikus
+`catch (Exception)` ágon át a middleware-be futott, ami minden nem `AppException`-t 500-ra
+képez - miközben a felhasználó szempontjából ez ugyanaz az eset, amit a fenti ellenőrzés elkap
+("már van aktív sprint"), tehát `409` a helyes válasz.
+
+**Megoldás:** a konkurencia-kimenet `ConflictException`-re fordítása. A szűrő két hibaalakot
+fog, és ez a lényegi rész: a PostgreSQL a szerializációs hibát (40001) a `COMMIT`-nál nyers
+`PostgresException`-ként adja, az `UPDATE`-nél viszont az EF Core **`DbUpdateException`-be
+csomagolja**. Egy csak a nyers alakra szűrő ág a csomagolt esetet átengedné - ezért a helper
+végigjárja a kivétel-láncot. A 23505 (egyediség-sértés) ugyanígy jöhet, azt a javított szűrt
+index adja.
+
+**Ami nyitva marad:** a `CounterService` retry-ága pontosan ettől a csomagolástól szenvedhet
+(`catch (PostgresException ex) when (ex.SqlState == "40001")`), és erre **nincs
+konkurencia-teszt**. Vagyis a `TaskKey` számláló retry-ágáról ma nem tudjuk, teljes-e. Ez
+tudatosan marad nyitva: a méréséhez két olyan kapcsolat kell, amely látja a másik commitját,
+és ez önálló munka.
+
+### A példányszám mint deklarált topológia: kérelemkorlátozás, backplane, DB pool
+
+**Probléma:** a felülvizsgálat kiindulópontja az a feltételezés volt, hogy egy példánynál a
+kérelemkorlátozás memóriában számol, és a Redis csak több példányhoz kell. **Méréssel kiderült,
+hogy ilyen visszaesés nem létezett**: a `RateLimitService` kötelezően `IConnectionMultiplexer`-t
+kér, az pedig csak akkor került a konténerbe, ha a `REDIS_CONNECTION` be volt állítva - az
+`IRateLimitService` viszont feltétel nélkül regisztrált volt.
+
+A következmény a csendes hibák osztályába tartozott, és a hatóköre szélesebb volt a korlátozott
+végpontoknál. Mivel az `AuthService` konstruktora kéri az `IRateLimitService`-t, a **teljes
+AuthController** feloldhatatlanná vált, az `AttachmentService`-szel és a webhook végponttal
+együtt. Mérve, `REDIS_CONNECTION` nélkül:
+
+| Környezet | Viselkedés |
+|---|---|
+| Development | Az API **el sem indul** - a DI validáció induláskor elkapja |
+| **Production** | **Elindul**, majd minden bejelentkezés, regisztráció és tokencsere `500` |
+
+Ez volt az **egyetlen** kritikus környezeti változó fail-fast ellenőrzés nélkül: 13 másik dob
+`InvalidOperationException`-t induláskor. A `.env.example` kommentje ráadásul azt állította,
+hogy „EGY backend példánnyal az alkalmazás elindul" - vagyis a dokumentáció megerősítette a
+téves feltevést.
+
+**Megoldás:** a **deklarált példányszám** lett az igazságforrás, nem az, hogy be van-e állítva
+egy connection string. Egy új `API_REPLICAS` változó adja a compose `deploy.replicas` értékét
+**és** az alkalmazás saját tudását is róla - ugyanabból a `${API_REPLICAS:-2}` kifejezésből,
+tehát a kettő nem tud elcsúszni. Három dolog következik belőle:
+
+1. **Hány konténer indul** (`deploy.replicas`).
+2. **Kell-e Redis.** Egy példánynál nem: új `InMemoryRateLimitService` számol a folyamat
+   memóriájában, ami egy példánnyal helyes, és a SignalR-nek sincs kit értesítenie. Több
+   példánynál **kötelező**, és a hiánya induláskor dob.
+3. **Mekkora a DB kapcsolatkészlet** példányonként.
+
+Miért a példányszám a helyes kapcsoló, és nem a connection string megléte: egy feltétel nélküli
+in-memory visszaesés **új** csendes hibát hozott volna. Ha több replikánál marad ki a
+`REDIS_CONNECTION`, minden példány a saját számlálóit vezeti, tehát a tényleges korlát a
+példányszámmal felszorozódik - és semmi nem hibázik. A példányszámot viszont nem lehet
+„elfelejteni": az mondja meg, hány konténer induljon.
+
+**Ami nyitva marad, és ezért hangos.** A `docker compose up --scale pm-api=N` felülírja a
+`deploy.replicas` értékét az env var változása nélkül - ilyenkor az alkalmazás egypéldányosnak
+hiszi magát. Erre nem több kód a válasz, hanem egy indulási `WRN` sor, amely kimondja, hogy
+a korlátok memóriában számolnak. A fordított tévedés (több példányt deklarálsz, egy fut)
+ártalmatlan: a Redis-es számláló akkor is helyes.
+
+**A DB kapcsolatkészlet.** A kapacitásterv előre jelezte, és a mérés igazolta: az Npgsql
+alapértelmezett 100-as készlete **folyamatonként** értendő, tehát két replika 200 kapcsolatot
+kérhetett egy 100-as `max_connections` ellen. A 100 fölötti kérés `53300: too many clients
+already`, ami **minden** replikát érint. A pool mostantól a példányszámból származik:
+
+```
+Maximum Pool Size = (max_connections - 20) / API_REPLICAS
+```
+
+A 20 tartalék a mentés `pg_dump`-ja, egy üzemeltetői `psql` és az induláskori migráció számára
+van. Két replikánál ez 40 kapcsolat példányonként. A korlát értelme nem a szűkítés - a készlet
+lusta, csak annyit nyit, amennyi kell -, hanem a **hibamód cseréje**: pool-timeout egyetlen
+replikán (lokális, újrapróbálható) a globális kiesés helyett. Ha az üzemeltető explicit
+`Maximum Pool Size`-t ad a `DATABASE_URL`-ben, az nyer.
+
+A `max_connections` ezért **kiírva** áll a compose fájlokban (`postgres -c max_connections=100`),
+pedig a 100 az alapértelmezés: a kód ebből az értékből származtat, és egy implicit alapértékre
+hivatkozó feltevést nem lehet átnézni. Pontosan ez a hibaosztály okozta a korábbi csendes
+hibákat - a konfiguráció két helyen élt. Nyolc replika felett a 10-es alsó pool-korlát miatt az
+összefüggés már nem állna; ilyenkor egy `WRN` sor megadja a szükséges `max_connections` értéket.
+
+**Hidegindítás.** A `ConnectionMultiplexer.Connect()` szinkron és eager, `abortConnect=false`
+nélkül. Mérve: ha a Redis még nem fogad kapcsolatot, az API `RedisConnectionException`-nel el
+sem indul. A `pm-api` ezért `condition: service_healthy`-vel vár a redisre a korábbi
+`service_started` helyett - a healthcheck a Redis jelszavas védésekor bekerült, tehát ez
+ingyen volt.
+
+**A kérelemkorlátozás lefedettsége.** A felülvizsgálat a hiányzó korlátokat is számba vette.
+A hitelesítés nélküli végpontok közül négyen nem volt korlát: `refresh`, `logout`,
+`verify-email`, `reset-password`. Ebből kettő kapott IP-alapú korlátot
+(`reset_password_ip` 10/óra, `verify_email_ip` 20/óra), mindkettő **a tokenlekérdezés előtt**
+futva - ugyanaz a sorrend, mint a regisztráción és a webhook végponton: a korlát a
+drága műveletet megelőzi, különben nem védene attól, amiért van.
+
+Ez **nem** a találgatás ellen szól: a tokenek 256 bitesek (`SecureTokenGenerator`), a brute
+force nem reális - ugyanaz az érvelés, amivel a meghívó token korlátja tudatosan
+elmaradt. Amit megszüntet: a hitelesítés nélkül, korlátlanul indítható adatbázis-lekérdezés.
+
+A `refresh` és a `logout` **szándékosan korlátlan marad**. A klienst időzítő hívja a token
+lejárata előtt, tehát egy IP-alapú korlát egy megosztott kijárat mögötti csapatot kizárna -
+és ez az `AuthService` saját tanulsága: a `login_ip` is csak *társ*korlátként működik, a
+szűkebb, e-mailt is tartalmazó kulcs mellett. Az e-mail-bombázás iránya zárt: mérve mindhárom
+levélküldési hely az `AuthService`-ben van, és mind korlát alatt.
+
+### Egy sebezhetőségi riasztás triázsolása a tényleges kódúthoz mérve
+
+**Probléma:** a példányszám-munka közben egy kényszerített NuGet restore előhozott egy
+**NU1902** figyelmeztetést: a `MessagePack 2.5.301` ismert sebezhetőséget tartalmaz
+(CVE-2026-92707, CVSS 5.3 közepes). A csomag a `Microsoft.AspNetCore.SignalR.StackExchangeRedis
+10.0.9`-en keresztül, **tranzitívan** érkezik - közvetlenül nem használjuk.
+
+Két tanulság már itt, a javítás előtt:
+
+- **A figyelmeztetés nem volt új, csak nem nézte meg senki.** Lokálisan azért nem látszott,
+  mert a buildek gyorsítótárazott restore-ral futottak, és a NuGet audit nem futott le újra
+  (mérve: a warning a változtatás nélkül is megjelenik `--force` restore-ral, az API projekten
+  is). A **CI-ban viszont ott volt**: a workflow friss `dotnet restore`-t futtat NuGet
+  gyorsítótár nélkül, tehát az audit minden futásnál lefutott és kiírta. Ez a kellemetlenebb
+  tanulság - nem a mérés hiányzott, hanem a figyelem. Egy kiírt, de a buildet meg nem állító
+  figyelmeztetés gyakorlatilag láthatatlan; a `-warnaserror:NU1901,NU1902,NU1903` megfontolása
+  ezért az `OPERATIONS.md` listájára került.
+- **A riasztást a kódúthoz kell mérni, nem reflexből patchelni.** A tanácsadó szerint a
+  támadáshoz nem megbízható MessagePack adat `System.Object`-be deszerializálása kell, és
+  kifejezetten az „`object` paraméteres SignalR hub metódusokat" nevezi meg veszélyeztetettként.
+
+**A triázs eredménye - mérve, nem feltételezve:**
+
+| Feltétel | Állapot |
+|---|---|
+| MessagePack hub protokoll | **Nincs**: `AddMessagePackProtocol` nulla találat, a kliens felé JSON megy; a frontend sem húz be msgpack csomagot |
+| `object` paraméteres hub metódus | **Nincs**: a `ProjectHub` két metódusa `(string projectId)` |
+| A maradék felület: a Redis backplane boríték | A Redis élesben **nincs porttal kitéve**, `requirepass` mögött van, és csak a `pma-internal` hálózaton érhető el |
+
+Vagyis a kliens bájtjai soha nem érnek el a MessagePack deszerializálóhoz. Aki a backplane
+csatornára tudna payloadot tenni, annak már megvan a Redis jelszava és a belső hálózati
+hozzáférése - abban a helyzetben pedig egyszerűen `DEL`-lel törli a kérelemkorlátozás kulcsait,
+ami nagyobb baj egy memória-DoS-nál. Ez pontosan az a fenyegetésmodell, amit a Redis
+jelszavas védése lezárt.
+**Elérhető kódút tehát nincs, a javítás nem sürgős.**
+
+**Megoldás - és az indok, ami nem a biztonság:** közvetlen `MessagePack 2.5.303` hivatkozás az
+API projektben. Nem azért, mert a kockázat valós itt, hanem mert az alternatíva egy **állandó
+NU1902 minden buildben**, ami arra tanít, hogy a figyelmeztetéseket figyelmen kívül kell hagyni -
+a projekt szabálya viszont a 0 warning. A figyelmeztetés költsége folyamatos, a javítás egyszeri
+és egy soros.
+
+**Ami a 30 napos szabállyal történt, és miért érdekes.** A szabály és a biztonsági javítás itt
+**nem ütközött**, de ez nem volt garantált:
+
+| Lehetőség | Kiadás | Kor | Döntés |
+|---|---|---|---|
+| `MessagePack 2.5.303` | 2026-09-17 | **36 nap** | **Ez lett** - megfelel a szabálynak |
+| `SignalR.StackExchangeRedis 10.0.13` (maga is `>= 2.5.303`-at kér) | 2026-10-13 | **10 nap** | Elvetve: megsértené a szabályt, és magával vonná az ASP.NET patch-családot |
+
+Vagyis a **tisztább** út (a tranzitív pin elhagyása) éppen az, amelyik a saját szabályunkba
+ütközik. A pin ezért **átmeneti**: 2026-11-12 után a `10.0.13` felvehető, és akkor a közvetlen
+`MessagePack` hivatkozás törölhető. Ez a `csproj` kommentjében is ott áll.
+
 ### Az objektumtároló leváltása: MinIO -> SeaweedFS
 
 **Probléma:** a MinIO közösségi kiadása a fejlesztés alatt fokozatosan megszűnt. A GitHub repó
@@ -4963,6 +5294,66 @@ Ami hibás volt, az az **állítás**: a védelem nem két rétegű, hanem egy. 
 kommentek javítva, a valódi működés és a mérés eredménye leírva. A presigned úton az aláírt
 fejléc kikényszerítése (presigned POST policy `content-length-range` és `Content-Type`
 feltétellel) külön munka, és nem ebbe a cserébe tartozik.
+
+### Az éles üzembe állítás tanulságai: ami csendben elromlott
+
+Mindkét csere kódszinten elsőre zöld volt, az éles beállítás viszont **öt** olyan hibát
+termelt, amelyek közül négy **némán** jelentkezett. Mindegyik ugyanabba a mintába tartozik:
+egy üres vagy félreértett konfigurációs érték nem hibát ad, hanem rosszabb viselkedést.
+
+**1. A `.env` betöltése a naplózás konfigurálása UTÁN futott.** A Serilog sink a környezetből
+olvassa a betöltési hitelesítő adatokat, tehát fejlesztői környezetben MINDIG üresek voltak,
+bármi is volt a fájlban - és minden napló 401-gyel elakadt. A Seq-nél ez rejtve maradt, mert
+az nem igényelt hitelesítést. Javítva: a betöltés a fájl elejére került, indoklással.
+
+**2. A sink hibái el voltak nyelve.** A Serilog alapértelmezésben nem jelzi, ha egy köteg
+elbukik. Javítva: `SelfLog` a hibakimenetre, plusz indulási figyelmeztetés hiányzó hitelesítő
+adatra. Ez a figyelmeztetés az élesben is azonnal megmutatta, mi a baj.
+
+**3. Két különböző név ugyanarra az értékre.** A compose `ZO_ROOT_USER_PASSWORD:
+${OO_ROOT_USER_PASSWORD}` alakja miatt a telepítő a gyártó által dokumentált `ZO_` nevet
+állította be, a behelyettesítés üresre oldódott, és a konténer "password is too weak" hibával
+meg sem indult. Javítva: ahol a változó a szolgáltatóé, ott a neve is a szolgáltatóé
+(`ZO_*`); ahol a miénk, ott `OO_*`.
+
+**4. Az admin felület jelszó nélkül futott.** A SeaweedFS `-admin.password` flagje üres
+értéknél **kikapcsolja a hitelesítést** ("if empty, auth is disabled"), és a konténer
+elindul. Ugyanez igaz az `AWS_*` kulcsokra az S3 API-n, amely a presigned URL-ek miatt
+publikusan elérhető.
+
+Javítva, és ez a legfontosabb: a három hitelesítési változó a Compose **kötelező-változó**
+alakját kapta (`${VAR:?üzenet}`), tehát egy hiányzó érték mellett a **deploy elbukik** egy
+olvasható hibaüzenettel, nem pedig egy bárkit beengedő szolgáltatás indul el.
+
+**5. YAML blokk-skalárba tett komment.** A `command: >` blokkban a `#` nem komment, hanem
+szöveg: egy magyarázat 23 hamis argumentumként került a parancsba, és mivel a Go
+flag-feldolgozó az első nem-flag argumentumnál leáll, az utána jövő `-admin.password` **soha
+nem érvényesült**. Minden magyarázat a blokk ELÉ tartozik.
+
+#### Két viselkedés, amit érdemes megjegyezni - mindkettő mérve
+
+| | Hogyan működik | Változtatható utólag? |
+|---|---|---|
+| `ZO_ROOT_USER_*` (OpenObserve) | adatbázis-sort hoz létre az első inicializáláskor | **Nem** - a kötet törlése kell hozzá |
+| `-admin.password` (SeaweedFS) | folyamat-argumentum, minden induláskor újraolvasódik | **Igen** - elég egy újraindítás |
+
+Az elsőnél a kötettörlés külön csapdát hozott: a `docker volume rm` **leállított** konténer
+mellett is "volume is in use" hibát ad - a konténert **törölni** kell, nem leállítani.
+
+#### Egy hibakeresési tanulság az SSH-tunnelről
+
+A tároló admin felülete `ERR_CONNECTION_RESET`-tel jött, és a helyi reprodukció is ugyanezt
+adta - miközben a helyi konténer rendben futott. Az ok: a nyitott SSH-tunnel a `127.0.0.1`-en
+**elfedte** a helyi portot, tehát a kérés az éles szerverre ment, ahol nem volt publikált
+port. Két következménye van: a tunnelt érdemes eltérő helyi portra irányítani, és a
+fejlesztői alkalmazás nyitott tunnel mellett az **éles** aggregátorba küldi a naplóit.
+
+#### Az ellenőrző teszt is kapott egy javítást
+
+Az `EnvExampleCoverageTests` mintája csak a csupasz `${VAR}` alakot ismerte, a kötelező
+`${VAR:?...}`-t nem - így egy valóban használt változót "dokumentált, de nem hivatkozott"-ként
+jelzett. Kiterjesztve a Compose mindhárom alakjára. A háló egyébként a csere alatt **négyszer**
+fogott hibát, ezért érte meg megírni.
 
 ## Git Webhook Enhancements
 PR body-based task matching in addition to title matching. GitLab webhook full support and testing. Git provider abstraction using Factory Pattern for easy extension with new providers. Webhook endpoint hardening: rate limiting to prevent spam/abuse despite existing HMAC signature validation.

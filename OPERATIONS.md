@@ -234,7 +234,54 @@ Olcsó szokás, ami tovább csökkenti a kockázatot: ha valaha ténylegesen ér
 
 ---
 
-## 3. Adatvédelmi incidens
+## 3. A példányszám megváltoztatása
+
+A futó API példányok számát **egyetlen** változó deklarálja, az `API_REPLICAS`. Ugyanez a
+változó adja a `docker-compose.prod.yml` `deploy.replicas` értékét **és** az alkalmazás saját
+tudását is róla, hogy a kettő ne tudjon elcsúszni. Három dolog függ tőle, ezért a módosítása
+nem csak egy szám átírása.
+
+### Mi következik a példányszámból
+
+| Példányszám | Kérelemkorlátozás | SignalR | DB pool / példány |
+|---|---|---|---|
+| 1 | a folyamat memóriájában | nincs backplane | 80 |
+| 2 (jelenlegi) | **Redis kötelező** | Redis backplane | 40 |
+| 3 | **Redis kötelező** | Redis backplane | 26 |
+
+A pool képlete: `(max_connections - 20) / API_REPLICAS`. A 20 tartalék a mentés `pg_dump`-ja,
+egy üzemeltetői `psql` munkamenet és az induláskor futó migráció számára van.
+
+### Mire kell figyelni
+
+- **Egyről többre emelve a `REDIS_CONNECTION` kötelezővé válik.** Ha nincs beállítva, az API
+  **indulásnál dob**, érthető üzenettel. Ez szándékos: megosztott számláló nélkül minden
+  példány külön számolna, tehát a tényleges korlát a példányszámmal felszorozódna — csendben.
+- **Egyre csökkentve a korlátok a memóriában számolnak.** Ez egy példánnyal helyes, de az
+  újraindítás nullázza a számlálókat. Az indulási naplóban ilyenkor egy `WRN` sor áll
+  (`RateLimitInMemory`), ami kimondja a módot.
+- **A `docker compose up --scale pm-api=N` NEM elég.** Felülírja a `deploy.replicas`-t, de az
+  env vart nem — az alkalmazás ilyenkor egypéldányosnak hiszi magát, és a korlátok
+  példányonként számolnak. Mindig az `API_REPLICAS`-t állítsd át.
+- **Nyolc példány felett** a 10-es alsó pool-korlát miatt a példányok együtt több kapcsolatot
+  kérhetnének, mint a `max_connections`. Ilyenkor az indulási napló egy `WRN` sorban
+  (`DbPoolFloorReached`) megadja a szükséges értéket. A `max_connections` a compose fájlokban
+  **kiírva** áll (`postgres -c max_connections=100`), és a kódban egy állandó párja van
+  (`ServiceCollectionExtensions.PostgresMaxConnections`) — **a kettőt együtt kell átírni.**
+
+### A napló ellenőrzése deploy után
+
+Az OpenObserve-ben a mód egyetlen lekérdezéssel ellenőrizhető:
+
+```sql
+SELECT * FROM default WHERE eventtype = 'RateLimitInMemory'
+```
+
+Két replika mellett ez **nem adhat találatot**. Ha mégis ad, akkor vagy az `API_REPLICAS`
+maradt 1-en, vagy a példányszám kézi skálázással lett megemelve — mindkét esetben a
+kérelemkorlátozás a vártnál engedékenyebb.
+
+## 4. Adatvédelmi incidens
 
 Adatvédelmi incidens minden olyan biztonsági esemény, amely személyes adat véletlen vagy
 jogellenes megsemmisítését, elvesztését, megváltoztatását, jogosulatlan közlését vagy az
@@ -266,7 +313,7 @@ is jogszabályi kötelezettség.
 
 ---
 
-## 4. Éles indulás előtti ellenőrzőlista
+## 5. Éles indulás előtti ellenőrzőlista
 
 A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pillanatában
 **igaznak kell lenniük**. Ez a lista gyűjti össze, mi van még nyitva.
@@ -285,20 +332,27 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       `ZO_COMPACT_DATA_RETENTION_DAYS: 30` a `docker-compose.prod.yml`-ben van, tehát
       verziókezelt. A deploy után **egyszer** ellenőrizd, hogy tényleg érvényre jutott — az
       alapértelmezés 3650 nap lenne, ami megsértené az adatkezelési tájékoztatót
-- [ ] **A mentés célja átállítva** a `seaweed_data` volume-ra a Dokploy felületén, és a
-      csere utáni első mentésben **ellenőrizve**, hogy a csatolmányok benne vannak. Lásd a
-      2. fejezet figyelmeztetését - ez a tárolócsere egyetlen olyan hibája, ami csendben
-      adatvesztéshez vezetne
-- [ ] **Az objektumtároló S3 kulcsai beállítva** (`S3_ACCESS_KEY` / `S3_SECRET_KEY`).
-      Hiányukban a SeaweedFS S3 API-ja **hitelesítés nélkül** futna - és a tároló a
-      presigned URL-ek miatt publikusan elérhető
-- [ ] **A naplózás betöltő felhasználója létrehozva** az OpenObserve felületén, és a tokenje
-      az `OO_INGEST_USER` / `OO_INGEST_TOKEN` változókban. Enélkül az alkalmazás elindul, de a
-      naplók **nem jutnak el** az aggregátorba — a hiba csak akkor derül ki, amikor keresni
-      próbálsz benne. Szándékosan nem a root hitelesítő adatai: azok ne kerüljenek az API
-      konténerébe
-- [ ] **A naplófelület elérése eldöntve** a többi felhasználó számára — lásd a 3. fejezet
-      végét. A konténer ma csak loopbacken hallgat, tehát SSH-tunnel nélkül senki nem éri el
+- [x] ~~**A mentés célja átállítva** a `seaweed_data` volume-ra.~~ Elvégezve, és a következő
+      mentés **ellenőrizve a Backblaze-en** - a csatolmányok benne vannak. Ez volt a
+      tárolócsere egyetlen olyan hibája, ami csendben adatvesztéshez vezetett volna
+- [x] ~~**Az objektumtároló S3 kulcsai beállítva**~~ (`S3_ACCESS_KEY` / `S3_SECRET_KEY`),
+      és a `${VAR:?}` alak miatt a deploy **elbukna** nélkülük. Hiányukban a SeaweedFS S3
+      API-ja hitelesítés nélkül futna - és a tároló a presigned URL-ek miatt publikusan elérhető
+- [x] ~~**Az admin felület jelszava beállítva**~~ (`S3_ADMIN_PASSWORD`, felhasználónév: `admin`).
+      Üres értéknél a SeaweedFS **hitelesítés nélkül** szolgálná ki az admin felületet, és ez
+      csendben történik. A `${VAR:?}` alak miatt a deploy most elbukik, ha kimarad
+- [ ] **KÜLÖN betöltő felhasználó** az OpenObserve felületén, az `OO_INGEST_USER` /
+      `OO_INGEST_TOKEN` változókhoz. **A naplózás már működik** - jelenleg a root hitelesítő
+      adataival -, tehát ez nem hiba, hanem higiénia: az admin jelszava ne üljön az API
+      konténerében, és a token önállóan rotálható legyen.
+      Megjegyzés: a nyílt kiadás **csak `admin` szerepkört** engedélyez (mérve), tehát ez nem
+      jogosultság-szűkítés. Lépések: belépés → *Management → Users* → új felhasználó → a két
+      változó átírása → **csak a `pm-api`** redeploy (az aggregátort nem kell újraindítani)
+- [x] ~~**A naplófelület elérése eldöntve.**~~ Marad **loopback + SSH-tunnel**, Traefik-útvonal
+      nélkül - ez a biztonságosabb választás, és a gyakorlatban megoldott. Ugyanígy a
+      tárolóé is (`127.0.0.1:23646`). Figyelem: a tunnel **elfedi a helyi portokat**, ezért
+      érdemes eltérő helyi portra irányítani (pl. `-L 23647:localhost:23646`), különben a
+      fejlesztői példány és az éles összekeveredik
 - [x] ~~**A mentés ütemezése rögzítve.**~~ Napi mentés a Dokploy ütemezőjével, 7 napos rotációval
 - [x] ~~**Az activity-leírások sablonosítása kész.**~~ Elkészült: a leírások sablont tárolnak,
       a neveket a kiolvasás helyettesíti be, így az anonimizálás magától érvényesül
@@ -306,6 +360,20 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       kezdeti beállításkor történt; azóta sok migráció jött, ezért érdemes megismételni -
       nem azért, mert a régi mentés érvénytelen lenne (a migráció felviszi az aktuális
       sémára), hanem mert egy soha nem gyakorolt eljárás nem eljárás
+- [ ] **2026-11-12 után: a `MessagePack` közvetlen hivatkozása elhagyható.** Ma azért van az
+      API `csproj`-jában, mert a `SignalR.StackExchangeRedis 10.0.9` egy sebezhető verziót
+      (2.5.301, CVE-2026-92707) hozna be tranzitívan. A `10.0.13` maga is `>= 2.5.303`-at kér,
+      de 2026-10-13-án jelent meg, tehát a 30 napos szabály szerint csak **2026-11-12 után**
+      vehető fel. Akkor: a SignalR csomag emelése, és a `MessagePack` sor törlése. A triázs
+      (miért nem volt sürgős) a `SCHEDULE.md`-ben
+- [ ] **Eldöntendő: a CI bukjon-e el NuGet sebezhetőségi figyelmeztetésen.** A `MessagePack`
+      NU1902 figyelmeztetése a CI naplójában **ott volt** minden futásnál (a workflow friss
+      `dotnet restore`-t futtat, NuGet gyorsítótár nélkül, tehát az audit lefut) - csak
+      lokálisan nem látszott, és senki nem nézte meg. Egy kiírt, de következmény nélküli
+      figyelmeztetés gyakorlatilag láthatatlan. Megfontolandó a `-warnaserror:NU1901,NU1902,NU1903`
+      a build lépésen: akkor egy új sebezhetőségi riasztás megállítja a pipeline-t, nem a
+      naplóban ül. Ellenérv: egy harmadik féltől jövő új riasztás így bármikor eltörheti a
+      buildet - ezért ez termékdöntés, nem automatikus javítás
 
 > A dokumentumokat jogász nem nézte át. Valódi felhasználókkal induló szolgáltatásnál ez megéri.
 > A szakdolgozatban ezt a fenntartást is érdemes jelezni.

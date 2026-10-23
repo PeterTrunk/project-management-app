@@ -14,14 +14,10 @@ namespace ProjectManager.API.Controllers
     public class ColumnDefinitionController : ControllerBase
     {
         private readonly IColumnService _columnService;
-        private readonly ILogger<ColumnDefinitionController> _logger;
 
-        public ColumnDefinitionController(
-            IColumnService columnService, 
-            ILogger<ColumnDefinitionController> logger)
+        public ColumnDefinitionController(IColumnService columnService)
         {
             _columnService = columnService;
-            _logger = logger;
         }
 
         [HttpPost]

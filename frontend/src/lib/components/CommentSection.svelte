@@ -17,28 +17,29 @@
 
     onMount(async () => {
         await loadComments();
-        registerSignalREvents();
+
+        //A CommentAdded és a CommentDeleted az EGYETLEN két esemény, amit nem a központi
+        //signalRClientService kezel, hanem csak itt - mert csak a megnyitott task alatt
+        //értelmes. A kezelők mégis nevesítve vannak, hogy a leiratkozás pontos legyen:
+        //egy kezelő nélküli off() két egyidejű példány esetén a másikét is levenné.
+        signalRService.on('CommentAdded', onCommentAdded);
+        signalRService.on('CommentDeleted', onCommentDeleted);
     });
 
-    function registerSignalREvents() {
-        signalRService.off('CommentAdded');
-        signalRService.off('CommentDeleted');
+    async function onCommentAdded(data: { taskId: string; commentId: string }) {
+        if (data.taskId !== taskId) return;  // csak az aktuális task kommentjei
+        if (comments.some(c => c.id === data.commentId)) return;
+        await loadComments();
+    }
 
-        signalRService.on('CommentAdded', async (data) => {
-            if (data.taskId !== taskId) return;  // csak az aktuális task kommentjei
-            if (comments.some(c => c.id === data.commentId)) return;
-            await loadComments();
-        });
-
-        signalRService.on('CommentDeleted', async (data) => {
-            if (data.taskId !== taskId) return;
-            await loadComments();
-        });
+    async function onCommentDeleted(data: { taskId: string }) {
+        if (data.taskId !== taskId) return;
+        await loadComments();
     }
 
     onDestroy(() => {
-        signalRService.off('CommentAdded');
-        signalRService.off('CommentDeleted');
+        signalRService.off('CommentAdded', onCommentAdded);
+        signalRService.off('CommentDeleted', onCommentDeleted);
     });
 
     async function loadComments() {

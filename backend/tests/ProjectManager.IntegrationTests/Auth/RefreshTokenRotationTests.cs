@@ -220,7 +220,7 @@ namespace ProjectManager.IntegrationTests.Auth
         }
 
         /// <summary>
-        /// A jelszóváltás a SEC-04 óta minden munkamenetet visszavon. Ez a teszt azt őrzi,
+        /// A jelszóváltás minden munkamenetet visszavon. Ez a teszt azt őrzi,
         /// hogy a kijelentkezés törlésre váltása ezen nem rontott.
         /// </summary>
         [Fact]

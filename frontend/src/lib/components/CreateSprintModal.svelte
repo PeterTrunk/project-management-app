@@ -7,6 +7,7 @@
     import { X } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
+    import { fromDateTimeLocalValue } from '../utils/dates';
 
     export let isSprintCreationOpen = false;
     export let projectId: string;
@@ -34,11 +35,10 @@
         success = '';
         try {
             await createSprintAsync(projectId, {
-                projectId: projectId,
                 name: name,
                 goal: goal,
-                startDate: startDate ? new Date(startDate) : null,
-                endDate: endDate ? new Date(endDate) : null,
+                startDate: fromDateTimeLocalValue(startDate),
+                endDate: fromDateTimeLocalValue(endDate),
                 state: 'Planning'
             });
             const button = document.getElementById('create') as HTMLButtonElement;

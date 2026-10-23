@@ -13,14 +13,10 @@ namespace ProjectManager.API.Controllers
     public class BoardController : ControllerBase
     {
         private readonly IBoardService _boardService;
-        private readonly ILogger<BoardController> _logger;
 
-        public BoardController(
-            IBoardService boardService,
-            ILogger<BoardController> logger)
+        public BoardController(IBoardService boardService)
         {
             _boardService = boardService;
-            _logger = logger;
         }
 
         [HttpPost]

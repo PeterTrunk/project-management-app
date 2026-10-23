@@ -10,7 +10,6 @@ namespace ProjectManager.Tests.Validators
 
         private static CreateBoardDto Valid() => new()
         {
-            ProjectId = Guid.NewGuid(),
             Name = "Fejlesztés",
             Description = "A csapat fő boardja"
         };

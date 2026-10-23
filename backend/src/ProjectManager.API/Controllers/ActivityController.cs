@@ -11,14 +11,10 @@ namespace ProjectManager.API.Controllers
     public class ActivityController : ControllerBase
     {
         private readonly IActivityService _activityService;
-        private readonly ILogger<ActivityController> _logger;
 
-        public ActivityController(
-            IActivityService activityService,
-            ILogger<ActivityController> logger)
+        public ActivityController(IActivityService activityService)
         {
             _activityService = activityService;
-            _logger = logger;
         }
 
         [HttpGet]

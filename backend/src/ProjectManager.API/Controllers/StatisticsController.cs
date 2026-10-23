@@ -11,14 +11,10 @@ namespace ProjectManager.API.Controllers
     public class StatisticsController : ControllerBase
     {
         private readonly IStatisticsService _statisticsService;
-        private readonly ILogger<StatisticsController> _logger;
 
-        public StatisticsController(
-            IStatisticsService statisticsService,
-            ILogger<StatisticsController> logger)
+        public StatisticsController(IStatisticsService statisticsService)
         {
             _statisticsService = statisticsService;
-            _logger = logger;
         }
         
         [HttpGet("task-status")]

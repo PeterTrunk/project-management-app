@@ -13,14 +13,10 @@ namespace ProjectManager.API.Controllers
     public class IntegrationController : ControllerBase
     {
         private readonly IIntegrationService _integrationService;
-        private readonly ILogger<IntegrationController> _logger;
 
-        public IntegrationController(
-            IIntegrationService integrationService,
-            ILogger<IntegrationController> logger)
+        public IntegrationController(IIntegrationService integrationService)
         {
             _integrationService = integrationService;
-            _logger = logger;
         }
 
         [HttpGet]

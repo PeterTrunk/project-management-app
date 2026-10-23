@@ -15,8 +15,9 @@ export interface SprintResponse {
     rowVersion: number;
 }
 
+//A projectId szandekosan NINCS a torzsben: a hatokort az utvonal hordozza.
+//A szerver a route erteket hasznalja, a torzsbol jovo azonositot figyelmen kivul hagyja.
 interface CreateSprintRequest {
-    projectId: string;
     name: string;
     goal: string | null;
     startDate: Date | null;

@@ -2,8 +2,8 @@ import apiClient from "./client";
 import { type ColumnResponse } from "./columnApi";
 import { validateCreateBoard, validateUpdateBoard } from "../utils/validators";
 
+//A projectId szandekosan NINCS a torzsben - lasd a sprintApi megjegyzeset.
 interface CreateBoardRequest {
-    projectId: string;
     name: string;
     description: string;
     isDefault: boolean;

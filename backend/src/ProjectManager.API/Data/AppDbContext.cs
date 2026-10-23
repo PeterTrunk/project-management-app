@@ -44,8 +44,6 @@ public class AppDbContext : DbContext
     }
     
     public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
     public DbSet<Board> Boards => Set<Board>();
@@ -182,43 +180,6 @@ public class AppDbContext : DbContext
             //Indexes
             entity.HasIndex(rt => rt.Token)
                   .IsUnique();
-        });
-        
-        modelBuilder.Entity<Role>(entity =>
-        {
-            //Constraints
-            entity.Property(r => r.Name)
-                  .HasMaxLength(64)
-                  .IsRequired();
-
-            entity.Property(r => r.CreatedAt)
-                  .IsRequired();
-
-            //Indexes
-            entity.HasIndex(r => r.Name)
-                  .IsUnique();
-        });
-        
-        modelBuilder.Entity<UserRole>(entity =>
-        {
-            //Composite PK
-            entity.HasKey(ur => new { ur.UserId, ur.RoleId });
-
-            //Constraints
-            entity.Property(ur => ur.AssignedAt)
-                  .IsRequired();
-
-            //Foreign keys
-            entity.HasOne(ur => ur.User)
-                  .WithMany(u => u.UserRoles)
-                  .HasForeignKey(ur => ur.UserId);
-
-            entity.HasOne(ur => ur.Role)
-                  .WithMany(r => r.UserRoles)
-                  .HasForeignKey(ur => ur.RoleId);
-
-            //Indexes
-            entity.HasIndex(ur => ur.RoleId);
         });
         
         modelBuilder.Entity<Project>(entity =>
@@ -387,10 +348,19 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(s => new { s.ProjectId, s.StartDate, s.EndDate });
         
-            // Partial unique index: projektenként csak 1 active sprint lehet
+            // Partial unique index: projektenként csak 1 active sprint lehet.
+            //
+            // A szuro erteke a SprintStates.Active konstansbol kepzodik, NEM kezzel beirva.
+            // Indok (mert ez egy valodi, 2026 marciusa ota elo hiba volt): a szuro korabban
+            // 'active'-ot tartalmazott kisbetuvel, az alkalmazas viszont 'Active'-ot ir.
+            // Igy az index egyetlen sorra sem illeszkedett, tehat a "projektenkent egy aktiv
+            // sprint" adatbazis-szintu garancia CSENDBEN hatastalan volt - merve, ket 'Active'
+            // sprint beszurhato volt ugyanabba a projektbe. Egy feltételes kenyszer sosem
+            // jelez, ha a feltetel nem illeszkedik; egy sima UNIQUE az elso hasznalatnal
+            // kiderul. Ezert a literal mostantol nem duplikalja a konstanst.
             entity.HasIndex(s => s.ProjectId)
                   .IsUnique()
-                  .HasFilter("\"State\" = 'active'")
+                  .HasFilter($"\"State\" = '{SprintStates.Active}'")
                   .HasDatabaseName("IX_Sprints_OneActiveSprint");
 
             //Foreign keys

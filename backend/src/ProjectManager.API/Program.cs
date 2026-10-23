@@ -119,6 +119,15 @@ try
     var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY");
     var emailFrom = Environment.GetEnvironmentVariable("EMAIL_FROM") ?? "noreply@trunkpeter.com";
     var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
+
+    //A futó API példányok DEKLARÁLT száma. Ugyanaz a változó állítja a compose
+    //`deploy.replicas` értékét, tehát a topológiát egy helyen mondjuk ki, és három dolog
+    //következik belőle: hány konténer indul, kell-e Redis, és mekkora a DB kapcsolatkészlet.
+    //Enélkül ezek külön-külön állítható értékek lennének, amelyek csendben ellentmondhatnak.
+    var apiReplicas = int.Parse(Environment.GetEnvironmentVariable("API_REPLICAS") ?? "1");
+    if (apiReplicas < 1)
+        throw new InvalidOperationException(
+            $"Az API_REPLICAS legalább 1 legyen (most {apiReplicas})!");
     var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
     var apiBaseUrl = Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5178";
 
@@ -230,7 +239,7 @@ try
     builder.Host.UseSerilog();
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddDatabase(connectionString);
+    builder.Services.AddDatabase(connectionString, apiReplicas);
     builder.Services.AddJwtAuthentication(new JwtOptions
     {
         Secret = jwtSecret,
@@ -240,6 +249,21 @@ try
         RefreshTokenLifetimeMinutes = int.Parse(jwtRefreshTokenLifetime)
     });
     builder.Services.AddRedisAndSignalR(redisConnection);
+    builder.Services.AddRateLimiting(redisConnection, apiReplicas);
+
+    //Figyelmeztetés, mert ez az egyetlen pont, ahol a deklarált topológia és a valóság
+    //elváhat: a `docker compose up --scale pm-api=N` felülírja a compose `deploy.replicas`
+    //értékét anélkül, hogy az API_REPLICAS változna. Ilyenkor az alkalmazás egypéldányosnak
+    //hiszi magát, és a korlátok példányonként számolnak. A naplóban ez legalább látszik.
+    if (apiReplicas == 1)
+    {
+        //A Resend csomagnak is van Log tipusa, ezert teljes nev kell
+        Serilog.Log.Warning(
+            "A kerelemkorlatozas a folyamat memoriajaban szamol (API_REPLICAS=1). "
+            + "Ha tobb API peldany fut, a korlatok PELDANYONKENT szamolnak - ilyenkor "
+            + "allitsd az API_REPLICAS-t a tenyleges peldanyszamra, hogy a Redis-es "
+            + "megosztott szamlalo lepjen eletbe. {EventType}", "RateLimitInMemory");
+    }
     builder.Services.AddSwagger();
     builder.Services.AddCors(options =>
     {
