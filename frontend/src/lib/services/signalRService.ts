@@ -77,7 +77,7 @@ class SignalRService {
                 //Ami NEM indok: a replikák közti terheléselosztás. Két replika ugyanazon a
                 //két vCPU-n osztozik, tehát nem ad CPU kapacitást - a hasznuk a leállás nélküli
                 //újraindítás és a rendelkezésre állás, amit a ragasztás nem érint (a Traefik
-                //csak ÉP backendre fogadja el a cookie-t). Lásd KERDESEK.md, 10. kérdés.
+                //csak ÉP backendre fogadja el a cookie-t).
                 //
                 //Az ára viszont valódi: aki nem tud WebSocketet használni, az egyáltalán nem
                 //kap valós idejű frissítést. 

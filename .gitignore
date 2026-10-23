@@ -1,14 +1,14 @@
 ## Extras
 
+# Local working files
+/docs/private/**
+
 # Generated Mermaid ERD code files
 /docs/erd/**
 
 # Enviromental Variables
 .env
 .env.local
-
-# Biztonsági riport - élő rendszer sebezhetőségeit írja le, nem publikus
-SECURITY-AUDIT.md
 
 # .NET
 backend/**/bin/

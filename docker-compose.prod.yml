@@ -213,8 +213,9 @@ services:
       # fel (a negotiate connectionToken-je a kiado peldany memoriajaban el).
       #
       # A maxage=30 NEM csuszo ablak: a Traefik valid cookie eseten korai visszateressel
-      # kiszolgal, Set-Cookie nelkul (ellenorizve a v3.1 forrasaban). Long polling eseten
-      # ezert 30 masodperc utan elszakadna a kapcsolat - lasd SIGNALR.md, 4. fejezet.
+      # kiszolgal, Set-Cookie nelkul (ellenorizve a v3.1 forrasaban:
+      # pkg/server/service/loadbalancer/wrr/wrr.go). Long polling eseten ezert 30 masodperc
+      # utan elszakadna a kapcsolat - ezt a transport megkotese zarja ki a kliensen.
       - "traefik.http.services.api.loadbalancer.sticky.cookie=true"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.name=signalr_affinity"
       - "traefik.http.services.api.loadbalancer.sticky.cookie.httponly=true"

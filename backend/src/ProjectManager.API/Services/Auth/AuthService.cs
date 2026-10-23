@@ -812,7 +812,7 @@ namespace ProjectManager.API.Services.Auth
         {
             //A korlát a lekérdezés ELŐTT fut, különben nem védene attól, amiért van:
             //a hitelesítés nélküli adatbázis-terheléstől. Ugyanaz a sorrend, mint a
-            //webhook végponton és a regisztráción (SEC-10/a, SEC-25).
+            //webhook végponton és a regisztráción.
             var ipAddress = GetIpAddress();
             var (isLimited, retryAfter) = await _rateLimitService
                 .IsRateLimitedAsync($"verify_email_ip:{ipAddress}", VerifyEmailIpAttemptsPerWindow, TimeSpan.FromHours(1));

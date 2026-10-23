@@ -3317,9 +3317,9 @@ Statikus kódolvasás és adatfolyam-követés két irányból:
 
 Éles rendszer ellen nem futott támadás, minden állítás kódútvonalból levezetve.
 
-**Eredmény:** 30 találat `SECURITY-AUDIT.md`-ben (2 kritikus, 3 magas, 13 közepes, 12 alacsony),
-találatonként hely, támadási forgatókönyv, enyhítő tényezők és javaslat.
-A riport nincs verziókezelve (`.gitignore`), mert éles rendszer sebezhetőségeit írja le.
+**Eredmény:** 30 találat (2 kritikus, 3 magas, 13 közepes, 12 alacsony), találatonként
+hely, támadási forgatókönyv, enyhítő tényezők és javaslat. A javítások leírása etaponként
+ebben a fejezetben szerepel.
 
 **Kivitelezés 9 etapban:**
 A javítás nem egy PR-ben ment, hanem etaponként: minden etap önállóan lefordul, egy témát fed le,
@@ -5011,16 +5011,18 @@ hibákat - a konfiguráció két helyen élt. Nyolc replika felett a 10-es alsó
 **Hidegindítás.** A `ConnectionMultiplexer.Connect()` szinkron és eager, `abortConnect=false`
 nélkül. Mérve: ha a Redis még nem fogad kapcsolatot, az API `RedisConnectionException`-nel el
 sem indul. A `pm-api` ezért `condition: service_healthy`-vel vár a redisre a korábbi
-`service_started` helyett - a healthcheck a SEC-19 óta megvan, tehát ez ingyen volt.
+`service_started` helyett - a healthcheck a Redis jelszavas védésekor bekerült, tehát ez
+ingyen volt.
 
 **A kérelemkorlátozás lefedettsége.** A felülvizsgálat a hiányzó korlátokat is számba vette.
 A hitelesítés nélküli végpontok közül négyen nem volt korlát: `refresh`, `logout`,
 `verify-email`, `reset-password`. Ebből kettő kapott IP-alapú korlátot
 (`reset_password_ip` 10/óra, `verify_email_ip` 20/óra), mindkettő **a tokenlekérdezés előtt**
-futva - ugyanaz a sorrend, mint a SEC-10/a és a SEC-25 javításnál.
+futva - ugyanaz a sorrend, mint a regisztráción és a webhook végponton: a korlát a
+drága műveletet megelőzi, különben nem védene attól, amiért van.
 
 Ez **nem** a találgatás ellen szól: a tokenek 256 bitesek (`SecureTokenGenerator`), a brute
-force nem reális - ugyanaz az érvelés, amivel a meghívó token korlátja (SEC-22) tudatosan
+force nem reális - ugyanaz az érvelés, amivel a meghívó token korlátja tudatosan
 elmaradt. Amit megszüntet: a hitelesítés nélkül, korlátlanul indítható adatbázis-lekérdezés.
 
 A `refresh` és a `logout` **szándékosan korlátlan marad**. A klienst időzítő hívja a token
@@ -5061,7 +5063,8 @@ Két tanulság már itt, a javítás előtt:
 Vagyis a kliens bájtjai soha nem érnek el a MessagePack deszerializálóhoz. Aki a backplane
 csatornára tudna payloadot tenni, annak már megvan a Redis jelszava és a belső hálózati
 hozzáférése - abban a helyzetben pedig egyszerűen `DEL`-lel törli a kérelemkorlátozás kulcsait,
-ami nagyobb baj egy memória-DoS-nál. Ez pontosan az a fenyegetésmodell, amit a SEC-19 lezárt.
+ami nagyobb baj egy memória-DoS-nál. Ez pontosan az a fenyegetésmodell, amit a Redis
+jelszavas védése lezárt.
 **Elérhető kódút tehát nincs, a javítás nem sürgős.**
 
 **Megoldás - és az indok, ami nem a biztonság:** közvetlen `MessagePack 2.5.303` hivatkozás az
