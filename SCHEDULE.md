@@ -5029,6 +5029,59 @@ lejárata előtt, tehát egy IP-alapú korlát egy megosztott kijárat mögötti
 szűkebb, e-mailt is tartalmazó kulcs mellett. Az e-mail-bombázás iránya zárt: mérve mindhárom
 levélküldési hely az `AuthService`-ben van, és mind korlát alatt.
 
+### Egy sebezhetőségi riasztás triázsolása a tényleges kódúthoz mérve
+
+**Probléma:** a példányszám-munka közben egy kényszerített NuGet restore előhozott egy
+**NU1902** figyelmeztetést: a `MessagePack 2.5.301` ismert sebezhetőséget tartalmaz
+(CVE-2026-92707, CVSS 5.3 közepes). A csomag a `Microsoft.AspNetCore.SignalR.StackExchangeRedis
+10.0.9`-en keresztül, **tranzitívan** érkezik - közvetlenül nem használjuk.
+
+Két tanulság már itt, a javítás előtt:
+
+- **A figyelmeztetés nem volt új, csak nem nézte meg senki.** Lokálisan azért nem látszott,
+  mert a buildek gyorsítótárazott restore-ral futottak, és a NuGet audit nem futott le újra
+  (mérve: a warning a változtatás nélkül is megjelenik `--force` restore-ral, az API projekten
+  is). A **CI-ban viszont ott volt**: a workflow friss `dotnet restore`-t futtat NuGet
+  gyorsítótár nélkül, tehát az audit minden futásnál lefutott és kiírta. Ez a kellemetlenebb
+  tanulság - nem a mérés hiányzott, hanem a figyelem. Egy kiírt, de a buildet meg nem állító
+  figyelmeztetés gyakorlatilag láthatatlan; a `-warnaserror:NU1901,NU1902,NU1903` megfontolása
+  ezért az `OPERATIONS.md` listájára került.
+- **A riasztást a kódúthoz kell mérni, nem reflexből patchelni.** A tanácsadó szerint a
+  támadáshoz nem megbízható MessagePack adat `System.Object`-be deszerializálása kell, és
+  kifejezetten az „`object` paraméteres SignalR hub metódusokat" nevezi meg veszélyeztetettként.
+
+**A triázs eredménye - mérve, nem feltételezve:**
+
+| Feltétel | Állapot |
+|---|---|
+| MessagePack hub protokoll | **Nincs**: `AddMessagePackProtocol` nulla találat, a kliens felé JSON megy; a frontend sem húz be msgpack csomagot |
+| `object` paraméteres hub metódus | **Nincs**: a `ProjectHub` két metódusa `(string projectId)` |
+| A maradék felület: a Redis backplane boríték | A Redis élesben **nincs porttal kitéve**, `requirepass` mögött van, és csak a `pma-internal` hálózaton érhető el |
+
+Vagyis a kliens bájtjai soha nem érnek el a MessagePack deszerializálóhoz. Aki a backplane
+csatornára tudna payloadot tenni, annak már megvan a Redis jelszava és a belső hálózati
+hozzáférése - abban a helyzetben pedig egyszerűen `DEL`-lel törli a kérelemkorlátozás kulcsait,
+ami nagyobb baj egy memória-DoS-nál. Ez pontosan az a fenyegetésmodell, amit a SEC-19 lezárt.
+**Elérhető kódút tehát nincs, a javítás nem sürgős.**
+
+**Megoldás - és az indok, ami nem a biztonság:** közvetlen `MessagePack 2.5.303` hivatkozás az
+API projektben. Nem azért, mert a kockázat valós itt, hanem mert az alternatíva egy **állandó
+NU1902 minden buildben**, ami arra tanít, hogy a figyelmeztetéseket figyelmen kívül kell hagyni -
+a projekt szabálya viszont a 0 warning. A figyelmeztetés költsége folyamatos, a javítás egyszeri
+és egy soros.
+
+**Ami a 30 napos szabállyal történt, és miért érdekes.** A szabály és a biztonsági javítás itt
+**nem ütközött**, de ez nem volt garantált:
+
+| Lehetőség | Kiadás | Kor | Döntés |
+|---|---|---|---|
+| `MessagePack 2.5.303` | 2026-09-17 | **36 nap** | **Ez lett** - megfelel a szabálynak |
+| `SignalR.StackExchangeRedis 10.0.13` (maga is `>= 2.5.303`-at kér) | 2026-10-13 | **10 nap** | Elvetve: megsértené a szabályt, és magával vonná az ASP.NET patch-családot |
+
+Vagyis a **tisztább** út (a tranzitív pin elhagyása) éppen az, amelyik a saját szabályunkba
+ütközik. A pin ezért **átmeneti**: 2026-11-12 után a `10.0.13` felvehető, és akkor a közvetlen
+`MessagePack` hivatkozás törölhető. Ez a `csproj` kommentjében is ott áll.
+
 ### Az objektumtároló leváltása: MinIO -> SeaweedFS
 
 **Probléma:** a MinIO közösségi kiadása a fejlesztés alatt fokozatosan megszűnt. A GitHub repó

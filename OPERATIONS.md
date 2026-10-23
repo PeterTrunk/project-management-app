@@ -360,6 +360,20 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
       kezdeti beállításkor történt; azóta sok migráció jött, ezért érdemes megismételni -
       nem azért, mert a régi mentés érvénytelen lenne (a migráció felviszi az aktuális
       sémára), hanem mert egy soha nem gyakorolt eljárás nem eljárás
+- [ ] **2026-11-12 után: a `MessagePack` közvetlen hivatkozása elhagyható.** Ma azért van az
+      API `csproj`-jában, mert a `SignalR.StackExchangeRedis 10.0.9` egy sebezhető verziót
+      (2.5.301, CVE-2026-92707) hozna be tranzitívan. A `10.0.13` maga is `>= 2.5.303`-at kér,
+      de 2026-10-13-án jelent meg, tehát a 30 napos szabály szerint csak **2026-11-12 után**
+      vehető fel. Akkor: a SignalR csomag emelése, és a `MessagePack` sor törlése. A triázs
+      (miért nem volt sürgős) a `SCHEDULE.md`-ben
+- [ ] **Eldöntendő: a CI bukjon-e el NuGet sebezhetőségi figyelmeztetésen.** A `MessagePack`
+      NU1902 figyelmeztetése a CI naplójában **ott volt** minden futásnál (a workflow friss
+      `dotnet restore`-t futtat, NuGet gyorsítótár nélkül, tehát az audit lefut) - csak
+      lokálisan nem látszott, és senki nem nézte meg. Egy kiírt, de következmény nélküli
+      figyelmeztetés gyakorlatilag láthatatlan. Megfontolandó a `-warnaserror:NU1901,NU1902,NU1903`
+      a build lépésen: akkor egy új sebezhetőségi riasztás megállítja a pipeline-t, nem a
+      naplóban ül. Ellenérv: egy harmadik féltől jövő új riasztás így bármikor eltörheti a
+      buildet - ezért ez termékdöntés, nem automatikus javítás
 
 > A dokumentumokat jogász nem nézte át. Valódi felhasználókkal induló szolgáltatásnál ez megéri.
 > A szakdolgozatban ezt a fenntartást is érdemes jelezni.
