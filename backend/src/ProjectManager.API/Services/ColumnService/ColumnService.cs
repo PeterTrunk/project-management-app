@@ -46,7 +46,11 @@ namespace ProjectManager.API.Services.ColumnService
 
             var column = new ColumnDefinition
             {
-                BoardId = dto.BoardId,
+                //A fentebb MAR ELLENORZOTT route-ertek: a board lekerdezese igazolta, hogy
+                //boardId a route projekthez tartozik. Korabban ez az ellenorzes lefutott,
+                //majd a kod a torzsbol jovo dto.BoardId-t hasznalta - vagyis a validalt
+                //erteket eldobta, es egy idegen board ala is lehetett oszlopot szurni.
+                BoardId = boardId,
                 Name = dto.Name,
                 MapsToStatus = dto.MapsToStatus,
                 WipLimit = dto.WipLimit,

@@ -35,7 +35,6 @@
         success = '';
         try {
             await createSprintAsync(projectId, {
-                projectId: projectId,
                 name: name,
                 goal: goal,
                 startDate: fromDateTimeLocalValue(startDate),

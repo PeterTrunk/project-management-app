@@ -11,7 +11,6 @@ namespace ProjectManager.Tests.Validators
 
         private static CreateSprintDto Valid() => new()
         {
-            ProjectId = Guid.NewGuid(),
             Name = "Sprint 1",
             State = SprintStates.Planning
         };
@@ -80,18 +79,29 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.State);
         }
 
-        [Theory]
-        [InlineData(SprintStates.Planning)]
-        [InlineData(SprintStates.Active)]
-        [InlineData(SprintStates.Completed)]
-        public void State_KnownValue_ShouldNotHaveError(string state)
+        [Fact]
+        public void State_Planning_ShouldNotHaveError()
         {
             var dto = Valid();
-            dto.State = state;
+            dto.State = SprintStates.Planning;
             _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.State);
         }
 
-        //A lista összehasonlítása kis- és nagybetűérzékeny
+        //Letrehozni CSAK Planning allapotban lehet. Az "Active" tiltasa a lenyegi allitas:
+        //azon az uton lehetett megkerulni az "mar van aktiv sprint" ellenorzest, es ket
+        //aktiv sprintet letrehozni ugyanabban a projektben.
+        //A "Completed" ugyanezert tiltott: az allapotgep nem indulhat a vegerol.
+        [Theory]
+        [InlineData(SprintStates.Active)]
+        [InlineData(SprintStates.Completed)]
+        public void State_NotPlanning_ShouldHaveError(string state)
+        {
+            var dto = Valid();
+            dto.State = state;
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.State);
+        }
+
+        //Az összehasonlítás kis- és nagybetűérzékeny
         [Theory]
         [InlineData("planning")]
         [InlineData("ACTIVE")]
@@ -105,16 +115,39 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.State);
         }
 
-        //Ez a teszt akkor bukik el, ha a SprintStates bővül, de a validátor tesztjei nem követik
+        //Ez a teszt korábban azt állította, hogy a létrehozó validátor MINDEN deklarált
+        //állapotot elfogad. Ez a szigorítás után már nem igaz, és nem is lenne helyes:
+        //létrehozni csak Planning állapotban lehet.
+        //
+        //A védő szerepe viszont megmarad, csak máshogy: ha a SprintStates bővül, ez a teszt
+        //elbukik, és akkor el KELL dönteni, hogy az új állapot létrehozható-e. Enélkül egy
+        //új állapot csendben bekerülne a rendszerbe anélkül, hogy bárki végiggondolta volna,
+        //honnan érhető el - és pontosan ilyen csendes úton lehetett eddig "Active" sprintet
+        //létrehozni, megkerülve az aktiválás ellenőrzését.
         [Fact]
-        public void EveryDeclaredState_IsAccepted()
+        public void TheDeclaredStateSet_IsTheKnownOne()
         {
-            Assert.All(SprintStates.ValidStates, state =>
+            Assert.Equal(
+                new[] { SprintStates.Planning, SprintStates.Active, SprintStates.Completed },
+                SprintStates.ValidStates);
+        }
+
+        //A nem létrehozható állapotokat a State_NotPlanning_ShouldHaveError fedi; ez itt
+        //azt köti le, hogy a kettő halmaza együtt kiadja a teljes deklarált halmazt.
+        [Fact]
+        public void EveryDeclaredState_IsEitherCreatableOrExplicitlyRejected()
+        {
+            foreach (var state in SprintStates.ValidStates)
             {
                 var dto = Valid();
                 dto.State = state;
-                _validator.TestValidate(dto).ShouldNotHaveValidationErrorFor(x => x.State);
-            });
+                var result = _validator.TestValidate(dto);
+
+                if (state == SprintStates.Planning)
+                    result.ShouldNotHaveValidationErrorFor(x => x.State);
+                else
+                    result.ShouldHaveValidationErrorFor(x => x.State);
+            }
         }
 
         //Dátum logika

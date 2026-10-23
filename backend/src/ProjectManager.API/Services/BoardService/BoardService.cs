@@ -54,7 +54,10 @@ namespace ProjectManager.API.Services.BoardService
             
             var board = new Board
             {
-                ProjectId = dto.ProjectId,
+                //A ROUTE erteke - lasd a SprintService.CreateSprintAsync megjegyzeset.
+                //A fenti IsDefault-takaritas is a route projectId-vel dolgozik, tehat
+                //korabban a ket utasitas ket kulonbozo projektre is hathatott.
+                ProjectId = projectId,
                 Name = dto.Name,
                 Description = dto.Description,
                 IsDefault = dto.IsDefault

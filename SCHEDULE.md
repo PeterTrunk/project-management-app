@@ -4958,6 +4958,132 @@ felejtsük el őket.
 Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
 listájába egy sor a globális szerepkörökről.
 
+### Projekt-hatókör a kérés törzséből, és egy néma adatbázis-kényszer
+
+**Kiváltó ok:** a szakdolgozat adatmodell-fejezetéhez gyűjtött anyag összevetése a kóddal.
+Négy hiba derült ki, és egyik sem a funkció hiányából, hanem abból, hogy **egy védelem
+meglétéből nem következik a működése**.
+
+#### 1. A hatókör a törzsből jött, a jogosultság az útvonalról
+
+Három létrehozó metódus a kérés **törzséből** vett projekt-, illetve board-azonosító alá írt,
+miközben a jogosultságot a `ProjectRoleHandler` az **útvonal** `projectId`-jére ellenőrzi:
+
+| Hely | Mit írt | Ellenőrizte? |
+|---|---|---|
+| `SprintService.CreateSprintAsync` | `ProjectId = dto.ProjectId` | nem |
+| `BoardService.CreateBoardAsync` | `ProjectId = dto.ProjectId` | nem |
+| `ColumnService.CreateColumnAsync` | `BoardId = dto.BoardId` | **a route `boardId`-t igen - majd eldobta** |
+| `TaskService` (`dto.BoardId`, `dto.SprintId`) | - | **igen**, a projekthez méri (ez a helyes minta) |
+
+Következmény: az "A" projekt adminja a `POST /api/projects/A/sprints` végpontra
+`{"projectId": "B"}`-t küldve **a B projektbe írt**. Nem jogosultsági hiba a végponton
+(a sprintek kezelése az adminé), hanem a jogosultsági kapu **megkerülése**: a kapu az
+útvonalra szólt, az írás máshová ment. A `ColumnService` a legtanulságosabb - lekérdezte,
+hogy a route `boardId` a route projekthez tartozik-e, aztán a validált érték helyett a
+törzsből jövőt használta.
+
+**Megoldás:** mindhárom hely a paraméterként kapott értéket használja, **és a három DTO-mező
+törlésre került**. Ez a különbség lényegi: egy ellenőrzés elfelejthető, egy nem létező mezőt
+viszont nem lehet megadni. A törlés után a fordító mutatta meg a négy érintett tesztet -
+pontosan ezt adja a szerkezeti javítás az ellenőrzés helyett. A frontend oldalán a három
+kérés-típusból is kiesett a mező; a felület eddig is ugyanazt az értéket küldte, mint az
+útvonal, tehát ez nem viselkedésváltozás.
+
+#### 2. Amiért a cross-project tesztmátrix ezt átengedte
+
+A háló azokat a metódusokat követelte meg tesztelni, amelyeknek az első paramétere
+`Guid projectId` **és van még legalább egy nem-nullozható `Guid` paraméterük**. A
+`CreateSprintAsync(Guid, CreateSprintDto)` második paramétere DTO, nem `Guid` - kiesett a
+hálóból. A `CreateColumnAsync`-ra **volt** teszt, és **zöld volt**, mert a route-ellenőrzés
+tényleg helyes; a hiba a DTO mezőjében volt, amit a teszt nem feszített.
+
+Vagyis a háló csak a **paramétereket** nézte, a **törzset** nem.
+
+**Megoldás:** új állítás a mátrixban, a hibaalakra szabva - *egy DTO nem ismételheti meg azt
+az azonosítót, amit a metódus már paraméterként megkap.* Ilyenkor ugyanaz az érték kétszer
+érkezik: egyszer az útvonalról (amire a jogosultság szól), egyszer a törzsből (amire semmi).
+
+A szabály pontosságát egy korábbi, tompább változat mutatta meg: az minden `BoardId` mezőt
+jelzett, köztük a `CreateTaskDto.BoardId`-t is - ott viszont a board a művelet **célja**, nem
+a hatóköre, az útvonal nem hordozza, és a `TaskService` ellenőrzi. A paraméter-egyezéshez
+kötött szabály ezt helyesen átengedi. Mutációval igazolva: a mező visszatétele a tesztet
+elbuktatja, és megnevezi a metódust és a mezőt.
+
+#### 3. A szűrt egyedi index hónapokig néma volt
+
+Az adatbázisban ez állt:
+
+    WHERE (("State")::text = 'active'::text)
+
+Az index `'active'`-ra szűrt **kisbetűvel**, az alkalmazás viszont `SprintStates.Active`-ot
+ír, ami `"Active"`. A szűrő tehát **egyetlen valódi sorra sem illeszkedett**: a
+"projektenként egy aktív sprint" adatbázis szintű garancia nem létezett. A hiba a
+`20260301150700_AddConstraintsAndIndexes` migrációval, 2026 márciusában került be.
+
+Mérve, kísérlettel (tranzakcióban, visszaállítva): két `'Active'` sprint **beszúrható volt**
+ugyanabba a projektbe; `'active'`-kal viszont a második elbukott. Vagyis az index működött,
+csak egy olyan értékre, amit a rendszer soha nem állít be.
+
+**Ez a hibaosztály lényege:** egy *feltételes* kényszer sosem jelez, ha a feltétel nem
+illeszkedik. Egy sima `UNIQUE` vagy `NOT NULL` az első használatnál kiderül; egy parciális
+index csendben elfogad mindent. Ugyanaz a logika, amiért a konkurenciavezérléshez az `xmin`
+rendszeroszlop lett a választás a kézzel kezelt verzióoszlop helyett: azt minden írási úton
+növelni kell, és ha egy helyen kimarad, a védelem némán megszűnik.
+
+**Megoldás:** a szűrő literálja **a konstansból képződik**, nem kézzel beírva, így a két érték
+nem tud elcsúszni. A migráció eldobja és újraépíti az indexet, és **előtte ellenőrzi az
+előfeltételt**: mivel a kényszer eddig nem érvényesült, létezhet olyan projekt, amelyben több
+aktív sprint van - ott a `CREATE UNIQUE INDEX` elbukna egy nehezen érthető hibával. A migráció
+ezért egy `RAISE EXCEPTION`-nel kimondja, mit kell tenni, és a javítás **szándékosan nem
+automatikus**: azt, hogy a többletből melyik sprint maradjon aktív, csak a projekt tagjai
+tudják eldönteni. (Fejlesztőin mérve nincs ilyen projekt.)
+
+Plusz négy integrációs teszt, mert a kényszer **az adatbázisról** szól, nem a kódról: a szűrő
+tartalmazza-e a konstanst (a `pg_index`-ből olvasva), két aktív sprint egy projektben
+elbukik-e, két *különböző* projektben megengedett-e (ne legyen túl szigorú), és hogy egy aktív
+mellett a lezárt/tervezett sprintek megmaradnak-e.
+
+#### 4. A létrehozás megkerülte az aktiválás ellenőrzését
+
+A `CreateSprintAsync` közvetlenül a `dto.State`-et írta, a validátor pedig engedte az
+`"Active"`-ot - ellenőrzés nélkül. Vagyis két aktív sprintet nem is kellett versenyhelyzetben
+előállítani: elég volt kétszer létrehozni egyet `state: "Active"`-kal.
+
+**Megoldás:** létrehozni csak `Planning` állapotban lehet. Az állapotgép
+(`Planning -> Active -> Completed`) így nem indul középről, és az aktiválás egyetlen úton,
+az `ActivateSprintAsync`-en történik. A felület mindig `'Planning'`-ot küldött, tehát ez nem
+töréses változás.
+
+A validátor-teszt, amely addig azt állította, hogy **minden** deklarált állapot elfogadható,
+átíródott: a védő szerepe megmaradt, csak máshogy. Ha a `SprintStates` bővül, a teszt elbukik,
+és akkor el kell dönteni, hogy az új állapot létrehozható-e - enélkül egy új állapot csendben
+bekerülne anélkül, hogy bárki végiggondolta volna, honnan érhető el.
+
+#### 5. Egy pontosítás a saját elemzésünkhöz
+
+Az első átvizsgálás azt állította, hogy az `ActivateSprintAsync` ellenőrzése *olvasás-majd-írás
+tranzakció nélkül*. **Ez téves volt:** a metódus `Serializable` tranzakciót nyit, és azon belül
+ellenőriz, tehát a versenyhelyzet meg van előzve.
+
+Ami tényleg hibás volt: a vesztes kérés **500**-at kapott. A szerializációs hiba a generikus
+`catch (Exception)` ágon át a middleware-be futott, ami minden nem `AppException`-t 500-ra
+képez - miközben a felhasználó szempontjából ez ugyanaz az eset, amit a fenti ellenőrzés elkap
+("már van aktív sprint"), tehát `409` a helyes válasz.
+
+**Megoldás:** a konkurencia-kimenet `ConflictException`-re fordítása. A szűrő két hibaalakot
+fog, és ez a lényegi rész: a PostgreSQL a szerializációs hibát (40001) a `COMMIT`-nál nyers
+`PostgresException`-ként adja, az `UPDATE`-nél viszont az EF Core **`DbUpdateException`-be
+csomagolja**. Egy csak a nyers alakra szűrő ág a csomagolt esetet átengedné - ezért a helper
+végigjárja a kivétel-láncot. A 23505 (egyediség-sértés) ugyanígy jöhet, azt a javított szűrt
+index adja.
+
+**Ami nyitva marad:** a `CounterService` retry-ága pontosan ettől a csomagolástól szenvedhet
+(`catch (PostgresException ex) when (ex.SqlState == "40001")`), és erre **nincs
+konkurencia-teszt**. Vagyis a `TaskKey` számláló retry-ágáról ma nem tudjuk, teljes-e. Ez
+tudatosan marad nyitva: a méréséhez két olyan kapcsolat kell, amely látja a másik commitját,
+és ez önálló munka.
+
 ### A példányszám mint deklarált topológia: kérelemkorlátozás, backplane, DB pool
 
 **Probléma:** a felülvizsgálat kiindulópontja az a feltételezés volt, hogy egy példánynál a

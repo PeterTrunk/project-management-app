@@ -348,10 +348,19 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(s => new { s.ProjectId, s.StartDate, s.EndDate });
         
-            // Partial unique index: projektenként csak 1 active sprint lehet
+            // Partial unique index: projektenként csak 1 active sprint lehet.
+            //
+            // A szuro erteke a SprintStates.Active konstansbol kepzodik, NEM kezzel beirva.
+            // Indok (mert ez egy valodi, 2026 marciusa ota elo hiba volt): a szuro korabban
+            // 'active'-ot tartalmazott kisbetuvel, az alkalmazas viszont 'Active'-ot ir.
+            // Igy az index egyetlen sorra sem illeszkedett, tehat a "projektenkent egy aktiv
+            // sprint" adatbazis-szintu garancia CSENDBEN hatastalan volt - merve, ket 'Active'
+            // sprint beszurhato volt ugyanabba a projektbe. Egy feltételes kenyszer sosem
+            // jelez, ha a feltetel nem illeszkedik; egy sima UNIQUE az elso hasznalatnal
+            // kiderul. Ezert a literal mostantol nem duplikalja a konstanst.
             entity.HasIndex(s => s.ProjectId)
                   .IsUnique()
-                  .HasFilter("\"State\" = 'active'")
+                  .HasFilter($"\"State\" = '{SprintStates.Active}'")
                   .HasDatabaseName("IX_Sprints_OneActiveSprint");
 
             //Foreign keys

@@ -862,7 +862,7 @@ namespace ProjectManager.API.Migrations
                     b.HasIndex("ProjectId")
                         .IsUnique()
                         .HasDatabaseName("IX_Sprints_OneActiveSprint")
-                        .HasFilter("\"State\" = 'active'");
+                        .HasFilter("\"State\" = 'Active'");
 
                     b.HasIndex("ProjectId", "Name")
                         .IsUnique();

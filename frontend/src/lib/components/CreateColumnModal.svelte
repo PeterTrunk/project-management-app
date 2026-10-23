@@ -38,7 +38,6 @@
         success = '';
         try {
             const newColumn = await createColumnAsync(projectId, boardId, {
-                boardId,
                 name,
                 mapsToStatus,
                 wipLimit: hasWip ? wipLimit : null,

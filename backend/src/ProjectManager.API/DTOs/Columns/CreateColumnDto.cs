@@ -2,7 +2,10 @@
 {
     public class CreateColumnDto
     {
-        public Guid BoardId { get; set; }
+        //A hatokort a ROUTE adja (/api/projects/{projectId}/...), ezert ez a mezo
+        //szandekosan NINCS a DTO-ban: amit a kereles torzse nem tud megadni, azt nem is
+        //lehet elteriteni. Korabban itt egy BoardId allt, es a letrehozas AZT hasznalta a
+        //route erteke helyett - a jogosultsagi kapu viszont a route-ra ellenorzott.
         /// <summary>
         /// Oszlop neve, max 80 karakter
         /// </summary>

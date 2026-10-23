@@ -1,8 +1,8 @@
 import apiClient from "./client";
 import { validateCreateColumn, validateUpdateColumn, validateColumnOrder } from "../utils/validators";
 
+//A boardId szandekosan NINCS a torzsben - lasd a sprintApi megjegyzeset.
 interface CreateColumnRequest {
-    boardId: string;
     name: string;
     mapsToStatus: string;
     wipLimit: number | null;

@@ -37,7 +37,6 @@ namespace ProjectManager.IntegrationTests.CrossProject
                 () => sut.CreateColumnAsync(seed.A.Project.Id, seed.B.Board.Id,
                     new CreateColumnDto
                     {
-                        BoardId = seed.B.Board.Id,
                         Name = "Idegen oszlop",
                         MapsToStatus = "todo",
                         Position = 1
