@@ -22,7 +22,7 @@ Az alkalmazás **önhosztolható**: minden konfiguráció környezeti változób
 - **HttpOnly refresh token süti** – `SameSite=Strict`, az access token kizárólag memóriában
 - **TOTP kétfaktoros hitelesítés** – választható, a titok AES-GCM-mel titkosítva tárolva
 - **RBAC jogosultságkezelés** – 4 projektszerep: `Owner`, `Admin`, `Member`, `Viewer`
-- **Rate limiting** – bejelentkezés, regisztráció, jelszó-visszaállítás, webhook végpont
+- **Rate limiting** – bejelentkezés, regisztráció, jelszó-visszaállítás és -beváltás, e-mail megerősítés, megerősítő levél újraküldése, presigned feltöltés, webhook végpont
 - **Fiókkezelés** – e-mail megerősítés, jelszó-visszaállítás, fióktörlés anonimizálással
 
 ### Projekt és feladatkezelés
@@ -199,7 +199,7 @@ A broadcast soha nem buktatja el a műveletet: az adat mentése után a SignalR 
 | Munkamenet-érvénytelenítés | Jelszóváltás, 2FA-művelet és token-visszajátszás esetén minden munkamenet visszavonódik |
 | Kétfaktoros hitelesítés | Választható TOTP; a kikapcsoláshoz ismételt hitelesítés kell |
 | Titkosítás | AES-GCM a TOTP titkokhoz és a webhook secretekhez, `enc:v1:` verziójelzéssel |
-| Rate limiting | Redis-alapú atomikus számláló; e-mail és IP szintű korlát is |
+| Rate limiting | E-mail és IP szintű korlát is. A megvalósítás a példányszámtól függ: egy példánynál memóriában, több példánynál Redis-alapú atomikus számláló (`API_REPLICAS`, lásd [`OPERATIONS.md`](./OPERATIONS.md) 3. fejezet) |
 | Webhook hitelesítés | HMAC-SHA256 (GitHub) és konstans idejű token-összevetés (GitLab), fail-closed ismeretlen providerre |
 | Hibakezelés | Tipizált kivétel-hierarchia; csak az `AppException` üzenete hagyja el a szervert, minden más `500` + általános szöveg |
 | Biztonsági fejlécek | CSP, HSTS, `frameDeny`, `Referrer-Policy`, `nosniff` – Traefik middleware-en |
@@ -350,7 +350,7 @@ Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS
 | PaaS / Orchestration | Dokploy (Docker Swarm + Traefik) |
 | SSL tanúsítvány | Let's Encrypt (Dokploy/Traefik automatikus) |
 | Reverse Proxy | Traefik (Dokploy beépített) |
-| Backend példányszám | 2 replika, SignalR affinity sütivel |
+| Backend példányszám | 2 replika (`API_REPLICAS`), SignalR affinity sütivel |
 
 **Domain struktúra:**
 - `app.trunkpeter.com`: Frontend (Svelte SPA, Nginx)
@@ -369,7 +369,8 @@ Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS
 3. **Dokploy projekt létrehozása** – Docker Compose alapú service, GitHub repo összekötése, `docker-compose.prod.yml` mint compose fájl megadása
 
 4. **Environment Variables** beállítása a Dokploy UI-ban. A teljes lista a [`.env.example`](./.env.example)-ben van, minden változónál leírva, mi történik nélküle. Éles környezetben a fejlesztői beállításon túl ezek is kellenek:
-   - `REDIS_PASSWORD`, `REDIS_CONNECTION` – a rate limiting és a SignalR backplane
+   - `REDIS_PASSWORD`, `REDIS_CONNECTION` – a rate limiting és a SignalR backplane. **Egynél több replikánál kötelező**, és a hiányában az API indulásnál leáll
+   - `API_REPLICAS` – a példányszám. Ebből következik, hogy kell-e Redis, és mekkora a DB kapcsolatkészlet példányonként. Alapértéke 2
    - `RESEND_API_KEY`, `EMAIL_FROM` – tranzakciós e-mailek
    - `OTLP_LOGS_ENDPOINT`, `OO_INGEST_USER`, `OO_INGEST_TOKEN`, `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` – naplózás
    - `DOMAIN`, `FRONTEND_DOMAIN`, `S3_DOMAIN`, `COOKIE_DOMAIN`, `S3_PUBLIC_URL` – routing és sütik
@@ -377,7 +378,7 @@ Az alkalmazás éles környezetben Hetzner VPS-en fut, Dokploy (self-hosted PaaS
 
 5. **Deploy** – Dokploy automatikusan build-eli a `backend/Dockerfile` és `frontend/Dockerfile` alapján mindkét service-t; push-ra automatikus újradeploy fut
 
-Indulás előtt érdemes végigmenni az [`OPERATIONS.md`](./OPERATIONS.md) 4. fejezetének ellenőrzőlistáján.
+Indulás előtt érdemes végigmenni az [`OPERATIONS.md`](./OPERATIONS.md) 5. fejezetének ellenőrzőlistáján.
 
 ### SignalR WebSocket a Cloudflare mögött
 
@@ -443,7 +444,7 @@ Az MVP után következő munkák (SignalR refaktor, biztonsági megerősítés, 
 - **UI / E2E tesztek** – a store-ok és segédfüggvények tesztelve vannak, a DOM-szintű tesztelés nem
 - **Terheléses teszt és kapacitásbecslés** – a kötő korlát mérés nélkül nem állítható meg számokkal
 - **Gyorsítótárazás** – a statisztikai lekérdezések a legdrágábbak; itt lenne értelme, ha a mérés indokolja
-- **Adatbázis-skálázás** – kapcsolat-pooling, olvasási replika, az `Activities` tábla partícionálása
+- **Adatbázis-skálázás** – olvasási replika, az `Activities` tábla partícionálása. A kapcsolatkészlet korlátozása elkészült: a pool mérete a példányszámból származik
 
 ### Funkciók (Ezek sokszor már bizonyos funkciókra épülő komolyabb kibontakozottabb funkciók)
 - **Git hivatkozás leválasztása** – az áthelyezés megvan, a hozzárendelés megszüntetése nem

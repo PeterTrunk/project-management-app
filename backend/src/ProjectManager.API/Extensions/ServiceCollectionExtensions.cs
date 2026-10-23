@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 using ProjectManager.API.Authorization.Handlers;
 using ProjectManager.API.Authorization.Requirements;
 using ProjectManager.API.Common.Constants;
@@ -44,10 +45,74 @@ namespace ProjectManager.API.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddDatabase(this IServiceCollection services, string connectionString)
+        /// <summary>A PostgreSQL `max_connections` beállítása. Lásd a docker-compose.prod.yml postgres `command`-ját.</summary>
+        private const int PostgresMaxConnections = 100;
+
+        /// <summary>
+        /// Tartalék kapcsolatok, amelyeket az alkalmazás nem foglalhat le: a Dokploy mentés
+        /// `pg_dump`-ja, egy üzemeltetői `psql` munkamenet, és az induláskor futó migráció.
+        /// </summary>
+        private const int ReservedConnections = 20;
+
+        public static IServiceCollection AddDatabase(
+            this IServiceCollection services,
+            string connectionString,
+            int apiReplicas)
         {
+            //A kapcsolatkészletet a példányszámból származtatjuk, mert a korlát a példányokra
+            //NÉZVE összegződik: az Npgsql alapértelmezett 100-as pool FOLYAMATONKÉNT értendő,
+            //tehát két replika 200 kapcsolatot kérhetett egy 100-as max_connections ellen.
+            //A 100 fölötti kérés `53300: too many clients already` hibát adna - ami az ÖSSZES
+            //replikát érinti. Korlátos pool mellett a kimerülés egyetlen replikán jelentkezik
+            //pool-timeoutként: lokális és újrapróbálható hiba a globális kiesés helyett.
+            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+
+            //Ha az üzemeltető explicit értéket adott a DATABASE_URL-ben, az nyer: a
+            //származtatás kényelmi alapérték, nem felülírhatatlan szabály.
+            //
+            //Az észlelés az ALAPÉRTÉKHEZ hasonlít, és nem a nyers szövegben keres. Így az
+            //értelmezést az Npgsql végzi, tehát minden általa elfogadott írásmód beleesik
+            //(`Maximum Pool Size`, `MaxPoolSize`, kis-nagybetűtől függetlenül), egy érvénytelen
+            //kulcs pedig már a beolvasásnál `ArgumentException`-t dob - mindkettő mérve.
+            //
+            //A `ContainsKey` erre NEM használható: az Npgsql erősen típusos buildere minden
+            //ismert kulcsot alapértékkel tartalmaz, ezért mindig igazat ad (mérve). Arra
+            //épülve a származtatás soha nem futott volna le, és a pool korlátlan maradt volna.
+            //
+            //Egyetlen vakfolt: ha az üzemeltető épp az alapértéket (100) írja ki explicit módon.
+            //Ezt felülírjuk - ami helyes is, hiszen pont ez a korlátlan érték, amit kötni akarunk.
+            var defaultMaxPoolSize = new NpgsqlConnectionStringBuilder().MaxPoolSize;
+
+            if (builder.MaxPoolSize == defaultMaxPoolSize)
+            {
+                //A 10-es alsó korlát azért kell, hogy sok replika mellett se maradjon
+                //használhatatlanul kicsi a készlet.
+                const int minimumPoolSize = 10;
+                var derived = (PostgresMaxConnections - ReservedConnections) / Math.Max(1, apiReplicas);
+                builder.MaxPoolSize = Math.Max(minimumPoolSize, derived);
+
+                //Ha az alsó korlát lép életbe, a `replikaszám × pool + tartalék <= max_connections`
+                //összefüggés MÁR NEM ÁLL - és pont ez volt a változtatás célja. Ezt kimondjuk,
+                //mert különben csendben visszakapnánk a hibát, amit megszüntetni akartunk.
+                //Ilyen példányszámnál a helyes válasz a max_connections emelése, nem a pool
+                //további szűkítése: 10 alatt a készlet már a normál működést akadályozná.
+                if (derived < minimumPoolSize)
+                {
+                    var required = (apiReplicas * minimumPoolSize) + ReservedConnections;
+                    Serilog.Log.Warning(
+                        "A DB kapcsolatkeszlet alsó korlátja ({MinimumPoolSize}) lépett életbe "
+                        + "{ApiReplicas} példánynál, ezért a példányok együtt több kapcsolatot "
+                        + "kérhetnek, mint a max_connections ({PostgresMaxConnections}). "
+                        + "Emeld a postgres max_connections értékét legalább {Required}-ra "
+                        + "(docker-compose: `postgres -c max_connections=...`), és írd át a "
+                        + "PostgresMaxConnections állandót. {EventType}",
+                        minimumPoolSize, apiReplicas, PostgresMaxConnections, required,
+                        "DbPoolFloorReached");
+                }
+            }
+
             services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(connectionString));
+                options.UseNpgsql(builder.ConnectionString));
             return services;
         }
 
@@ -88,6 +153,48 @@ namespace ProjectManager.API.Extensions
             return services;
         }
 
+        /// <summary>
+        /// Kérelemkorlátozás regisztrálása a példányszámnak megfelelő megvalósítással.
+        /// </summary>
+        /// <remarks>
+        /// A döntés a <c>API_REPLICAS</c>-on alapul, mert a kérelemkorlátozás helyessége
+        /// a példányszámtól függ, nem attól, hogy be van-e állítva egy connection string:
+        /// <list type="bullet">
+        /// <item>egy példány: a memóriában vezetett számláló a teljes rendszert látja, tehát helyes;</item>
+        /// <item>több példány: csak a megosztott Redis számláló helyes, különben minden példány
+        /// külön számol, és a tényleges korlát a példányszámmal felszorozódik - CSENDBEN.</item>
+        /// </list>
+        /// Ezért több replikánál a Redis hiánya induláskor hibát dob. Korábban a Redis
+        /// hiánya feltétel nélkül csendes hiba volt: éles módban az alkalmazás elindult,
+        /// majd a teljes AuthController, az AttachmentService és a webhook végpont
+        /// 500-at adott, mert az IConnectionMultiplexer nem volt feloldható.
+        /// </remarks>
+        public static IServiceCollection AddRateLimiting(
+            this IServiceCollection services,
+            string? redisConnection,
+            int apiReplicas)
+        {
+            if (apiReplicas > 1)
+            {
+                if (string.IsNullOrWhiteSpace(redisConnection))
+                    throw new InvalidOperationException(
+                        $"A REDIS_CONNECTION kötelező, ha API_REPLICAS > 1 (most {apiReplicas}). " +
+                        "Megosztott számláló nélkül a kérelemkorlátozás példányonként számolna, " +
+                        "tehát a tényleges korlát a példányszámmal felszorozódna.");
+
+                services.AddScoped<IRateLimitService, RateLimitService>();
+                return services;
+            }
+
+            //Egy példány: a számláló a folyamat memóriájában is a teljes rendszert látja.
+            //Singleton, nem Scoped - Scopedként minden kérés friss számlálót kapna, és a
+            //korlát soha nem lépne életbe. A Redis-es változatnál ez nem gond, mert ott az
+            //állapot a folyamaton kívül van.
+            services.AddMemoryCache();
+            services.AddSingleton<IRateLimitService, InMemoryRateLimitService>();
+            return services;
+        }
+
         public static IServiceCollection AddRedisAndSignalR(this IServiceCollection services, string? redisConnection)
         {
             //Explicit időzítés, hogy a kliens és a szerver ne mondhasson ellent egymásnak.
@@ -99,6 +206,10 @@ namespace ProjectManager.API.Extensions
                 options.KeepAliveInterval = TimeSpan.FromSeconds(15);
                 options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
             });
+            //A backplane feltételes, és ez helyes: egyetlen példánynál a memóriában tartott
+            //hub ugyanazt adja, mert nincs másik példány, akihez az üzenetet át kellene vinni.
+            //Több példánynál viszont a Redis kötelező - ezt az AddRateLimiting kényszeríti ki,
+            //ott egy helyen, hogy a két döntés ne tudjon ellentmondani egymásnak.
             if (!string.IsNullOrEmpty(redisConnection))
             {
                 //SignalR backplane
@@ -107,7 +218,10 @@ namespace ProjectManager.API.Extensions
                     options.Configuration.ChannelPrefix = RedisChannel.Literal("ProjectManager");
                 });
 
-                //Rate limiting-hez külön regisztráció multiplexerként
+                //A Redis-es kérelemkorlátozás multiplexere. A Connect() szinkron és eager:
+                //ha a Redis még nem fogad kapcsolatot, itt RedisConnectionException-nel el sem
+                //indul az alkalmazás (mérve). Ezért a compose-ban a pm-api a redisre
+                //`condition: service_healthy`-vel vár, nem `service_started`-del.
                 var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
                 services.AddSingleton<IConnectionMultiplexer>(multiplexer);
             }
@@ -199,7 +313,8 @@ namespace ProjectManager.API.Extensions
 
             //Scoped service-ek
             services.AddScoped<IAuthService, AuthService>();
-            services.AddScoped<IRateLimitService, RateLimitService>();
+            //Az IRateLimitService NEM itt regisztrálódik: a megvalósítás a példányszámtól
+            //függ, ezért az AddRateLimiting végzi.
             services.AddScoped<IProjectService, ProjectService>();
             services.AddScoped<ITaskService, TaskService>();
             services.AddScoped<ILabelService, LabelService>();

@@ -3,6 +3,12 @@ services:
     image: postgres:17
     container_name: pm-postgres
     restart: unless-stopped
+    # A 100 a PostgreSQL alapertelmezese, tehat ez a sor funkcionalisan semmit nem valtoztat.
+    # Azert van kiirva, mert a kod EBBOL szarmaztatja a kapcsolatkeszlet meretet
+    # (ServiceCollectionExtensions.PostgresMaxConnections): egy implicit alapertekre
+    # hivatkozo feltevest nem lehet atnezni, egy kiirt erteket igen. Ha ez valtozik,
+    # a kodban levo allandot is at kell irni.
+    command: postgres -c max_connections=100
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -121,7 +127,16 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     deploy:
-      replicas: 2
+      # A peldanyszam egyetlen helyen deklaralva. Ugyanez a kifejezes szerepel a lenti
+      # env blokkban is: a Compose mindkettot ugyanabbol a valtozobol helyettesiti be,
+      # tehat a topologia es az app errol valo tudasa nem tud elcsuszni egymastol.
+      # Ebbol harom dolog kovetkezik: hany konterner indul, kell-e Redis (1 peldanynal
+      # nem, a korlatozas memoriaban szamol; tobbnel KOTELEZO, kulonben az API el sem
+      # indul), es mekkora a DB kapcsolatkeszlet peldanyonkent.
+      # FIGYELEM: a `docker compose up --scale pm-api=N` felulirja ezt az erteket az
+      # env var valtozasa NELKUL - olyankor allitsd at a valtozot is, kulonben az app
+      # egypeldanyosnak hiszi magat. Az indulasi naplo WRN sora ezt kimondja.
+      replicas: ${API_REPLICAS:-2}
     #container_name: pm-api
     restart: unless-stopped
     depends_on:
@@ -130,7 +145,10 @@ services:
       seaweedfs:
         condition: service_healthy
       redis:
-        condition: service_started
+        # service_healthy, nem service_started: a ConnectionMultiplexer.Connect() szinkron
+        # es eager, tehat ha a Redis meg nem fogad kapcsolatot, az API RedisConnectionException-nel
+        # el sem indul (merve). A redisnek van healthcheckje, igy ez ingyen van.
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5178
@@ -152,6 +170,8 @@ services:
       API_BASE_URL: ${API_BASE_URL}
       FRONTEND_URL: ${FRONTEND_URL}
       REDIS_CONNECTION: ${REDIS_CONNECTION}
+      # Ugyanaz a kifejezes, mint a fenti deploy.replicas - lasd az ottani megjegyzest.
+      API_REPLICAS: ${API_REPLICAS:-2}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}

@@ -234,7 +234,54 @@ Olcsó szokás, ami tovább csökkenti a kockázatot: ha valaha ténylegesen ér
 
 ---
 
-## 3. Adatvédelmi incidens
+## 3. A példányszám megváltoztatása
+
+A futó API példányok számát **egyetlen** változó deklarálja, az `API_REPLICAS`. Ugyanez a
+változó adja a `docker-compose.prod.yml` `deploy.replicas` értékét **és** az alkalmazás saját
+tudását is róla, hogy a kettő ne tudjon elcsúszni. Három dolog függ tőle, ezért a módosítása
+nem csak egy szám átírása.
+
+### Mi következik a példányszámból
+
+| Példányszám | Kérelemkorlátozás | SignalR | DB pool / példány |
+|---|---|---|---|
+| 1 | a folyamat memóriájában | nincs backplane | 80 |
+| 2 (jelenlegi) | **Redis kötelező** | Redis backplane | 40 |
+| 3 | **Redis kötelező** | Redis backplane | 26 |
+
+A pool képlete: `(max_connections - 20) / API_REPLICAS`. A 20 tartalék a mentés `pg_dump`-ja,
+egy üzemeltetői `psql` munkamenet és az induláskor futó migráció számára van.
+
+### Mire kell figyelni
+
+- **Egyről többre emelve a `REDIS_CONNECTION` kötelezővé válik.** Ha nincs beállítva, az API
+  **indulásnál dob**, érthető üzenettel. Ez szándékos: megosztott számláló nélkül minden
+  példány külön számolna, tehát a tényleges korlát a példányszámmal felszorozódna — csendben.
+- **Egyre csökkentve a korlátok a memóriában számolnak.** Ez egy példánnyal helyes, de az
+  újraindítás nullázza a számlálókat. Az indulási naplóban ilyenkor egy `WRN` sor áll
+  (`RateLimitInMemory`), ami kimondja a módot.
+- **A `docker compose up --scale pm-api=N` NEM elég.** Felülírja a `deploy.replicas`-t, de az
+  env vart nem — az alkalmazás ilyenkor egypéldányosnak hiszi magát, és a korlátok
+  példányonként számolnak. Mindig az `API_REPLICAS`-t állítsd át.
+- **Nyolc példány felett** a 10-es alsó pool-korlát miatt a példányok együtt több kapcsolatot
+  kérhetnének, mint a `max_connections`. Ilyenkor az indulási napló egy `WRN` sorban
+  (`DbPoolFloorReached`) megadja a szükséges értéket. A `max_connections` a compose fájlokban
+  **kiírva** áll (`postgres -c max_connections=100`), és a kódban egy állandó párja van
+  (`ServiceCollectionExtensions.PostgresMaxConnections`) — **a kettőt együtt kell átírni.**
+
+### A napló ellenőrzése deploy után
+
+Az OpenObserve-ben a mód egyetlen lekérdezéssel ellenőrizhető:
+
+```sql
+SELECT * FROM default WHERE eventtype = 'RateLimitInMemory'
+```
+
+Két replika mellett ez **nem adhat találatot**. Ha mégis ad, akkor vagy az `API_REPLICAS`
+maradt 1-en, vagy a példányszám kézi skálázással lett megemelve — mindkét esetben a
+kérelemkorlátozás a vártnál engedékenyebb.
+
+## 4. Adatvédelmi incidens
 
 Adatvédelmi incidens minden olyan biztonsági esemény, amely személyes adat véletlen vagy
 jogellenes megsemmisítését, elvesztését, megváltoztatását, jogosulatlan közlését vagy az
@@ -266,7 +313,7 @@ is jogszabályi kötelezettség.
 
 ---
 
-## 4. Éles indulás előtti ellenőrzőlista
+## 5. Éles indulás előtti ellenőrzőlista
 
 A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pillanatában
 **igaznak kell lenniük**. Ez a lista gyűjti össze, mi van még nyitva.

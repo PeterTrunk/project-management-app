@@ -4941,6 +4941,94 @@ felejtsük el őket.
 Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
 listájába egy sor a globális szerepkörökről.
 
+### A példányszám mint deklarált topológia: kérelemkorlátozás, backplane, DB pool
+
+**Probléma:** a felülvizsgálat kiindulópontja az a feltételezés volt, hogy egy példánynál a
+kérelemkorlátozás memóriában számol, és a Redis csak több példányhoz kell. **Méréssel kiderült,
+hogy ilyen visszaesés nem létezett**: a `RateLimitService` kötelezően `IConnectionMultiplexer`-t
+kér, az pedig csak akkor került a konténerbe, ha a `REDIS_CONNECTION` be volt állítva - az
+`IRateLimitService` viszont feltétel nélkül regisztrált volt.
+
+A következmény a csendes hibák osztályába tartozott, és a hatóköre szélesebb volt a korlátozott
+végpontoknál. Mivel az `AuthService` konstruktora kéri az `IRateLimitService`-t, a **teljes
+AuthController** feloldhatatlanná vált, az `AttachmentService`-szel és a webhook végponttal
+együtt. Mérve, `REDIS_CONNECTION` nélkül:
+
+| Környezet | Viselkedés |
+|---|---|
+| Development | Az API **el sem indul** - a DI validáció induláskor elkapja |
+| **Production** | **Elindul**, majd minden bejelentkezés, regisztráció és tokencsere `500` |
+
+Ez volt az **egyetlen** kritikus környezeti változó fail-fast ellenőrzés nélkül: 13 másik dob
+`InvalidOperationException`-t induláskor. A `.env.example` kommentje ráadásul azt állította,
+hogy „EGY backend példánnyal az alkalmazás elindul" - vagyis a dokumentáció megerősítette a
+téves feltevést.
+
+**Megoldás:** a **deklarált példányszám** lett az igazságforrás, nem az, hogy be van-e állítva
+egy connection string. Egy új `API_REPLICAS` változó adja a compose `deploy.replicas` értékét
+**és** az alkalmazás saját tudását is róla - ugyanabból a `${API_REPLICAS:-2}` kifejezésből,
+tehát a kettő nem tud elcsúszni. Három dolog következik belőle:
+
+1. **Hány konténer indul** (`deploy.replicas`).
+2. **Kell-e Redis.** Egy példánynál nem: új `InMemoryRateLimitService` számol a folyamat
+   memóriájában, ami egy példánnyal helyes, és a SignalR-nek sincs kit értesítenie. Több
+   példánynál **kötelező**, és a hiánya induláskor dob.
+3. **Mekkora a DB kapcsolatkészlet** példányonként.
+
+Miért a példányszám a helyes kapcsoló, és nem a connection string megléte: egy feltétel nélküli
+in-memory visszaesés **új** csendes hibát hozott volna. Ha több replikánál marad ki a
+`REDIS_CONNECTION`, minden példány a saját számlálóit vezeti, tehát a tényleges korlát a
+példányszámmal felszorozódik - és semmi nem hibázik. A példányszámot viszont nem lehet
+„elfelejteni": az mondja meg, hány konténer induljon.
+
+**Ami nyitva marad, és ezért hangos.** A `docker compose up --scale pm-api=N` felülírja a
+`deploy.replicas` értékét az env var változása nélkül - ilyenkor az alkalmazás egypéldányosnak
+hiszi magát. Erre nem több kód a válasz, hanem egy indulási `WRN` sor, amely kimondja, hogy
+a korlátok memóriában számolnak. A fordított tévedés (több példányt deklarálsz, egy fut)
+ártalmatlan: a Redis-es számláló akkor is helyes.
+
+**A DB kapcsolatkészlet.** A kapacitásterv előre jelezte, és a mérés igazolta: az Npgsql
+alapértelmezett 100-as készlete **folyamatonként** értendő, tehát két replika 200 kapcsolatot
+kérhetett egy 100-as `max_connections` ellen. A 100 fölötti kérés `53300: too many clients
+already`, ami **minden** replikát érint. A pool mostantól a példányszámból származik:
+
+```
+Maximum Pool Size = (max_connections - 20) / API_REPLICAS
+```
+
+A 20 tartalék a mentés `pg_dump`-ja, egy üzemeltetői `psql` és az induláskori migráció számára
+van. Két replikánál ez 40 kapcsolat példányonként. A korlát értelme nem a szűkítés - a készlet
+lusta, csak annyit nyit, amennyi kell -, hanem a **hibamód cseréje**: pool-timeout egyetlen
+replikán (lokális, újrapróbálható) a globális kiesés helyett. Ha az üzemeltető explicit
+`Maximum Pool Size`-t ad a `DATABASE_URL`-ben, az nyer.
+
+A `max_connections` ezért **kiírva** áll a compose fájlokban (`postgres -c max_connections=100`),
+pedig a 100 az alapértelmezés: a kód ebből az értékből származtat, és egy implicit alapértékre
+hivatkozó feltevést nem lehet átnézni. Pontosan ez a hibaosztály okozta a korábbi csendes
+hibákat - a konfiguráció két helyen élt. Nyolc replika felett a 10-es alsó pool-korlát miatt az
+összefüggés már nem állna; ilyenkor egy `WRN` sor megadja a szükséges `max_connections` értéket.
+
+**Hidegindítás.** A `ConnectionMultiplexer.Connect()` szinkron és eager, `abortConnect=false`
+nélkül. Mérve: ha a Redis még nem fogad kapcsolatot, az API `RedisConnectionException`-nel el
+sem indul. A `pm-api` ezért `condition: service_healthy`-vel vár a redisre a korábbi
+`service_started` helyett - a healthcheck a SEC-19 óta megvan, tehát ez ingyen volt.
+
+**A kérelemkorlátozás lefedettsége.** A felülvizsgálat a hiányzó korlátokat is számba vette.
+A hitelesítés nélküli végpontok közül négyen nem volt korlát: `refresh`, `logout`,
+`verify-email`, `reset-password`. Ebből kettő kapott IP-alapú korlátot
+(`reset_password_ip` 10/óra, `verify_email_ip` 20/óra), mindkettő **a tokenlekérdezés előtt**
+futva - ugyanaz a sorrend, mint a SEC-10/a és a SEC-25 javításnál.
+
+Ez **nem** a találgatás ellen szól: a tokenek 256 bitesek (`SecureTokenGenerator`), a brute
+force nem reális - ugyanaz az érvelés, amivel a meghívó token korlátja (SEC-22) tudatosan
+elmaradt. Amit megszüntet: a hitelesítés nélkül, korlátlanul indítható adatbázis-lekérdezés.
+
+A `refresh` és a `logout` **szándékosan korlátlan marad**. A klienst időzítő hívja a token
+lejárata előtt, tehát egy IP-alapú korlát egy megosztott kijárat mögötti csapatot kizárna -
+és ez az `AuthService` saját tanulsága: a `login_ip` is csak *társ*korlátként működik, a
+szűkebb, e-mailt is tartalmazó kulcs mellett. Az e-mail-bombázás iránya zárt: mérve mindhárom
+levélküldési hely az `AuthService`-ben van, és mind korlát alatt.
+
 ### Az objektumtároló leváltása: MinIO -> SeaweedFS
 
 **Probléma:** a MinIO közösségi kiadása a fejlesztés alatt fokozatosan megszűnt. A GitHub repó
