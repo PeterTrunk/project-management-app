@@ -34,7 +34,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(SprintResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> CreateSprintAsync(Guid projectId, [FromBody] CreateSprintDto dto)
@@ -44,7 +44,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPut("{sprintId}")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(SprintResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> UpdateSprintAsync(Guid projectId, Guid sprintId, [FromBody] UpdateSprintDto dto)
@@ -54,7 +54,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{sprintId}")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteSprintAsync(Guid projectId, Guid sprintId)
@@ -74,7 +74,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{sprintId}/plan")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(SprintResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> PlanSprintAsync(Guid projectId, Guid sprintId)
@@ -84,7 +84,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{sprintId}/activate")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(SprintResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -94,7 +94,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPost("{sprintId}/complete")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(typeof(SprintResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SprintResponseDto>> CompleteSprintAsync(Guid projectId, Guid sprintId, [FromBody] Guid? targetSprintId)

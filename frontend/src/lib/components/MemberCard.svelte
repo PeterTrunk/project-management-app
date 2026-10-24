@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { MemberResponse } from '../api/teamApi';
     import { updateMemberRoleAsync, removeMemberAsync } from '../api/teamApi';
+    import { outranks, assignableRoles } from '../utils/projectRoles';
     import ConfirmModal from './ConfirmModal.svelte';
 
     import { UserMinus } from 'lucide-svelte';
@@ -13,7 +14,10 @@
     export let currentUserId: string;
     export let onRefresh: () => Promise<void> = async () => {};
 
-    const ROLES = ['Admin', 'Member', 'Viewer'];
+    //A felajánlott szerepkörök a hívó rangjától függenek: csak a sajátjánál alacsonyabbat
+    //adhat. A tulajdonosi szerepkör soha nincs köztük, mert nem kiosztható.
+    //A kikényszerítés a szerveren van - ez itt a felület viselkedése.
+    $: roleOptions = assignableRoles(currentUserRole);
 
     let isConfirmOpen = false;
     let confirmTitle = '';
@@ -21,9 +25,10 @@
     let confirmAction: () => Promise<void> = async () => {};
     let error = '';
 
-    $: isOwner = currentUserRole === 'Owner';
-    $: isMemberOwner = member.projectRole === 'Owner';
-    $: canModify = isOwner && !isMemberOwner;
+    //Ugyanaz a rangsor-szabály, mint a szerveren: csak a nálad alacsonyabb rangú tagot
+    //érintheted. Ebből adódik, hogy adminisztrátor nem érhet másik adminisztrátorhoz, a
+    //tulajdonoshoz senki, és saját magához sem érhet senki - külön feltétel nélkül.
+    $: canModify = outranks(currentUserRole, member.projectRole);
 
     function openConfirm(title: string, message: string, action: () => Promise<void>) {
         confirmTitle = title;
@@ -106,7 +111,7 @@
                 value={member.projectRole}
                 on:change={handleRoleChange}
             >
-                {#each ROLES as role}
+                {#each roleOptions as role}
                     <option value={role}>{role}</option>
                 {/each}
             </select>

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { rankOf } from '../utils/projectRoles';
     import { type MemberResponse, type InviteLinkResponse, getInvitationsAsync, deleteInvitationAsync } from '../api/teamApi';
     import { authStore } from '../stores/authStore';
     import { teamStore  } from '../stores/teamStore';
@@ -47,12 +48,12 @@
         }
     });
     
-    // Rendezés: Owner első, utána Admin, Member, Viewer ABC sorrendben
+    // Rendezés: Owner első, utána Admin, Member, Viewer ABC sorrendben.
+    // A rangsor a közös helperből jön, nem beégetett listából: enélkül egy új szerepkör
+    // bevezetésekor ez a rendezés csendben a lista végére sorolná (a korábbi `?? 4`).
     $: sortedMembers = [...members].sort((a, b) => {
-        const roleOrder = { Owner: 0, Admin: 1, Member: 2, Viewer: 3 };
-        const aOrder = roleOrder[a.projectRole as keyof typeof roleOrder] ?? 4;
-        const bOrder = roleOrder[b.projectRole as keyof typeof roleOrder] ?? 4;
-        if (aOrder !== bOrder) return aOrder - bOrder;
+        const byRank = rankOf(b.projectRole) - rankOf(a.projectRole);
+        if (byRank !== 0) return byRank;
         return a.displayName.localeCompare(b.displayName);
     });
 
