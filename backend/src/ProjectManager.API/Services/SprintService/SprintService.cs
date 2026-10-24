@@ -745,7 +745,7 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new NotFoundException("Sprint nem található");
 
-            _context.Entry(sprint).OriginalValues["RowVersion"] = dto.RowVersion;
+            _context.Entry(sprint).OriginalValues["xmin"] = dto.RowVersion;
 
             if (dto.Name != null) sprint.Name = dto.Name;
             if (dto.Goal != null) sprint.Goal = dto.Goal;
