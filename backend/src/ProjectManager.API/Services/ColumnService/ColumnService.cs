@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Columns;
@@ -315,6 +316,16 @@ namespace ProjectManager.API.Services.ColumnService
                 }
 
                 return updatedColumns.Select(MapToDto).ToList();
+            }
+            //A Serializable tranzakció ára, hogy a szerver ütközéskor megszakítja a műveletet.
+            //Itt ez reális: az átrendezés a tábla MINDEN oszlopát írja, tehát két egyidejű
+            //átrendezés egymásba ér. A felhasználó szempontjából ez kezelt helyzet, tehát a
+            //válasz 409 - a generikus ág alatt viszont 500 lett volna. Ugyanazt az üzenetet
+            //adjuk, mint az oszlop egyedi módosításánál jövő konkurencia-ütközésnél.
+            catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new ConflictException("Az oszlopok sorrendje időközben módosult, kérjük próbáld újra!");
             }
             catch (Exception)
             {

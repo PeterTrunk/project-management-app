@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pipelines.Sockets.Unofficial.Arenas;
+using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
@@ -559,10 +560,26 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 }
             }
 
-            // NeedsRebalancing ellenőrzés a mentés után
+            // NeedsRebalancing ellenőrzés a mentés után.
+            //
+            // Itt az újrasorszámozás KARBANTARTÁS, nem előfeltétel: a mozgatás már elmentve,
+            // a pozíció érvényes, csak hosszú. Ha közben más is írja az oszlopot, az ütközés
+            // miatt elhagyott újrasorszámozás egyetlen következménye, hogy a pozíciók
+            // hosszúak maradnak a következő alkalomig - a felhasználó mozgatását viszont
+            // nem buktathatja el. (A két ütközés miatti hívási hely ezzel szemben a művelet
+            // előfeltétele, ott a kivétel szándékosan kiszáll.)
             if (dto.ColumnId.HasValue && _lexorankService.NeedsRebalancing(newPosition))
             {
-                await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
+                try
+                {
+                    await RebalanceColumnAsync(dto.ColumnId.Value, newPosition);
+                }
+                catch (ConflictException ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Az ujrasorszamozas utkozes miatt elmaradt, a poziciok hosszuak maradnak "
+                        + "| ColumnId: {ColumnId} | {EventType}", dto.ColumnId.Value, "RebalanceDeferred");
+                }
             }
 
             var assignments = await _context.TaskAssignments
@@ -893,7 +910,47 @@ namespace ProjectManager.API.Services.ProjectTaskService
             return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
+        /// <summary>
+        /// Egy oszlop összes feladatának újrasorszámozása a következő bucketben.
+        /// </summary>
+        /// <remarks>
+        /// Sorosított tranzakcióban fut, mert az állítás a sorok HALMAZÁRA szól ("a pozíciók
+        /// szigorúan növekvők"), amit az xmin konkurencia-token nem tud kikényszeríteni: az
+        /// egyenként nézi a sorokat.
+        ///
+        /// Újrapróbálás azért van, és a számlálónál is azért van, mert ez a művelet
+        /// AUTOMATIKUSAN indul, a felhasználó akarata nélkül - egy ütközés esetén tehát nem
+        /// tudja, mit kellene újrapróbálnia. A hívási helyek közül kettő (ütközés miatti
+        /// újrasorszámozás) a művelet ELŐFELTÉTELE, ott a hiba nem elnyelhető; a harmadik
+        /// (hossztúllépés utáni karbantartás) elhalasztható - lásd ott.
+        /// </remarks>
         private async Task RebalanceColumnAsync(Guid columnId, string position)
+        {
+            const int maxAttempts = 3;
+
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                try
+                {
+                    await RebalanceColumnOnceAsync(columnId, position);
+                    return;
+                }
+                catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex) && attempt < maxAttempts - 1)
+                {
+                    //A bukott kísérlet entitásállapotát el kell dobni, különben a következő
+                    //próbálkozás a már módosított, nem mentett pozíciókkal indulna.
+                    _context.ChangeTracker.Clear();
+                    await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)));
+                }
+                catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+                {
+                    throw new ConflictException(
+                        "A feladatok sorrendje időközben módosult. Töltsd újra az oldalt, és próbáld újra!");
+                }
+            }
+        }
+
+        private async Task RebalanceColumnOnceAsync(Guid columnId, string position)
         {
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try

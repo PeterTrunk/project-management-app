@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Attachment;
@@ -40,28 +41,6 @@ namespace ProjectManager.API.Services.SprintService
             _currentUserService = currentUserService;
             _activityService = activityService;
             _logger = logger;
-        }
-
-        /// <summary>
-        /// Szerializációs ütközés (40001) vagy egyediség-sértés (23505) a kivétel-láncban.
-        /// </summary>
-        /// <remarks>
-        /// A láncot végig kell járni, nem csak a legkülső kivételt nézni: az EF Core a
-        /// PostgreSQL hibáját <c>DbUpdateException</c>-be csomagolja, ha az az UPDATE-nél
-        /// keletkezik, és csak a COMMIT-nál jövő hiba érkezik nyers alakban.
-        /// </remarks>
-        private static bool IsConcurrencyConflict(Exception exception)
-        {
-            for (var current = exception; current != null; current = current.InnerException)
-            {
-                if (current is PostgresException postgres &&
-                    (postgres.SqlState == "40001" || postgres.SqlState == "23505"))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         public async Task<SprintResponseDto> ActivateSprintAsync(Guid projectId, Guid sprintId)
@@ -161,7 +140,7 @@ namespace ProjectManager.API.Services.SprintService
             //viszont az EF Core DbUpdateException-be CSOMAGOLJA. Egy csak a nyers alakra
             //szűrő ág a csomagolt esetet átengedné. A 23505 (egyediség-sértés) ugyanígy
             //jöhet: azt a javított szűrt index adja, ha a két írás mégis összeérne.
-            catch (Exception ex) when (IsConcurrencyConflict(ex))
+            catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
             {
                 await transaction.RollbackAsync();
                 throw new ConflictException("Már van Aktív sprint!");
@@ -324,6 +303,15 @@ namespace ProjectManager.API.Services.SprintService
                 sprint.State = SprintStates.Completed;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+            }
+            //A Serializable tranzakció ára, hogy a szerver ütközéskor megszakítja a műveletet.
+            //Ez a felhasználó szempontjából kezelt helyzet ("valaki más épp ugyanezt teszi"),
+            //tehát 409 a helyes válasz - a generikus ág alatt viszont 500 lett volna, mert a
+            //middleware minden nem AppException-t belső hibaként képez le.
+            catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new ConflictException("A sprint időközben módosult. Töltsd újra az oldalt, és próbáld újra!");
             }
             catch (Exception)
             {
@@ -692,6 +680,15 @@ namespace ProjectManager.API.Services.SprintService
                         }
                     }
                 }
+            }
+            //A Serializable tranzakció ára, hogy a szerver ütközéskor megszakítja a műveletet.
+            //Ez a felhasználó szempontjából kezelt helyzet ("valaki más épp ugyanezt teszi"),
+            //tehát 409 a helyes válasz - a generikus ág alatt viszont 500 lett volna, mert a
+            //middleware minden nem AppException-t belső hibaként képez le.
+            catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new ConflictException("A sprint időközben módosult. Töltsd újra az oldalt, és próbáld újra!");
             }
             catch (Exception)
             {

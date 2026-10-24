@@ -4958,6 +4958,52 @@ felejtsük el őket.
 Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
 listájába egy sor a globális szerepkörökről.
 
+### Az `xmin` konkurencia-token felülvizsgálata: megvizsgált és megtartott döntés
+
+**Kiváltó ok:** egy külső felvetés, hogy az `xmin` rendszeroszlop konkurencia-tokenként nem
+teljesen megbízható. Ez igaz, és **a PostgreSQL kézikönyve is kimondja az alapját**:
+
+> „It is unwise, however, to depend on the uniqueness of transaction IDs over the long term
+> (more than one billion transactions)." (*ddl-system-columns*)
+
+Konkrétan pedig Andres Freund, a PostgreSQL egyik core committere írta le 2020-ban a
+`pgsql-bugs` és `pgsql-hackers` listán, épp az EF Core-os használatra válaszolva, hogy ez
+„not really a safe use of xmin" - mert körbefordulhat, és mert nem kezeli jól a tranzakción
+belüli több utasítást. A megjegyzéséhez ő maga tette hozzá: „Perhaps those are low enough
+risk for you."
+
+**A két mechanizmus megmérve**, a projekt adatbázisán, nem hivatkozás alapján:
+
+| Művelet | Megváltozik az `xmin`? |
+|---|---|
+| `VACUUM FREEZE` | **Nem** - `pageinspect`-tel igazolva, hogy a sor fagyott, az érték mégis a nyers |
+| `VACUUM FULL`, `CLUSTER` | Nem |
+| `ALTER TABLE ... ALTER COLUMN ... TYPE` | **Igen**, minden soron - egy táblát újraíró migráció érvényteleníti a kinti tokeneket |
+| Két írás egy tranzakción belül | **Nem** - az `xmin` tranzakciós bélyeg, nem írásszámláló |
+| `UPDATE ... RETURNING xmin`, majd commit | A visszaadott érték a commit után is érvényes |
+
+Az első mérés egy **saját tévedést javított**: a feltevés az volt, hogy a fagyasztás után az
+érték `2`-re (`FrozenTransactionId`) változik. Nem változik - és ez nem megnyugtató, hanem épp
+a körbefordulás *előfeltétele*: egy régen nem bolygatott sor `xmin`-je illeszthető marad.
+Mérés nélkül ez fordított előjellel került volna a dokumentációba.
+
+**Az alternatíva megvizsgálva.** Egy alkalmazás által karbantartott verzió-számláló, amit a
+`SaveChangesAsync` tölt ki (a `CreatedAt` / `UpdatedAt` mintájára), **mindkét** kifogást
+megszüntetné. A költsége mérve: 46 gépies leképezés, 4 entitás-property, 4 konfigurációs sor,
+~6 sor a `SaveChangesAsync`-ben, 1 migráció - és **nulla frontend-változás**, ha a típus `uint`
+marad. Egy fókuszált félnap.
+
+**Mégsem készült el, és ez a döntés indoka.** A számláló egy valószínűségi lyukat
+**determinisztikusra** cserélne: amit nem a `SaveChangesAsync` ír, az nem növeli a verziót -
+`ExecuteUpdateAsync`, nyers SQL, és ami nem fogható le hálóval, a **kézi adatbázis-javítás**.
+Ott a régi token 100%-os valószínűséggel illeszkedne, nem 1/2³²-vel. Az `xmin` erénye pont ez:
+**az adatbázis tartja karban, így semmilyen írási út nem kerülheti meg** - ugyanaz az érvelés,
+amiért a kézi verzióoszlopot az elején is elvetettük, csak most számokkal.
+
+Az `xmin` tehát **ismert korláttal** marad, nem fenntartás nélkül. A részletes elemzés - a négy
+Npgsql-korlát és a kódbázis nulla kitettsége mindegyikre - a szakdolgozat adatmodell-fejezetének
+munkaanyagában van.
+
 ### Projekt-hatókör a kérés törzséből, és egy néma adatbázis-kényszer
 
 **Kiváltó ok:** a szakdolgozat adatmodell-fejezetéhez gyűjtött anyag összevetése a kóddal.
