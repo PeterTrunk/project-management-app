@@ -73,7 +73,7 @@
         for (const file of files) {
             try {
                 // 1. Presigned URL kérés
-                const { presignedUrl, storageKey } = await getProjectPresignedUrlAsync(
+                const { uploadUrl, fields, storageKey } = await getProjectPresignedUrlAsync(
                     projectId, {
                         fileName: file.name,
                         contentType: file.type,
@@ -82,7 +82,7 @@
                 );
 
                 // 2. Direkt feltöltés az objektumtárolóba
-                await uploadToStorageAsync(presignedUrl, file, (progress) => {
+                await uploadToStorageAsync({ uploadUrl, fields }, file, (progress) => {
                     uploadProgress = progress;
                 });
 

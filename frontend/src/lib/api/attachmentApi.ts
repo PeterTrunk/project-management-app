@@ -22,7 +22,8 @@ interface PresignedUrlRequest {
 }
 
 interface PresignedUrlResponse {
-    presignedUrl: string;
+    uploadUrl: string;
+    fields: Record<string, string>;
     storageKey: string;
     expiresAt: string;
 }
@@ -61,9 +62,26 @@ export async function getProjectPresignedUrlAsync(projectId: string, data: Presi
 
 // Közvetlen feltöltés az objektumtárolóba, a backend által kiadott presigned URL-re.
 // A függvény szolgáltató-független: csak egy PUT-ot küld az aláírt címre.
-export async function uploadToStorageAsync(presignedUrl: string, file: File, onProgress?: (progress: number) => void): Promise<void> {
-    await axios.put(presignedUrl, file, {
-        headers: { 'Content-Type': file.type },
+// Alairt POST policy-val toltunk fel, nem sima PUT-tal: igy a tarolo maga kenyszeriti ki a
+// fajltipust es a meretet. A fields minden mezoje valtozatlanul kell, kulonben az alairas nem egyezik,
+// a Content-Type pedig FORM MEZOKENT utazik - a policy arra van alairva.
+export async function uploadToStorageAsync(
+    upload: Pick<PresignedUrlResponse, 'uploadUrl' | 'fields'>,
+    file: File,
+    onProgress?: (progress: number) => void
+): Promise<void> {
+    const form = new FormData();
+
+    for (const [key, value] of Object.entries(upload.fields)) {
+        form.append(key, value);
+    }
+    form.append('Content-Type', file.type);
+
+    // A file mezo kotelezoen az utolso - az S3 POST a sorrendre erzekeny.
+    form.append('file', file);
+
+    // A Content-Type fejlecet NEM allitjuk be: a boundary-t a bongeszonek kell generalnia.
+    await axios.post(upload.uploadUrl, form, {
         onUploadProgress: (e) => {
             if (onProgress && e.total) {
                 onProgress(Math.round(e.loaded / e.total * 100));

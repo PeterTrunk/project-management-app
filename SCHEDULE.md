@@ -3628,9 +3628,11 @@ használta** - nem épült be az aláírásba. A `ConfirmUploadAsync` ezen nem j
 ellenőrizte, az adatbázisba pedig a kliens által **bejelentett** típus került. A `ValidateFile`
 whitelistje így a presigned úton csak formalitás volt: a felhasználó bejelentett `image/png`-t,
 és bármit feltölthetett.
-Megoldás: `.WithHeaders(["Content-Type"] = contentType)` a presigned argumentumokba - a MinIO
-elutasítja az eltérő fejléccel érkező PUT-ot. Második rétegként a confirm összeveti a
-`StatObject` által visszaadott típust a bejelentettel.
+Megoldás: `.WithHeaders(["Content-Type"] = contentType)` a presigned argumentumokba, második
+rétegként pedig a confirm összeveti a `StatObject` által visszaadott típust a bejelentettel.
+**Ez a megoldás felében téves volt** - a `WithHeaders` nem teszi a fejlécet az aláírásba, tehát
+a tároló nem utasítja el az eltérő típussal érkező PUT-ot. A tényleges javítás az aláírt POST
+policy; lásd *Az aláírt feltöltés kikényszerítése: PUT helyett POST policy*.
 (Enyhítő tényező volt, amit az audit külön kiemelt: a letöltés `Content-Disposition: attachment`
 + `nosniff` fejlécekkel megy, tehát stored XSS ezen az úton nem volt - ez helyes tervezési döntés.)
 
@@ -5634,6 +5636,58 @@ kliens állapotától. Erre külön integrációs teszt is van.
 kötelező `taskId`-t várnak, és a következő webhook esemény úgyis visszakapcsolná - ehhez egy
 külön „elutasítva" fogalom kellene.
 
+
+### Az aláírt feltöltés kikényszerítése: PUT helyett POST policy
+
+**Probléma:** a fenti *Content-type whitelist nem érvényesült* javítás **nem oldotta meg**, amit
+állított. A megoldásként rögzített `.WithHeaders(["Content-Type"] = contentType)` hívás a Minio
+SDK 7.0.0-ban nem teszi a fejlécet az aláírásba: a kiadott URL-ben `X-Amz-SignedHeaders=host`
+áll, a fejléc pedig egy query paraméterként szivárog ki, a .NET típusnév értékével. A tároló
+tehát **bármilyen** típust elfogad a presigned PUT-on. Méréssel ellenőrizve: mindhárom eset
+(helyes, eltérő, hiányzó `Content-Type`) `200`-at ad. A whitelist a presigned úton továbbra is
+csak formalitás volt, a tényleges kikényszerítés egyedül a confirm lépés `StatObject`
+összevetésében élt — akkor viszont a fájl már fent van. Ugyanebből következett, hogy a
+**méretre sem** volt feltöltéskori korlát (lásd *Tárhely-kimerítés*).
+
+**Megoldás:** aláírt **POST policy** a presigned PUT helyett. A POST policy a feltétellistát
+írja alá, és a tároló kikényszeríti. A `PresignedUpload` (URL + űrlapmezők) váltja a puszta
+URL-t, a policy pedig három feltételt köt: a kulcsot, a `Content-Type`-ot és a **pontos**
+tartalomhosszt (a `PostPolicy.SetContentLength` `content-length-range min=max` feltételt ad, nem
+felső korlátot — itt ez a helyes, mert a kliens a méretet előre bejelenti).
+
+Ugyanazon a SeaweedFS 4.46-on mérve, a valódi `S3FileStorageService`-en keresztül:
+
+| Eset | Eredmény |
+|---|---|
+| egyező típus és méret | `204` |
+| eltérő típus (bejelentett `image/png`, küldött `application/x-msdownload`) | **`403`** |
+| a bejelentettnél nagyobb fájl | **`400`** |
+| a bejelentettnél kisebb fájl | **`400`** |
+
+A fájltípus és a méret így már a feltöltéskor, a tárolóban eldől. A confirm ellenőrzései
+**megmaradnak második rétegként**, mert a kikényszerítés a tároló viselkedésén nyugszik, az
+pedig csere vagy verzióváltás után némán megváltozhat.
+
+Érintett fájlok: `IFileStorageService` (`GeneratePresignedPutUrlAsync` →
+`GeneratePresignedUploadAsync`), új `PresignedUpload`, `S3FileStorageService`,
+`PresignedUrlResponseDto` (`PresignedUrl` → `UploadUrl` + `Fields`), `AttachmentService`,
+`attachmentApi.ts` (`axios.put` → `FormData` + `axios.post`), `TaskDetailModal.svelte`,
+`TeamResources.svelte`.
+
+Két részlet, ami nélkül a feltöltés némán elbukik: a `Content-Type` **űrlapmezőként** utazik
+(a policy arra van aláírva, nem a fejlécre), és a `file` mező kötelezően az **utolsó**. A
+böngésző felé a `Content-Type` kérésfejlécet nem állítjuk be, mert a multipart boundary-t a
+böngészőnek kell generálnia.
+
+**Teszt:** `Storage/PresignedUploadPolicyTests` — saját SeaweedFS konténert indít (adatbázis nem
+kell hozzá), és a fenti négy esetet, plusz a feltöltött objektum visszaolvasott típusát és
+méretét állítja. Ez az a fajta állítás, amit **nem lehet a kódból olvasva igazolni**: a
+viselkedés a tárolóé, nem a miénk.
+
+**Nyitva maradt:** a tárhelykvóta és a bucket lifecycle szabály továbbra is üzemeltetési döntés.
+A `presigned_upload:{userId}` rate limit és az induláskor is lefutó cleanup változatlanul kell,
+mert a meg nem erősített feltöltés objektuma attól még a tárolóban marad, hogy a típusa és a
+mérete helyes.
 
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
