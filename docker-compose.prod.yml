@@ -94,6 +94,17 @@ services:
     image: openobserve/openobserve:v1.0.0
     container_name: pm-openobserve
     restart: unless-stopped
+    # NINCS healthcheck, es ez tudatos - nem feledes.
+    #
+    # Az OpenObserve sajat allapot-vegpontja a /healthz, de a kepe (debian-slim alapu)
+    # NEM tartalmaz sem curl-t, sem wget-et, sem netcatet, a /dev/tcp pedig bash-sajatossag.
+    # Egy curl-os healthcheck tehat tartosan "unhealthy"-t jelezne egy mukodo
+    # szolgaltatasrol - az rosszabb, mint a jelzes hianya.
+    #
+    # Es nem is kritikus: a pm-api NEM var ra a depends_on-ban, a Serilog sinkjei
+    # kotegelve, aszinkron kuldenek, tehat az aggregator kiesese az alkalmazast nem
+    # lassitja es nem rontja el. A healthcheck itt kizarolag a telepito
+    # feluleten latszo allapotjelzest adna.
     environment:
       # Szandekosan ugyanaz a nev kint es bent: ezek az OpenObserve SAJAT valtozoi, es a
       # dokumentacioja is ezen a neven hivatkozik rajuk. Egy elteo kulso nev (pl. OO_*) csak
@@ -139,6 +150,20 @@ services:
       replicas: ${API_REPLICAS:-2}
     #container_name: pm-api
     restart: unless-stopped
+    # A /health vegpont szandekosan "shallow": csak azt mondja meg, hogy a folyamat
+    # kiszolgal, adatbazist NEM kerdez. Ha melyebb lenne, egy adatbazis-kieses MINDKET
+    # peldanyt kivenne a rotaciobol, es a felhasznalo a sajat hibauzenetunk helyett a
+    # Traefik 503-at latna - vagyis a diagnosztika rosszabb lenne, nem jobb.
+    #
+    # start_period: a migracio es a harom indulasi feladat (webhook secret migracio,
+    # TOTP titkositas, dokumentumverzio seed) az app.Run() ELOTT fut, tehat a port
+    # addig nem is figyel. Enelkul a kontener elobb lenne "unhealthy", mint kesz.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5178/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,6 +220,18 @@ services:
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls=true"
       - "traefik.http.services.api.loadbalancer.server.port=5178"
+      # Keszenlet-jelzes a terheleselosztonak. Enelkul a Traefik akkor veszi fel a
+      # kontenert szerverkent, amikor az FUT - nem amikor a port valaszol. Mivel az
+      # indulasi munka (migracio + harom seed/backfill) az app.Run() elott fut, egy
+      # gordulo ujrainditas alatt a kor-korbejaras olyan peldanyhoz is kuldene kerest,
+      # ahol meg senki nem hallgat: azok 502/503-cal elesnek. Retry middleware nincs
+      # beallitva, tehat nincs, ami ezt elfedje.
+      #
+      # Ezt a Traefik kivulrol vegzi, tehat NEM igenyel eszkozt a kontenerben -
+      # a Dockerfile-ban telepitett curl a Docker-szintu healthcheckhez kell.
+      - "traefik.http.services.api.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.api.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.api.loadbalancer.healthcheck.timeout=3s"
       - "traefik.http.middlewares.api-ws.headers.customRequestHeaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.api-security.headers.stsSeconds=300"
       - "traefik.http.middlewares.api-security.headers.contentTypeNosniff=true"
