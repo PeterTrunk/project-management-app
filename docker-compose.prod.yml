@@ -158,9 +158,22 @@ services:
     # start_period: a migracio es a harom indulasi feladat (webhook secret migracio,
     # TOTP titkositas, dokumentumverzio seed) az app.Run() ELOTT fut, tehat a port
     # addig nem is figyel. Enelkul a kontener elobb lenne "unhealthy", mint kesz.
+    #
+    # Az interval SZANDEKOSAN 30s, nem 10s. A Docker-szintu healthcheck minden
+    # futasnal UJ curl folyamatot inditt a kontenerben, es ennek merheto koltsege van:
+    # a Dokploy sajat healthcheckje (10 masodperces curl + DB-kerdes) a 0.27.1-ben
+    # megduplazta a kontener memoriahasznalatat, es a karbantarto javaslata is a
+    # 30-60 masodperces intervallum, illetve egy DB-t nem kerdezo vegpont lett
+    # (Dokploy issue #3755). A masodik javaslat nalunk eleve teljesul: a /health
+    # nem nyul adatbazishoz.
+    #
+    # Ennek azert nincs funkcionalis ara, mert a kiszolgalast NEM ez kapuzza, hanem a
+    # Traefik oldali health check - az pedig a Traefik sajat folyamatabol ker, tehat
+    # folyamatot nem inditt, es maradhat 10 masodpercen. Ugyanaz a mechanizmus, ket
+    # megvalositas, ket koltseg.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:5178/health"]
-      interval: 10s
+      interval: 30s
       timeout: 3s
       retries: 3
       start_period: 40s

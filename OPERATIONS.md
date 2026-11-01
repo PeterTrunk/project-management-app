@@ -377,3 +377,67 @@ A jogi dokumentumok olyan állításokat tartalmaznak, amelyeknek az indulás pi
 
 > A dokumentumokat jogász nem nézte át. Valódi felhasználókkal induló szolgáltatásnál ez megéri.
 > A szakdolgozatban ezt a fenntartást is érdemes jelezni.
+
+---
+
+## 6. Memóriahelyzet és a két elhalasztott intézkedés
+
+Mérés 2026-10-30-án, éles gépen (`docker stats --no-stream`, `free -h`, `vmstat 1 5`):
+
+| Csoport | Memória |
+|---|---|
+| **Az alkalmazás egésze** (2× API, PostgreSQL, SeaweedFS, OpenObserve, Redis, frontend) | **~829 MiB** |
+| **A platform** (Dokploy 966 MiB + saját Postgres 112 + saját Redis 5 + Traefik 34) | **~1117 MiB** |
+| Konténerek összesen | ~1946 MiB |
+| `free` szerint használt / elérhető | 2.5 GiB / **1.2 GiB** |
+| Swap | **0 B — nincs konfigurálva** |
+
+Részletek: a két API példány 204 és 169 MiB, tehát a .NET oldalon **nincs** memóriaprobléma
+(a Server GC-re vonatkozó gyanú mérés alapján elvetve, nincs szükség GC-beállításra).
+A `vmstat` nem jelez swappolást és io-várakozást, a CPU 92-98%-ban üresjáratban van.
+
+**A platform 35%-kal többet használ, mint amit futtat.** Ez tudatosan vállalt csere: a
+Dokploy adja a mentéseket, a Let's Encrypt automatizálást, a git-alapú telepítést és a
+beépített Traefiket. A kiváltása ezeket külön-külön pótolná - a mentés a legnehezebb.
+
+### Amiért ez ma nem probléma, és mikor válna azzá
+
+Üzem közben nincs szűkösség: 1.2 GiB elérhető, nincs swappolás. A kockázat a **tartalék
+hiánya egy csúcs alatt**, és van egy rendszeresen bekövetkező csúcs: a Dokploy **ugyanezen a
+gépen buildel**. A `dotnet publish` és a Vite build több száz MB-ot kér, miközben nincs swap
+és nincs konténer-memórialimit. Ilyenkor az OOM killer pontszám szerint választ, tehát a
+legnagyobb RSS-ű folyamatot lövi ki - akár a PostgreSQL-t.
+
+A plauzibilis hibaforgatókönyv tehát nem az, hogy üzem közben elfogy a memória, hanem hogy
+**egy telepítés kinyír egy futó szolgáltatást**.
+
+### A két elhalasztott intézkedés
+
+Mindkettő gyorsan elvégezhető, és **tudatosan várat magára** - a rendszer ma teszt- és
+demonstrációs terhelés alatt fut, ahol ez a kockázat elfogadható.
+
+**1. Swap hozzáadása (szerveroldali művelet, nem kódváltozás).** 2 GB fájl swap. Ez a
+legkisebb beavatkozás és a legnagyobb hatás: a csúcsokat kisimítja ahelyett, hogy OOM-ot
+okozzanak. A lassulás egy ritka csúcs alatt elfogadható ár egy kilőtt konténerhez képest.
+
+**2. Konténer-memórialimitek (`deploy.resources.limits.memory` a compose-ban).** Nem a
+fogyasztás csökkentésére, hanem azért, hogy az OOM killer a **hibás** komponenst válassza, ne
+a PostgreSQL-t. A fenti mérés alapján van mire méretezni: az API-knak 400 MB bőséges, a
+többinek a mért érték kétszerese. Mellékhaszon: a .NET GC beolvassa a cgroup limitet, és
+ahhoz méretezi a heapet.
+
+**3. Hosszabb távon: ne a hoszton épüljenek a képek.** Ha a build CI-ban történne és a
+szerver csak `pull`-ozna, a legnagyobb memóriacsúcs eltűnne a gépről. Ez viszont már a
+telepítési folyamat átalakítása, nem compose-változás.
+
+### A healthcheckek memóriaköltsége - amit a mérés tanított
+
+A Dokploy 0.27.1-ben a saját healthcheckje **megduplázta** a konténer memóriahasználatát: a
+megvalósítás 10 másodpercenként új `curl` folyamatot indított, és minden futásnál adatbázist
+kérdezett (Dokploy issue #3755). A karbantartó javaslata két pontból áll: 30-60 másodperces
+intervallum, és olyan végpont, amely nem nyúl adatbázishoz.
+
+Ezt a tanulságot a `pm-api` healthcheckje átveszi: a `/health` eleve nem kérdez adatbázist, az
+intervallum pedig **30 másodperc**. Funkcionális ára nincs, mert a kiszolgálást nem ez
+kapuzza, hanem a Traefik oldali health check - az a Traefik saját folyamatából kér, tehát
+folyamatot nem indít, és 10 másodpercen maradhat.
