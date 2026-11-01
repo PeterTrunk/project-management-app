@@ -52,7 +52,7 @@
         <p class="task-key">{task.taskKey}</p>
         {#if task.priority === 'high' || task.priority === 'critical'}
             <span class="priority priority-{task.priority}">{task.priority}</span>
-        {/if} 
+        {/if}
     </div>
     <p class="task-title">{task.title}</p>
     {#if task.labelIds.length > 0}

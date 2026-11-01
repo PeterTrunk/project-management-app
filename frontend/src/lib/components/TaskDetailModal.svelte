@@ -7,8 +7,8 @@
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
     import CommentSection from './CommentSection.svelte';
-    import { getLabelsAsync, addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
-    import { projectStore, setLabels } from '../stores/projectStore';
+    import { addLabelToTaskAsync, removeLabelFromTaskAsync, type LabelResponse } from '../api/labelApi';
+    import { projectStore } from '../stores/projectStore';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
     import { boardStore } from '../stores/boardStore';
@@ -190,15 +190,8 @@
         members = state.members;
     });
 
-    onMount(async () => {
+    onMount(() => {
         modalRef?.focus();
-        
-        try {
-            const data = await getLabelsAsync(projectId);
-            setLabels(data);
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba a labelek lekérésekor!');
-        }
     });
     
     let isConfirmOpen = false;
@@ -475,6 +468,7 @@
 
                 <div class="tab-content">
                     {#if activeDetailTab === 'details'}
+                        <h3>Alap adatok</h3>
                         <div class="meta-grid">
                             <span class="meta-label">Létrehozó</span>
                             <span class="meta-value">{task.createdByName}</span>
@@ -493,6 +487,28 @@
                                 <span class="meta-value">{new Date(task.closedAt).toLocaleDateString('hu-HU')}</span>
                             {/if}
                         </div>
+
+                        
+                        <h3>Opcionális mezők</h3>
+                        <div class="meta-grid">
+                            <span class="meta-label">Leírás</span>
+                            <span class="meta-value">
+                                {task.description?.trim() ? task.description : 'Nincs leírás'}
+                            </span>
+
+                            <span class="meta-label">Prioritás</span>
+                            <span class="meta-value">
+                                {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
+                                    <span class="priority priority-{task.priority}">{task.priority}</span>
+                                {:else}
+                                    <span>Nincs</span>
+                                {/if}
+                            </span>
+                            
+                            <span class="meta-label">Becsült idő</span>
+                            <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
+                        </div>
+                        
 
                         <div class="section">
                             <h3>Hozzárendelt személyek</h3>
@@ -521,24 +537,6 @@
                                 {:else}
                                     <p class="empty">Nincs label</p>
                                 {/if}
-                            </div>
-                        </div>
-
-                        <div class="optional-fields">
-                            <h3>Opcionális mezők</h3>
-                            <div class="meta-grid">
-                                <span class="meta-label">Leírás</span>
-                                <span class="meta-value">{task.description ?? 'Nincs leírás'}</span>
-                                <span class="meta-label">Prioritás</span>
-                                <span class="meta-value">
-                                    {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
-                                        <span class="priority priority-{task.priority}">{task.priority}</span>
-                                    {:else}
-                                        <span>Nincs</span>
-                                    {/if}
-                                </span>
-                                <span class="meta-label">Becsült idő</span>
-                                <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
                             </div>
                         </div>
                     {/if}
@@ -761,7 +759,7 @@
                                 </button>
                             </div>
                         {/if}
-                        {#if error}<p class="msg error">{error}</p>{/if}
+                        <!--{#if error}<p class="msg error">{error}</p>{/if} -->
                         {#if success}<p class="msg success">{success}</p>{/if}
                         <button type="button" class="btn-primary" on:click={() => openConfirm(
                             'Módosítások mentése',
@@ -795,10 +793,6 @@
     <CreateLabelModal
         bind:isOpen={isCreateLabelOpen}
         projectId={projectId}
-        onClose={async () => {
-            const data = await getLabelsAsync(projectId);
-            setLabels(data);
-        }}
     />
 {/if}
 
@@ -1005,10 +999,7 @@
         grid-template-columns: auto 1fr;
         gap: 0.35rem 1rem;
         font-size: 0.9rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
         border-radius: 6px;
-        padding: 0.75rem 1rem;
     }
 
     .meta-label { color: var(--text-muted); white-space: nowrap; }

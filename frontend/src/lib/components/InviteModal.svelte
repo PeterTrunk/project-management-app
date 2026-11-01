@@ -66,7 +66,7 @@
                 <div class="form-group">
                     <label for="maxUses">
                         Maximális használatok száma
-                        <span class="hint">(üresen hagyva = korlátlan)</span>
+                        <span class="hint">(üresen hagyva korlátlan)</span>
                     </label>
                     <input
                         id="maxUses"

@@ -29,7 +29,9 @@
     import UpdateBoardModal from './UpdateBoardModal.svelte';
     import ColumnDetailModal from './ColumnDetailModal.svelte';
 
-    import { ChevronDown, Plus, Pencil, ArrowLeftRight, X, Search, Funnel } from 'lucide-svelte';
+    import { ChevronDown, Plus, Pencil, ArrowLeftRight, X, Search, 
+        Funnel, RefreshCw, ChevronRight
+     } from 'lucide-svelte';
 
     let isColumnCreationOpen = false;
     let isTaskCreationOpen = false;
@@ -89,7 +91,13 @@
                     (dueDate.getTime() - now.getTime()) < 1 * 24 * 60 * 60 * 1000
                     : true;
 
-        return matchesSearch && matchesAssignee && matchesPriority && matchesLabel && matchesDue;
+        //A lezárt feladatok nem jelennek meg a táblán. Korábban ezt a modalok bezárásakor
+        //futó újralekérés oldotta meg úgy, hogy a MEGOSZTOTT store-t szűkítette egyetlen
+        //tábla nyitott feladataira - attól viszont a store tartalma attól függött, honnan
+        //navigált ide a felhasználó. A szűrés helye a nézet, nem a store.
+        const isOpen = !task.closedAt;
+
+        return isOpen && matchesSearch && matchesAssignee && matchesPriority && matchesLabel && matchesDue;
     });
 
     $: hasActiveFilter = searchQuery !== '' || filterAssigneeId !== '' || 
@@ -135,6 +143,50 @@
     let columnTasks: Record<string, TaskResponse[]> = {};
 
     // Amikor betöltjük a taskokat, szétválogatjuk oszloponként
+    //KÉZI SZINKRONIZÁCIÓ.
+    //
+    //A modalok bezárásakor korábban automatikus újralekérés futott. Az feleslegesen pazarló
+    //volt - a tábla reaktív a store-ra, a store-t pedig a SignalR események tartják frissen -,
+    //de elvett egy javító lehetőséget: ha egy esemény kimarad (megszakadt kapcsolat, elbukott
+    //broadcast), semmi nem állítja helyre a nézetet a következő újracsatlakozásig.
+    //
+    //Ezért a lekérés kézi gombra került: a felhasználó akkor kéri, amikor gyanút fog, és nem
+    //minden bezárásnál fut le.
+    //
+    //A hatókör szándékosan UGYANAZ, mint az induló betöltésnél ('initial'): egy tábla
+    //szerinti szűkítés a MEGOSZTOTT store-t szűkítené egyetlen tábla feladataira, és a store
+    //tartalma attól függne, melyik táblán nyomták meg a gombot.
+    let isSyncing = false;
+    let syncCooldown = false;
+    const SYNC_COOLDOWN_MS = 10000;
+
+    async function handleSync() {
+        if (isSyncing || syncCooldown || !activeProjectId) return;
+        isSyncing = true;
+        try {
+            const [freshTasks, freshColumns] = await Promise.all([
+                getTasksAsync(activeProjectId, undefined, undefined, 'initial'),
+                activeBoard?.id
+                    ? getColumnsAsync(activeProjectId, activeBoard.id)
+                    : Promise.resolve(null)
+            ]);
+
+            setTasks(freshTasks);
+            if (freshColumns) {
+                setColumns(freshColumns.sort((a, b) => a.position - b.position));
+            }
+            notify.success('Szinkronizálva!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a szinkronizálás során!');
+        } finally {
+            isSyncing = false;
+            //Rövid tiltás, hogy a gomb ne legyen kattintgatható. Nem védelem, csak
+            //a felhasználó dolgozik vele - a valódi korlát a szerveroldali rate limit.
+            syncCooldown = true;
+            setTimeout(() => syncCooldown = false, SYNC_COOLDOWN_MS);
+        }
+    }
+
     function distributeTasks(allTasks: TaskResponse[]) {
         const map: Record<string, TaskResponse[]> = {};
         const cols = columns.filter(c => c.position > 0);  // ← direkt szűrés
@@ -199,11 +251,6 @@
     async function handleColumnFinalize(e: CustomEvent) {
         columns = e.detail.items;
         isDraggingColumns = false;
-        // Reorder API hívás
-        //Itt szándékosan NINCS "változások betöltése" sáv, mint a szerkesztő modaloknál: az
-        //átrendezés egy mozdulattal, azonnal mentődik, nincs nyitott szerkesztő és nincs
-        //beírt szöveg, ami elveszhetne. A token viszont itt is érvényes kell legyen - üres
-        //vagy nulla token nem létezhet, azt a szerveroldali validátor elutasítja.
         const order = visibleColumns.map((col, index) => ({
             id: col.id,
             position: index + 1,
@@ -296,7 +343,11 @@
 <div class="board-toolbar">
     <div class="dropdown">
         <button class="toolbar-btn" on:click={toggleDropdown}>
-            {activeBoard?.name ?? 'Válassz boardot'} <ChevronDown size={14} />
+            {#if isDropdownOpen}
+                <ChevronDown size={14} /> {activeBoard?.name ?? 'Válassz boardot'} 
+            {:else}
+                <ChevronRight size={14} /> {activeBoard?.name ?? 'Válassz boardot'} 
+            {/if}
         </button>
         {#if isDropdownOpen}
             <div class="dropdown-menu">
@@ -327,6 +378,12 @@
     </button>
     <button class="toolbar-btn" on:click={() => isFilterToolbarOpen = !isFilterToolbarOpen}>
         <Funnel size={14} /> {isFilterToolbarOpen ? 'Szűrők elrejtése' : 'Szűrők'}
+    </button>
+    <button class="toolbar-btn" on:click={handleSync}
+        disabled={isSyncing || syncCooldown}
+        title="A tábla adatainak kézi szinkronizálása a szerverről">
+        <RefreshCw size={14} class={isSyncing ? 'spinning' : ''} />
+        {isSyncing ? 'Szinkronizálás…' : 'Szinkronizáció'}
     </button>
 </div>
 
@@ -418,16 +475,12 @@
     />
 {/if}
 {#if isTaskCreationOpen}
+    <!-- Nincs onClose-beli újralekérés: a TaskCreated esemény a létrehozót is eléri, és a
+         store kezelője felveszi az új feladatot. -->
     <CreateTaskModal 
         bind:isTaskCreationOpen={isTaskCreationOpen}
         projectId={activeProjectId}
         boardId={activeBoard?.id ?? ''}
-        onClose={async () => {
-            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
-            const filtered = _tasks.filter(t => !t.closedAt);
-            setTasks(filtered);
-            distributeTasks(filtered);
-        }}
     />
 {/if}
 {#if isTaskDetailOpen && $taskStore.activeTask}
@@ -435,12 +488,12 @@
         bind:isTaskDetailOpen={isTaskDetailOpen}
         projectId={activeProjectId}
         task={$taskStore.activeTask!}
-        onClose={async () => {
+        onClose={() => {
+            //Nincs újralekérés: a tábla elrendezése reaktív a store-ra (lásd a
+            //distributeTasks-ot hívó reaktív blokkot), a store-t pedig a SignalR
+            //eseménykezelők tartják frissen - a szerkesztő saját módosítása is így jut
+            //vissza, mert az esemény a teljes projekt-csoportnak megy ki.
             isTaskDetailOpen = false;
-            const _tasks = await getTasksAsync(activeProjectId, activeBoard?.id ?? '')
-            const filtered = _tasks.filter(t => !t.closedAt);
-            setTasks(filtered);
-            distributeTasks(filtered);
             setActiveTask(null);
         }}
     />
@@ -532,6 +585,26 @@
     .toolbar-btn:hover {
         background: var(--border-hover);
         color: var(--text-primary);
+    }
+
+    .toolbar-btn:disabled {
+        opacity: 0.55;
+        cursor: default;
+    }
+
+    .toolbar-btn:disabled:hover {
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+    }
+
+    /* A forgó ikon jelzi, hogy a kérés folyamatban van. */
+    :global(.spinning) {
+        animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
     }
 
     .toolbar-btn.active {

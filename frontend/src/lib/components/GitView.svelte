@@ -239,7 +239,7 @@
                                     <div class="assign-row">
                                         <span class="task-chip" title={commit.taskTitle ?? ''}>{commit.taskKey}</span>
                                         {#if commit.isManuallyLinked}
-                                            <span class="manual-chip" title="Ezt a hozzárendelést ember állította be">kézi</span>
+                                            <span class="manual-chip" title="Ezt a hozzárendelést ember állította be">Manuális módon kapcsolva</span>
                                         {/if}
                                         <button class="assign-btn" on:click={() => openTaskPicker('commit', commit.id)}>
                                             <CornerUpRight size={13} /> Áthelyezés
@@ -459,9 +459,10 @@
         padding: 0.1rem 0.45rem;
         border-radius: 4px;
         background: var(--bg-hover);
-        color: var(--text-muted);
-        font-size: 0.7rem;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
         white-space: nowrap;
+        font-weight: bold;
     }
 
     .git-list {
