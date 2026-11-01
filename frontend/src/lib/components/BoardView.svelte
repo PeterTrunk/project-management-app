@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { requireRowVersion } from '../api/concurrency';
     import { authStore } from '../stores/authStore';
     import { boardStore, setBoards, setActiveBoard, setColumns } from '../stores/boardStore';
     import { getBoardsAsync, } from '../api/boardApi';
@@ -245,7 +246,7 @@
             const response = await moveTaskAsync(activeProjectId, movedTaskId, {
                 columnId,
                 afterTaskId,
-                rowVersion: movedTask?.rowVersion ?? 0
+                rowVersion: requireRowVersion(movedTask?.rowVersion, 'feladat')
             });
 
             // Store frissítés a backend válasszal

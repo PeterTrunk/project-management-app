@@ -62,10 +62,25 @@ describe('taskStore', () => {
                 id: '2', boardId: 'b1', columnId: 'c1', sprintId: null,
                 taskKey: 'PMA-2', title: 'Új task', priority: null, dueDate: null,
                 estimateInMinutes: null, position: 'p', createdAt: '2026-02-01T00:00:00Z',
-                completedAt: null
+                completedAt: null, rowVersion: 7
             });
 
             expect(get(taskStore).tasks.map(t => t.id)).toEqual(['1', '2']);
+        });
+
+        it('a konkurencia-tokent is átveszi a payloadból', () => {
+            //A szerver küldi, a típus korábban nem deklarálta, és az `as unknown as` cast
+            //elnémította. Token nélkül a szerkesztés 400-at kapott volna.
+            setTasks([]);
+
+            handleTaskCreated({
+                id: '9', boardId: 'b1', columnId: 'c1', sprintId: null,
+                taskKey: 'PMA-9', title: 'Token', priority: null, dueDate: null,
+                estimateInMinutes: null, position: 'p', createdAt: '2026-02-01T00:00:00Z',
+                completedAt: null, rowVersion: 42
+            });
+
+            expect(get(taskStore).tasks[0].rowVersion).toBe(42);
         });
     });
 

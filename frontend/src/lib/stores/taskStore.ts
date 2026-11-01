@@ -41,6 +41,8 @@ export function handleTaskCreated(payload: {
     position: string;
     createdAt: string;
     completedAt: string | null;
+    //A szerver küldi; korábban a típus nem deklarálta, és az `as unknown as` cast elnémította.
+    rowVersion: number;
 }) {
     const projectId = get(projectStore).activeProject?.id ?? '';
     taskStore.update(state => ({
@@ -76,14 +78,17 @@ export function handleTaskUpdated(payload: {
     rowVersion?: number;
 }) {
     const { taskId, ...rest } = payload;
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const tasks = state.tasks.map(t =>
             t.id === taskId
-                ? { ...t, ...rest } as TaskResponse
+                ? { ...t, ...rest, rowVersion: rest.rowVersion ?? t.rowVersion } as TaskResponse
                 : t
-        )
-    }));
+        );
+        //Az aktív elem is követi a listát. Korábban kimaradt, ezért egy nyitott
+        //részletnézet NEM mutatta a másik felhasználó módosítását. Ez most biztonságos:
+        //a szerkesztő a mentéskor nem ebből veszi a tokent, hanem a saját alapvonalából.
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
+    });
 }
 
 export function handleTaskMoved(payload: {
@@ -93,23 +98,32 @@ export function handleTaskMoved(payload: {
     sprintId: string | null;
     position: string;
     completedAt: string | null;
+    //Az oszlopból származtatott státusz. A DTO denormalizálva tartja, ezért az esemény is
+    //küldi - enélkül a mozgatás után a kliensen a régi státusz maradna.
+    status?: string;
     rowVersion?: number;
 }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t =>
+    taskStore.update(state => {
+        const tasks = state.tasks.map(t =>
             t.id === payload.taskId
                 ? { ...t,
                     boardId: payload.boardId,
                     columnId: payload.columnId ?? t.columnId,
                     sprintId: payload.sprintId,
                     position: payload.position,
+                    //A denormalizált státusz: enélkül a mozgatás után a régi érték maradt.
+                    status: payload.status ?? t.status,
                     completedAt: payload.completedAt ? new Date(payload.completedAt) : null,
                     rowVersion: payload.rowVersion ?? t.rowVersion
                   } as unknown as TaskResponse
                 : t
-        )
-    }));
+        );
+        //Az aktív elem is követi a listát. Korábban kimaradt, ezért egy NYITOTT
+        //részletnézet nem követte a mozgatást: a board mögötte frissült, a fejléc nem.
+        //Ez biztonságos: a szerkesztő a mentéskor nem ebből veszi a tokent, hanem a
+        //saját alapvonalából.
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
+    });
 }
 
 export function handleTaskDeleted(payload: { taskId: string }) {
@@ -124,13 +138,13 @@ export function handleTasksRebalanced(payload: {
     columnId: string;
     tasks: { id: string; position: string; rowVersion: number }[];
 }) {
-    taskStore.update(state => ({
-        ...state,
-        tasks: state.tasks.map(t => {
+    taskStore.update(state => {
+        const tasks = state.tasks.map(t => {
             const rebalanced = payload.tasks.find(r => r.id === t.id);
             return rebalanced ? { ...t, position: rebalanced.position, rowVersion: rebalanced.rowVersion } : t;
-        })
-    }));
+        });
+        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
+    });
 }
 
 export function handleTaskAssigneeAdded(payload: { taskId: string; userId: string }) {

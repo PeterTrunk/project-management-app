@@ -79,7 +79,7 @@ export interface TaskResponse {
     completedAt: Date;
     createdAt: Date;
     updatedAt: Date;
-    rowVersion: number | null;
+    rowVersion: number;
 }
 
 export async function getTaskByIdAsync(projectId: string, taskId: string): Promise<TaskResponse> {

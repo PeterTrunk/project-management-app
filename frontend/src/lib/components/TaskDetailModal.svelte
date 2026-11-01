@@ -1,6 +1,8 @@
 ﻿<script lang="ts">
     import { onMount } from 'svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
+    import { requireRowVersion } from '../api/concurrency';
+    import { getTaskByIdAsync } from '../api/taskApi';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
     import { authStore } from '../stores/authStore';
     import ConfirmModal from './ConfirmModal.svelte';
@@ -33,16 +35,26 @@
     $: isBacklogTask = !task.boardId && !task.columnId && !task.sprintId;
    
     let boards: BoardResponse[] = [];
-    $: boardName = task.boardId 
-        ? (boards.find(b => b.id === task.boardId)?.name ?? 'Ismeretlen board')
+    $: boardName = currentTask.boardId 
+        ? (boards.find(b => b.id === currentTask.boardId)?.name ?? 'Ismeretlen board')
         : null;
     
     let sprints: SprintResponse[] = [];
-    $: sprintName = task.sprintId
-        ? (sprints.find(s => s.id === task.sprintId)?.name ?? 'Ismeretlen sprint')
+    $: sprintName = currentTask.sprintId
+        ? (sprints.find(s => s.id === currentTask.sprintId)?.name ?? 'Ismeretlen sprint')
         : null;
     
     $: currentTask = $taskStore.activeTask ?? task;
+
+    //A status SZÁRMAZTATOTT érték: az oszlop MapsToStatus-a, amit a feladat DTO-ja
+    //denormalizálva tart. Hat különböző esemény tudja megváltoztatni a feladat oszlopát
+    //(mozgatás, oszlop törlése, sprint-hozzárendelés…), és ha bármelyik nem küldi a frissített
+    //statust, a denormalizált érték állott marad. Ezért a MEGJELENÍTÉSHEZ az oszlopból
+    //vezetjük le - az oszlopok amúgy is a store-ban vannak -, és csak akkor esünk vissza a
+    //DTO értékére, ha az oszlop nincs betöltve (például másik board feladatánál).
+    $: columnStatus = ($boardStore.columns ?? [])
+        .find(c => c.id === currentTask.columnId)?.mapsToStatus
+        ?? currentTask.status;
 
     export let projectId: string;
     export let allLabels: LabelResponse[] = [];
@@ -54,6 +66,65 @@
     let currentUserId = '';
 
     let isEditing = false;
+
+    //A SZERKESZTÉS ALAPVONALA.
+    //
+    //Szándékosan külön a megjelenítés állapotától: a modal a store-ból mindig a FRISS
+    //állapotot mutatja (currentTask), a mentés viszont azt a tokent küldi, amellyel a
+    //szerkesztés INDULT. Ha a kettő egy változó lenne - ahogy korábban volt -, akkor a
+    //SignalR-frissítés a tokent is átírná, a mentés mindig sikerülne, és a másik felhasználó
+    //módosítása NÉMÁN felülíródna. A token automatikus frissítése a nyitott szerkesztőben
+    //nem kényelmi funkció, hanem a védelem feladása.
+    let baselineRowVersion = task.rowVersion;
+
+    //A szerveroldali ütközés ténye: ez akkor is bizonyíték a távoli módosításra, ha a
+    //SignalR-esemény nem jutott el hozzánk (megszakadt kapcsolat, kimaradt üzenet). Enélkül
+    //az ütközés-üzenet olyat kért a felhasználótól, amihez nem volt kapcsoló a felületen.
+    let conflictDetected = false;
+    let isReloading = false;
+
+    //Igaz, ha a szerkesztés kezdete óta valaki más módosította ezt a feladatot - akár a
+    //store-ból látjuk, akár a mentés bukásából tudjuk.
+    $: hasRemoteChange = isEditing
+        && (conflictDetected || currentTask.rowVersion !== baselineRowVersion);
+
+    function startEditing() {
+        //Az alapvonal a szerkesztés indításakor fixálódik, és csak kifejezett újratöltéskor változik.
+        baselineRowVersion = currentTask.rowVersion;
+        editTitle = currentTask.title;
+        editDescription = currentTask.description ?? '';
+        editPriority = currentTask.priority ?? '';
+        editEstimateInMinutes = currentTask.estimateInMinutes ?? 0;
+        editDueDate = toDateTimeLocalValue(currentTask.dueDate);
+        error = '';
+        conflictDetected = false;
+        isEditing = true;
+    }
+
+    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a MÁR
+    //BEÍRT értékeit megtartja. Enélkül az ütközés zsákutca volt: az "újra próbálom" ugyanazt
+    //a tokent küldte, tehát másodszor is elbukott.
+    async function acceptRemoteChanges() {
+        if (isReloading) return;
+        isReloading = true;
+        try {
+            //Szándékosan a szervertől, nem a store-ból: ha az ütközést a mentés bukásából
+            //tudtuk meg, akkor a store is állott - a SignalR-esemény nem jött meg.
+            const fresh = await getTaskByIdAsync(projectId, task.id);
+            setActiveTask(fresh);
+            task = fresh;
+            baselineRowVersion = fresh.rowVersion;
+            conflictDetected = false;
+            error = '';
+            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
+            error = message;
+            notify.error(message);
+        } finally {
+            isReloading = false;
+        }
+    }
     let editTitle = task.title;
     let editDescription = task.description ?? '';
     let editPriority = task.priority ?? '';
@@ -158,13 +229,23 @@
                     priority: editPriority !== '' ? editPriority : null, 
                     estimateInMinutes: editEstimateInMinutes ?? null,
                     dueDate: fromDateTimeLocalValue(editDueDate),
-                    rowVersion: task.rowVersion ?? 0
+                    rowVersion: requireRowVersion(baselineRowVersion, 'feladat')
                 });
             success = "Módosítva";
             notify.success('Task módosítva!');
             setActiveTask(response);
+            baselineRowVersion = response.rowVersion;
             isEditing = false;
         } catch (e: any) {
+            if (e.response?.status === 409) {
+                //Az ütközés nem technikai hiba, hanem döntési helyzet: a beírt értékek
+                //megmaradnak, és a felhasználó a sávon át veszi át a friss állapotot.
+                conflictDetected = true;
+                error = 'Valaki módosította ezt a feladatot, amíg szerkesztetted. '
+                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                notify.warning(error);
+                return;
+            }
             const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
             error = message;
             notify.error(message);
@@ -333,7 +414,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <div class="header-actions">
-                <button class="edit-btn" on:click={() => isEditing = !isEditing}>
+                <button class="edit-btn" on:click={() => isEditing ? isEditing = false : startEditing()}>
                     {#if isEditing}
                         <X size={15} /> Mégse
                     {:else}
@@ -353,10 +434,10 @@
                 <X size={16} />
             </button>
             <h1>{task.title}</h1>
-            <p class="task-meta">{task.taskKey} -
+            <p class="task-meta">{currentTask.taskKey} -
                 {#if !isBacklogTask}
                     {#if sprintName}{sprintName} - {/if}
-                    {#if boardName}{boardName} - {task.status}{:else}Nincs Boardhoz rendelve{/if}
+                    {#if boardName}{boardName} - {columnStatus}{:else}Nincs Boardhoz rendelve{/if}
                 {:else}
                     Projekt Backlog
                 {/if}
@@ -374,8 +455,8 @@
                         <button class="tab-btn" class:active={activeDetailTab === 'attachments'}
                             on:click={() => activeDetailTab = 'attachments'}>
                             <Paperclip size={14} /> Csatolmányok
-                            {#if task.attachments?.length > 0}
-                                <span class="tab-badge">{task.attachments.length}</span>
+                            {#if currentTask.attachments?.length > 0}
+                                <span class="tab-badge">{currentTask.attachments.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'git'}
@@ -558,7 +639,7 @@
                     {#if activeDetailTab === 'comments'}
                         <CommentSection
                             {projectId}
-                            taskId={task.id}
+                            taskId={currentTask.id}
                             {currentUserId}
                         />
                     {/if}
@@ -667,6 +748,19 @@
                                 <input type="datetime-local" bind:value={editDueDate}>
                             </label>
                         </div>
+                        {#if hasRemoteChange}
+                            <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
+                                 hogy ütközés lesz, nem a hibaüzenetből utólag. -->
+                            <div class="remote-change">
+                                <span class="remote-change-text">
+                                    Ezt a feladatot időközben módosította valaki.
+                                </span>
+                                <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
+                                        disabled={isReloading}>
+                                    {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                                </button>
+                            </div>
+                        {/if}
                         {#if error}<p class="msg error">{error}</p>{/if}
                         {#if success}<p class="msg success">{success}</p>{/if}
                         <button type="button" class="btn-primary" on:click={() => openConfirm(
@@ -1221,5 +1315,48 @@
         font-size: 0.85rem;
         color: var(--text-muted);
         padding: 0.5rem 0;
+    }
+    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló. */
+    .remote-change {
+        display: flex;
+        align-items: center;
+        gap: var(--gap-sm);
+        flex-wrap: wrap;
+        padding: var(--card-padding);
+        margin-bottom: var(--gap-sm);
+        border: 1px solid var(--accent-yellow);
+        border-radius: var(--border-radius);
+        background: var(--bg-secondary);
+        font-size: var(--font-size-sm);
+    }
+
+    .remote-change-text {
+        /* A szöveg kitölti a maradék helyet, így a gomb a jobb szélre kerül. */
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    /* A projekt btn-warning mintáját követi: ez figyelmeztetés, nem elsődleges művelet. */
+    .btn-reload {
+        flex: 0 0 auto;
+        background: var(--accent-yellow-bg);
+        border: 1px solid var(--accent-yellow);
+        color: var(--accent-yellow);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+    }
+
+    .btn-reload:hover:not(:disabled) {
+        background: var(--accent-yellow);
+        color: #000;
+    }
+
+    .btn-reload:disabled {
+        opacity: 0.6;
+        cursor: default;
     }
 </style>

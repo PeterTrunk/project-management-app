@@ -530,6 +530,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                         position = task.Position,
                         completedAt = task.CompletedAt,
                         triggeredBy = task.CreatedById,
+                        status = column?.MapsToStatus ?? "Backlog",
                         rowVersion = task.xmin
                     });
             }
