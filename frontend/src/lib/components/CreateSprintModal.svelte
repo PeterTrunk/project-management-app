@@ -72,14 +72,18 @@
         </button>
         <form on:submit|preventDefault={handleSprintCreation}>
             <h1>Sprint Létrehozás {activeProject?.name}-hoz</h1>
-            Sprint neve
-            <input type="text" bind:value={name}>
-            Sprint goal
-            <input type="text" bind:value={goal}>
-            Sprint kezdete
-            <input type="datetime-local" bind:value={startDate}>
-            Sprint vége
-            <input type="datetime-local" bind:value={endDate}>
+            <label>Sprint neve
+                <input type="text" bind:value={name}>
+            </label>
+            <label>Sprint goal
+                <input type="text" bind:value={goal}>
+            </label>
+            <label>Sprint kezdete
+                <input type="datetime-local" bind:value={startDate}>
+            </label>
+            <label>Sprint vége
+                <input type="datetime-local" bind:value={endDate}>
+            </label>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -194,6 +198,8 @@
         background: var(--accent-blue);
         color: #fff;
     }
+
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }

@@ -54,13 +54,15 @@
         </button>
         <h1>Új Label</h1>
         <form on:submit|preventDefault={handleCreateLabel}>
-            Label neve:
-            <input type="text" bind:value={name} placeholder="Label neve (max 40 karakter)">
-            Label színe:
-            <div class="color-picker">
-                <input type="color" bind:value={color}>
-                <span style="color: {color}">{color}</span>
-            </div>
+            <label>Label neve:
+                <input type="text" bind:value={name} placeholder="Label neve (max 40 karakter)">
+            </label>
+            <label>Label színe:
+                <div class="color-picker">
+                    <input type="color" bind:value={color}>
+                    <span style="color: {color}">{color}</span>
+                </div>
+            </label>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -179,6 +181,8 @@
         background: var(--accent-blue);
         color: #fff;
     }
+
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed { color: var(--accent-red); }

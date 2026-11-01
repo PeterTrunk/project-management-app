@@ -55,7 +55,10 @@ export function handleSprintUpdated(payload: {
         const { sprintId, ...rest } = payload;
         const updatedSprints = state.sprints.map(s =>
             s.id === sprintId
-                ? { ...s, ...rest } as unknown as SprintResponse
+                //A token csak akkor íródik felül, ha az esemény küldte is: a nyers spread
+                //egy hiányzó mezővel undefined-ra állítaná, és a szerkesztő ezután
+                //érvénytelen tokent küldene.
+                ? { ...s, ...rest, rowVersion: rest.rowVersion ?? s.rowVersion } as unknown as SprintResponse
                 : s
         );
         return {

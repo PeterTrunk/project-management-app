@@ -109,17 +109,21 @@
         </button>
         <form on:submit|preventDefault={handleCreateTask}>
             <h1>Task Létrehozás {activeBoardName}-hoz</h1>
-            Új Task címe:
-            <input type="text" placeholder="Task cím" bind:value={title}/>
+            <h2>Alap adatok</h2>
+            <label>Új Task címe:
+                <input type="text" placeholder="Task cím" bind:value={title}/>
+            </label>
+            
             {#if !isBacklogMode}
-                Válasszon Oszlopot
-                <select bind:value={columnId}>
-                    {#each columns.filter(c => c.position > 0) as column}
-                        <option value={column.id}>{column.name}</option>
-                    {/each}
-                </select>
+                <label>Válasszon Oszlopot
+                    <select bind:value={columnId}>
+                        {#each columns.filter(c => c.position > 0) as column}
+                            <option value={column.id}>{column.name}</option>
+                        {/each}
+                    </select>
+                </label>
             {/if}
-            Labelek
+            <h2>Labelek</h2>
             <div class="labels-grid">
                 {#each allLabels as label}
                     <div class="label-select-row">
@@ -138,11 +142,11 @@
                     </div>
                 {/each}
             </div>
-            <div id="optional-fields">
-                <h2>Opcionális mezők</h2>
-                Task leírása
+            <h2>Opcionális mezők</h2>
+            <label>Task leírása
                 <textarea placeholder="Leírás" bind:value={description}></textarea>
-                Válasszon prioritást 
+            </label>
+            <label>Válasszon prioritást 
                 <select bind:value={priority}>
                     <option value="none">Nincs prioritás</option>
                     <option value="low">Alacsony</option>
@@ -150,11 +154,13 @@
                     <option value="high">Magas</option>
                     <option value="critical">Kritikus</option>
                 </select>
-                <br>Becsült idő
+            </label>
+            <label>Becsült idő
                 <input type="number" bind:value={estimateInMinutes}>
-                Task határidő
+            </label>
+            <label>Task határidő
                 <input type="datetime-local" bind:value={dueDate}>
-            </div>
+            </label>                
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -292,6 +298,7 @@
         color: #fff;
     }
 
+    /*
     #optional-fields {
         background: var(--bg-primary);
         border-radius: 8px;
@@ -301,9 +308,9 @@
         gap: 0.75rem;
         margin-top: 0.5rem;
         border: 1px solid var(--border);
-    }
+    }*/
 
-    #optional-fields h2 {
+    h2 {
         font-size: 1rem;
         color: var(--text-secondary);
         margin-bottom: 0.25rem;
@@ -348,6 +355,7 @@
     }
 
     .label-add-btn:hover { background: var(--accent-green-bg); }
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; }

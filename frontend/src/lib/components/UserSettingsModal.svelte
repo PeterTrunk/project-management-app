@@ -278,13 +278,14 @@
                 {#if activeView === 'profile'}
                     <!--placeholder img tag-->
                     <h1>{displayName} profilja</h1>
-                    <img src="" alt="">
-                    <p>{displayName}</p>
-                    <p>{email}</p>
+                    <p>Megjelenítési név: <strong>{displayName}</strong></p>
+                    <p>E-mail cím: <strong>{email}</strong></p>
                 {:else if activeView === 'changeprofile'}
                     <h1>Profil módosítása</h1>
                     <form on:submit|preventDefault={handleProfileChange}>
-                        <input type="text" bind:value={newDisplayName} placeholder="Új felhasználónév">
+                        <label>Új felhasználónév
+                            <input type="text" bind:value={newDisplayName} placeholder="Új felhasználónév">
+                        </label>
                         {#if error}
                             <p id="failed">{error}</p>
                         {/if}
@@ -296,9 +297,15 @@
                 {:else if activeView === 'password'}
                     <h1>Jelszó változtatás</h1>
                     <form on:submit|preventDefault={handlePasswordChange}>
-                        Jelenlegi jelszó <input type="password" placeholder="Jelenlegi jelszó" bind:value={currentPassword}>
-                        Új jelszó <input type="password" placeholder="Új jelszó" bind:value={newPassword}>
-                        Új jelszó megint újra <input type="password" placeholder="Új jelszó" bind:value={newPasswordConfirm}>
+                        <label>
+                             Jelenlegi jelszó <input type="password" placeholder="Jelenlegi jelszó" bind:value={currentPassword}>
+                        </label>
+                        <label>
+                            Új jelszó<input type="password" placeholder="Új jelszó" bind:value={newPassword}>
+                        </label>
+                        <label>
+                            Új jelszó újra<input type="password" placeholder="Új jelszó" bind:value={newPasswordConfirm}>
+                        </label>
                         {#if error}
                             <p id="failed">{error}</p>
                         {/if}
@@ -762,6 +769,8 @@
     .danger-btn:hover:not(:disabled) {
         filter: brightness(1.1);
     }
+
+    label { color: var(--text-muted); }
 
     .danger-btn:disabled {
         opacity: 0.45;

@@ -81,6 +81,27 @@ describe('sprintStore', () => {
             expect(state.sprints.find(s => s.id === 'b')!.name).toBe('Sprint b');
         });
 
+        //A sprint-szerkesztő a store élő listájából veszi a token összehasonlítását (a szülő
+        //pillanatképet ad át). Ha a token nem jut el ide, a "Változások betöltése" sáv sosem
+        //jelenne meg, és a felhasználó csak a mentés bukásából tudná meg az ütközést.
+        it('a konkurencia-tokent is átvezeti', () => {
+            setSprints([sprint('a', { rowVersion: 10 })]);
+
+            handleSprintUpdated({ sprintId: 'a', name: 'Átnevezve', rowVersion: 11 });
+
+            expect(get(sprintStore).sprints[0].rowVersion).toBe(11);
+        });
+
+        it('token nélküli payload NEM írja felül a meglévő tokent', () => {
+            //A nyers spread korábban undefined-ra tudta volna állítani, és a szerkesztő
+            //ezután érvénytelen tokent küldött volna.
+            setSprints([sprint('a', { rowVersion: 10 })]);
+
+            handleSprintUpdated({ sprintId: 'a', name: 'Átnevezve' });
+
+            expect(get(sprintStore).sprints[0].rowVersion).toBe(10);
+        });
+
         it('csak a küldött mezőket írja felül, a többit megtartja', () => {
             setSprints([sprint('a', { goal: 'Eredeti cél' })]);
 

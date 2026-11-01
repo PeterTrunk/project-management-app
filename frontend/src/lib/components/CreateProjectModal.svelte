@@ -62,12 +62,15 @@
         </button>
         <form on:submit|preventDefault={handleCreateProject}>
             <h1>Projekt Létrehozás</h1>
-            Új projekt neve
-            <input type="text" placeholder="Projekt Név" bind:value={name}/>
-            Új projekt kulcsa (Végleges érték létrehozás után)
-            <input type="text" placeholder="Projekt Kulcs" bind:value={projKey}/>
-            Projekt leírása
-            <textarea placeholder="Leírás" bind:value={description}></textarea>
+            <label>Új projekt neve
+                <input type="text" placeholder="Projekt Név" bind:value={name}/>
+            </label>
+            <label>Új projekt kulcsa (Végleges érték létrehozás után)
+                <input type="text" placeholder="Projekt Kulcs" bind:value={projKey}/>
+            </label>
+            <label>Projekt leírása
+                <textarea placeholder="Leírás" bind:value={description}></textarea>
+            </label>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -182,6 +185,8 @@
             padding: var(--card-padding);
         }
     }
+
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed { color: var(--accent-red); white-space: pre-line; }

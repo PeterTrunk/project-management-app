@@ -200,10 +200,14 @@
         columns = e.detail.items;
         isDraggingColumns = false;
         // Reorder API hívás
+        //Itt szándékosan NINCS "változások betöltése" sáv, mint a szerkesztő modaloknál: az
+        //átrendezés egy mozdulattal, azonnal mentődik, nincs nyitott szerkesztő és nincs
+        //beírt szöveg, ami elveszhetne. A token viszont itt is érvényes kell legyen - üres
+        //vagy nulla token nem létezhet, azt a szerveroldali validátor elutasítja.
         const order = visibleColumns.map((col, index) => ({
             id: col.id,
             position: index + 1,
-            rowVersion: col.rowVersion ?? 0
+            rowVersion: requireRowVersion(col.rowVersion, 'oszlop')
             //Ujradolgozott Sprint logika: backlog oszlop fix 0 position, 
             //és ezt nem jelenítjük meg, így a látható oszlopok 1-es indexel kezdődnek!
         }));
@@ -211,6 +215,12 @@
             await reorderColumnsAsync(activeProjectId, activeBoard?.id ?? '', order);
             notify.success('Oszlopok sorrendje módosítva!');
         } catch (e: any) {
+            if (e.response?.status === 409) {
+                //Itt nincs mit megtartani: a helyes válasz az újratöltés.
+                notify.warning('Az oszlopok sorrendje időközben módosult. '
+                             + 'Töltsd újra az oldalt, és próbáld újra!');
+                return;
+            }
             notify.error(e.response?.data ?? e.message ?? 'Hiba az oszlopok átrendezésekor!');
         }
     }
