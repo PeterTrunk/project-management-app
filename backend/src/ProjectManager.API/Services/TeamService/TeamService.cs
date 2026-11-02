@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Common.Security;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Team;
@@ -190,6 +191,31 @@ namespace ProjectManager.API.Services.TeamService
             };
         }
 
+        /// <summary>
+        /// A hívó projekt-szerepkörének rangja, vagy -1 ha nem tagja a projektnek.
+        /// </summary>
+        private async Task<int> GetCallerRankAsync(Guid projectId)
+        {
+            var callerRole = await _context.ProjectMembers
+                .Where(pm => pm.ProjectId == projectId && pm.UserId == _currentUserService.UserId)
+                .Select(pm => pm.ProjectRole)
+                .FirstOrDefaultAsync();
+
+            return ProjectRoles.RankOf(callerRole);
+        }
+
+        /// <summary>
+        /// A rangsor relációs szabálya: a hívó csak a nála ALACSONYABB rangú tagot érintheti.
+        /// </summary>
+        private static void EnsureCallerOutranks(int callerRank, string targetRole, string action)
+        {
+            var targetRank = ProjectRoles.RankOf(targetRole);
+
+            if (callerRank <= targetRank)
+                throw new ForbiddenException(
+                    $"Csak a nálad alacsonyabb szerepkörű tagot {action}.");
+        }
+
         public async Task RemoveMemberAsync(Guid projectId, Guid userId)
         {
             var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
@@ -209,6 +235,11 @@ namespace ProjectManager.API.Services.TeamService
                 .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == userId);
             if (member == null)
                 throw new ValidationException("A felhasználó nem tagja a projektnek!");
+
+            //A kizárás mostantól az adminisztrátornak is nyitva áll, de csak lefelé:
+            //adminisztrátor nem távolíthat el másik adminisztrátort vagy a tulajdonost.
+            var callerRank = await GetCallerRankAsync(projectId);
+            EnsureCallerOutranks(callerRank, member.ProjectRole, "távolíthatod el");
 
             _context.ProjectMembers.Remove(member);
 
@@ -261,6 +292,19 @@ namespace ProjectManager.API.Services.TeamService
                 .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == userId);
             if (member == null)
                 throw new ValidationException("A felhasználó nem tagja a projektnek!");
+
+            //A rangsor relációs alkalmazása - két összehasonlítás, és mindkettő kell.
+            //
+            //Az első: csak a nálad alacsonyabb rangú tagot minősítheted át.
+            //A második: csak a magadnál alacsonyabb jogot adhatodm vagyis adminisztrátor nem oszthat meg
+            //adminisztrátori szerepkört, tulajdonos viszont igen.
+            //Enélkül az adminisztrátor saját rangjára emelhetne másokat, és a "csak lefelé" szabály megkerülhető lenne.
+            var callerRank = await GetCallerRankAsync(projectId);
+            EnsureCallerOutranks(callerRank, member.ProjectRole, "minősítheted át");
+
+            if (ProjectRoles.RankOf(dto.ProjectRole) >= callerRank)
+                throw new ForbiddenException(
+                    "Csak a sajátodnál alacsonyabb szerepkört adhatsz.");
 
             member.ProjectRole = dto.ProjectRole;
             await _context.SaveChangesAsync();

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { requireRowVersion } from '../api/concurrency';
     import { onDestroy } from 'svelte';
 
     import { notify } from '../stores/notificationStore';
@@ -54,7 +55,7 @@
         try {
             const response = await assignTaskToBoardAsync(projectId, task.id, {
                 boardId: selectedBoardId === '' ? null : selectedBoardId,
-                rowVersion: task.rowVersion ?? 0
+                rowVersion: requireRowVersion(task.rowVersion, 'feladat')
             });
             await onBoardAssigned();
             notify.success('Task módosítva!');

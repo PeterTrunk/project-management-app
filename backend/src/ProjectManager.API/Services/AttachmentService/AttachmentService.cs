@@ -223,9 +223,9 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<PresignedUrlResponseDto> GetPresignedUploadUrlAsync(Guid projectId, Guid? taskId, PresignedUrlRequestDto dto)
         {
-            //A presigned PUT-nak nincs szerveroldali méretkorlátja, és a tényleges kikényszerítés csak a confirm lépésben történik.
-            //Akkor viszont a fájl már fent van. Aki nem hívja meg a confirmot, annak az objektuma a
-            //Cleanup job következő futásáig marad. A rate limit ezt a ciklust töri meg.
+            //Az aláírt policy a típust és a méretet kikényszeríti, de aki a confirmot nem hívja meg,
+            //annak az objektuma a Cleanup job következő futásáig a tárolóban marad.
+            //A rate limit ezt a ciklust töri meg.
             var (isLimited, retryAfter) = await _rateLimitService.IsRateLimitedAsync(
                 $"presigned_upload:{_currentUserService.UserId}", 60, TimeSpan.FromMinutes(10));
             if (isLimited)
@@ -240,8 +240,8 @@ namespace ProjectManager.API.Services.AttachmentService
             var storageKey = _fileStorageService.GenerateStorageKey(projectId, taskId, dto.FileName);
             var expiresAt = DateTime.UtcNow.AddSeconds(120);
 
-            var presignedUrl = await _fileStorageService.GeneratePresignedPutUrlAsync(
-                storageKey, dto.ContentType);
+            var upload = await _fileStorageService.GeneratePresignedUploadAsync(
+                storageKey, dto.ContentType, dto.SizeBytes);
 
             //PresignedUrlLog létrehozása
             var log = new PresignedUrlLog
@@ -266,7 +266,8 @@ namespace ProjectManager.API.Services.AttachmentService
 
             return new PresignedUrlResponseDto
             {
-                PresignedUrl = presignedUrl,
+                UploadUrl = upload.Url,
+                Fields = upload.Fields,
                 StorageKey = storageKey,
                 ExpiresAt = expiresAt
             };
@@ -307,11 +308,11 @@ namespace ProjectManager.API.Services.AttachmentService
 
             //A ténylegesen feltöltött objektum típusa egyezzen a bejelentettel.
             //
-            //Ez NEM második védelmi réteg, hanem AZ EGYETLEN: a presigned URL aláírása
-            //- méréssel ellenőrizve - nem tartalmazza a Content-Type-ot,
-            //tehát a tároló bármilyen típust elfogad a feltöltéskor.
-            //A hibás típusú fájl így bekerül a tárolóba, de Attachment rekord nem jön létre hozzá,
-            //és az árva objektumot az OrphanCleanupJob viszi el. Lásd S3FileStorageService.GeneratePresignedPutUrlAsync.
+            //Ez MÁSODIK védelmi réteg: az aláírt POST policy óta a tároló maga is elutasítja
+            //az eltérő típusú (403) és méretű (400) feltöltést - lásd
+            //S3FileStorageService.GeneratePresignedUploadAsync. Az ellenőrzés mégis itt marad,
+            //mert a kikényszerítés a tároló viselkedésén nyugszik, az pedig csere vagy
+            //verzióváltás után némán megváltozhat; itt a sor létre sem jön.
             var storedContentType = objectInfo.ContentType;
             if (!string.IsNullOrEmpty(storedContentType)
                 && !string.Equals(storedContentType, log.ContentType, StringComparison.OrdinalIgnoreCase))

@@ -10,6 +10,8 @@
     import { X, Trash2 } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
+    import { requireRowVersion } from '../api/concurrency';
+    import LabelCard from './LabelCard.svelte';
 
     export let isUpdateBoardOpen = false;
     export let projectId: string;
@@ -49,6 +51,54 @@
     let error = '';
     let success = '';
 
+    //A SZERKESZTÉS ALAPVONALA - ugyanaz a minta, mint a feladat részletnézeténél.
+    //
+    //A megjelenítés a store-ból jön (activeBoard), a mentés viszont azt a tokent küldi,
+    //amellyel a szerkesztés indult. Ha a kettő egy változó lenne, a SignalR-frissítés a
+    //tokent is átírná, a mentés mindig sikerülne, és a másik felhasználó módosítása NÉMÁN
+    //felülíródna.
+    let baselineRowVersion: number | null = null;
+    //A 409 maga is bizonyíték a távoli módosításra, akkor is, ha az esemény nem jutott el.
+    let conflictDetected = false;
+    let isReloading = false;
+
+    //Az alapvonal a megnyitáskor fixálódik - a modal csak nyitott állapotban létezik.
+    $: if (activeBoard && baselineRowVersion === null) {
+        baselineRowVersion = activeBoard.rowVersion;
+    }
+
+    $: hasRemoteChange = !!activeBoard
+        && (conflictDetected || (baselineRowVersion !== null && activeBoard.rowVersion !== baselineRowVersion));
+
+    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a már
+    //beírt értékeit megtartja. Szándékosan a szervertől kérdez, nem a store-ból: ha az
+    //ütközést a mentés bukásából tudtuk meg, akkor a store is állott.
+    async function acceptRemoteChanges() {
+        if (isReloading || !activeBoard) return;
+        isReloading = true;
+        try {
+            const boards = await getBoardsAsync(projectId);
+            setBoards(boards);
+            const fresh = boards.find(b => b.id === activeBoard!.id);
+            if (!fresh) {
+                error = 'Ezt a boardot időközben törölték.';
+                notify.error(error);
+                return;
+            }
+            setActiveBoard(fresh);
+            baselineRowVersion = fresh.rowVersion;
+            conflictDetected = false;
+            error = '';
+            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
+            error = message;
+            notify.error(message);
+        } finally {
+            isReloading = false;
+        }
+    }
+
     async function handleUpdateBoard() {
         error = '';
         success = '';
@@ -57,14 +107,23 @@
                 name, 
                 description, 
                 isDefault,
-                rowVersion: activeBoard!.rowVersion ?? ''
+                rowVersion: requireRowVersion(baselineRowVersion, 'board')
             });
             success = 'Board módosítva!';
             notify.success('Board módosítva!');
             setActiveBoard(response);
+            baselineRowVersion = response.rowVersion;
+            conflictDetected = false;
             const boards = await getBoardsAsync(projectId);
             setBoards(boards);
         } catch (e: any) {
+            if (e.response?.status === 409) {
+                conflictDetected = true;
+                error = 'Valaki módosította ezt a boardot, amíg szerkesztetted. '
+                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                notify.warning(error);
+                return;
+            }
             const message = e.response?.data ?? e.message ?? 'Hiba történt a board módosítása során!';
             error = message;
             notify.error(message);
@@ -111,13 +170,33 @@
 
         <form on:submit|preventDefault={handleUpdateBoard}>
             <h1>Board módosítása</h1>
-            Board neve:
-            <input type="text" bind:value={name} placeholder="Board neve">
-            Board leírása:
-            <textarea bind:value={description} placeholder="Board leírása (opcionális)"></textarea>
-            Legyen alapvető board?
-            <input type="checkbox" bind:checked={isDefault}>
-            Jelenlegi alapvető board: <span>{currentDefaultBoard?.name ?? 'Nincs'}</span>
+            <label>Board neve:
+                <input type="text" bind:value={name} placeholder="Board neve">
+            </label>
+            <label>Board leírása:
+                <textarea bind:value={description} placeholder="Board leírása (opcionális)"></textarea>
+            </label>
+            <label>Legyen alapvető board?
+                <input type="checkbox" bind:checked={isDefault}>
+            </label>
+            <label>
+                Jelenlegi alapvető board: <span>{currentDefaultBoard?.name ?? 'Nincs'}</span>
+                <!-- Ne adjon warningot a label -->
+                <button style="visibility: hidden;" >Dummy</button>
+            </label>
+            {#if hasRemoteChange}
+                <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
+                     hogy ütközés lesz, nem a hibaüzenetből utólag. -->
+                <div class="remote-change">
+                    <span class="remote-change-text">
+                        Ezt a boardot időközben módosította valaki.
+                    </span>
+                    <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
+                            disabled={isReloading}>
+                        {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                    </button>
+                </div>
+            {/if}
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -278,4 +357,49 @@
 
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
+
+    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló.
+       Ugyanaz a minta, mint a feladat részletnézeténél. */
+    .remote-change {
+        display: flex;
+        align-items: center;
+        gap: var(--gap-sm);
+        flex-wrap: wrap;
+        padding: var(--card-padding);
+        margin-bottom: var(--gap-sm);
+        border: 1px solid var(--accent-yellow);
+        border-radius: var(--border-radius);
+        background: var(--bg-secondary);
+        font-size: var(--font-size-sm);
+    }
+
+    .remote-change-text {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .btn-reload {
+        flex: 0 0 auto;
+        background: var(--accent-yellow-bg);
+        border: 1px solid var(--accent-yellow);
+        color: var(--accent-yellow);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+    }
+
+    .btn-reload:hover:not(:disabled) {
+        background: var(--accent-yellow);
+        color: #000;
+    }
+
+    .btn-reload:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    label { color: var(--text-muted) }
 </style>

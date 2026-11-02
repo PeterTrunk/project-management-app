@@ -30,7 +30,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{userId}")]
-        [Authorize(Policy = PolicyNames.ProjectOwner)]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> RemoveMemberAsync(Guid projectId, Guid userId)
@@ -40,7 +40,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpPatch("{userId}/role")]
-        [Authorize(Policy = PolicyNames.ProjectOwner)]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(typeof(ProjectMemberResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ProjectMemberResponseDto>> UpdateMemberRoleAsync(Guid projectId, Guid userId, [FromBody] UpdateMemberRoleDto dto)

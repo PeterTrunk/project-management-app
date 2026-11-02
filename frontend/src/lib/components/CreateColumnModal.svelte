@@ -7,6 +7,7 @@
     import { X } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
+    import { requireRowVersion } from '../api/concurrency';
 
     export let isColumnCreationOpen = false;
     export let projectId: string;
@@ -62,16 +63,22 @@
                 .map((col, index) => ({
                     id: col.id,
                     position: index + 1,
-                    rowVersion: col.rowVersion ?? ''
+                    //Üres vagy nulla token nem létezhet: a szerver elutasítaná, és a
+                    //hibaüzenetből nem derülne ki, mi a baj.
+                    rowVersion: requireRowVersion(col.rowVersion, 'oszlop')
                 }));
             try {
                 await reorderColumnsAsync(projectId, boardId, order);
                 success = success + 'Rendezés sikeres!';
                 notify.success('Rendezés sikeres!');
             } catch (e: any) {
-                const message = e.response?.data ?? e.message ?? 'Rendezés sikeretelen!';
+                //Az oszlop MÁR létrejött; csak az átrendezés bukott el. Ezt külön kell
+                //megmondani, különben a felhasználó azt hiszi, az egész művelet elúszott.
+                const message = e.response?.status === 409
+                    ? 'Az oszlop létrejött, de a sorrend időközben módosult. Töltsd újra az oldalt!'
+                    : (e.response?.data ?? e.message ?? 'Rendezés sikertelen!');
                 error = error + message;
-                notify.error(message);
+                notify.warning(message);
             }
             
         } catch (e: any) {
@@ -103,25 +110,30 @@
         </button>
         <form on:submit|preventDefault={handleCreateColumn}>
             <h1>Oszlop létrehozása {activeBoardName}-hoz</h1>
-            Új oszlop neve
-            <input type="text" placeholder="Oszlop Név" bind:value={name}/>
-            Az új oszlopban lévő Feladatok státusza
-            <input type="text" placeholder="Státusz" bind:value={mapsToStatus}/>
+            <label>Új oszlop neve
+                <input type="text" placeholder="Oszlop Név" bind:value={name}/>
+            </label>
+            <label>Az új oszlopban lévő Feladatok státusza
+                <input type="text" placeholder="Státusz" bind:value={mapsToStatus}/>
+            </label>
             <div> 
-                Legyen WIP-Limit?  
-                <input type="checkbox" bind:checked={hasWip}>
+                <label>Legyen WIP-Limit?  
+                    <input type="checkbox" bind:checked={hasWip}>
+                </label>
                 {#if hasWip}
-                    Limit számossága:
-                    <input type="number" bind:value={wipLimit}>
+                    <label>Limit számossága:
+                        <input type="number" bind:value={wipLimit}> 
+                    </label>
                 {/if}
             </div>
-            Legyen ez az oszlop után:
-            <select bind:value={afterColumnId}>
-                <option value="">Legelső oszlop legyen</option>
-                {#each columns.filter(c => c.position > 0) as column}
-                    <option value={column.id}>{column.name}</option>
-                {/each}
-            </select>
+            <label> Legyen ez az oszlop után:
+                <select bind:value={afterColumnId}>
+                    <option value="">Legelső oszlop legyen</option>
+                    {#each columns.filter(c => c.position > 0) as column}
+                        <option value={column.id}>{column.name}</option>
+                    {/each}
+                </select>
+            </label>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -253,6 +265,8 @@
         background: var(--accent-blue);
         color: #fff;
     }
+
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }

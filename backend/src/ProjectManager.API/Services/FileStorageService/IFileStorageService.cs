@@ -13,7 +13,12 @@ namespace ProjectManager.API.Services.FileStorageService
         Task DeleteFileAsync(string storageKey);
         string GenerateStorageKey(Guid projectId, Guid? taskId, string fileName);
         Task StreamFileAsync(string storageKey, Stream destination, CancellationToken ct = default);
-        Task<string> GeneratePresignedPutUrlAsync(string storageKey, string contentType, int expirySeconds = 120);
+        Task<PresignedUpload> GeneratePresignedUploadAsync(
+            string storageKey,
+            string contentType,
+            long sizeBytes,
+            int expirySeconds = 120
+        );
         Task<ObjectInfo?> GetObjectInfoAsync(string storageKey);
     }
 }

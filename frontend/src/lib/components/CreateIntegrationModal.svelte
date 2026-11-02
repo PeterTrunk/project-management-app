@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { createIntegrationAsync } from '../api/integrationApi';
 
-    import { GitBranch, Plus, TriangleAlert } from 'lucide-svelte';
+    import { GitBranch, Plus, TriangleAlert, X } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
 
@@ -67,8 +67,10 @@
     tabindex="-1"
 >
     <div class="modal-content">
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
         <h1><GitBranch size={18} /> Git Integráció Hozzáadása</h1>
-
         <form on:submit|preventDefault={handleCreate}>
             <div class="form-group">
                 <label for="provider">Provider</label>
@@ -127,7 +129,6 @@
             {/if}
 
             <div class="buttons">
-                <button type="button" on:click={closeModal}>Mégse</button>
                 <!-- A gomb letiltása kényelmi jelzés: a nyilatkozatot a szerver kényszeríti ki,
                      mert az API közvetlenül is hívható. -->
                 <button
@@ -167,6 +168,7 @@
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+        position: relative;
     }
 
     @media (max-width: 480px) {
@@ -248,6 +250,25 @@
         color: var(--text-secondary);
         font-size: 0.9rem;
         transition: background 0.15s, color 0.15s;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
     }
 
     button:hover { background: var(--border-hover); color: var(--text-primary); }

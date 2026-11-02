@@ -9,6 +9,7 @@ using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
 using ProjectManager.API.Services.CommentService;
 using ProjectManager.API.Services.CounterService;
+using ProjectManager.API.Services.TeamService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.GitService;
@@ -77,6 +78,27 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 activity,
                 new CounterService(context),
                 NullLogger<TaskService>.Instance);
+
+            return (sut, new ServiceContext(context, hub));
+        }
+
+        /// <summary>
+        /// A TeamService valódi adatbázissal. A levélküldés nem helyettesített, mert a
+        /// tagkezelés vizsgált metódusai (átminősítés, eltávolítás) nem küldenek levelet -
+        /// csak a meghívó, amit ezek a tesztek nem érintenek.
+        /// </summary>
+        public static (TeamService Sut, ServiceContext Ctx) CreateTeamService(
+            AppDbContext context, Guid currentUserId, string currentUserDisplayName = "Teszt Elek")
+        {
+            var (user, hub, activity) = Common(context, currentUserId, currentUserDisplayName);
+
+            var sut = new TeamService(
+                context,
+                hub,
+                user,
+                activity,
+                Options.Create(new EmailOptions { FrontendUrl = "https://teszt.local" }),
+                NullLogger<TeamService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
         }

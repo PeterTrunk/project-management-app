@@ -154,7 +154,7 @@ namespace ProjectManager.API.Services.ProjectService
                     "Project",
                     projectId,
                     "Unarchived",
-                    $"{{actor}} dearchivált a projektet"
+                    $"{{actor}} aktiválta a projektet"
                 );
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

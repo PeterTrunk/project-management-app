@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { tokenStore } from '../stores/tokenStore';
 import { refreshTokenOnce } from './tokenRefresh';
+import { friendlyMessageFor, normalizeResponseData } from './errorMessages';
 
 const apiClient = axios.create({
     baseURL: `${import.meta.env.VITE_API_URL || 'http://localhost:5178'}/api`,
@@ -19,44 +20,13 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
-//A hívók a `e.response?.data ?? e.message` mintát használják. Ha a kérés el sem jutott a szerverig,
-//az axios nyers technikai szövege ("Network Error", "timeout of 0ms exceeded") kerülne a felhasználó elé.
-//Ezért itt cseréljük felhasználóbarátabb üzenetre.
-function friendlyMessageFor(error: any): string | null {
-    //A megszakított kérés nem hiba, nem is kell róla üzenet
-    if (error.code === 'ERR_CANCELED') {
-        return null;
-    }
-
-    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-        return 'A szerver nem válaszolt időben, próbáld újra!';
-    }
-
-    if (!error.response) {
-        return 'Nem sikerült elérni a szervert! Ellenőrizd az internetkapcsolatod, vagy próbáld újra pár másodperc múlva.';
-    }
-
-    const status = error.response.status;
-    if (status === 502 || status === 503 || status === 504) {
-        return 'A szerver éppen nem elérhető, próbáld újra pár másodperc múlva!';
-    }
-
-    return null;
-}
-
 // Response interceptor - 401 Unauth. esetén kijelentkeztetés
 apiClient.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
 
-        //A backend hibaválasza {"error": "..."} alakú JSON. A hívók e.response.data-t olvasnak szövegként,
-        //Itt egy helyen csomagoljuk ki.
-        const data = error.response?.data;
-        if (data && typeof data === 'object' && typeof data.error === 'string') {
-            error.response.data = data.error;
-        }
-
+        //A hálózati hibák emberi nyelvre cserélése elsőbbséget kap: ezeknél nincs is válasz.
         const friendly = friendlyMessageFor(error);
         if (friendly) {
             //A technikai részlet a konzolban marad, a felhasználó az olvasható üzenetet kapja
@@ -65,10 +35,19 @@ apiClient.interceptors.response.use(
             if (error.response) {
                 error.response.data = friendly;
             }
-        } else if (typeof error.response?.data === 'string' && error.response.data.trimStart().startsWith('<')) {
-            //Nem a mi API-nktól jött (pl. reverse proxy HTML hibaoldala)
-            console.error('API hiba (nem JSON válasz):', error.response.status, error.response.data);
-            error.response.data = 'Váratlan szerverhiba történt, próbáld újra!';
+        } else if (error.response) {
+            //A válasz törzse MINDIG olvasható szöveggé alakul - lásd normalizeResponseData.
+            const normalized = normalizeResponseData(error.response.data);
+            if (normalized !== null) {
+                error.response.data = normalized;
+                error.message = normalized;
+            } else {
+                //Ismeretlen alak vagy nem JSON válasz: a nyers tartalom a konzolba megy.
+                console.error('API hiba (ismeretlen válaszalak):',
+                    error.response.status, error.response.data);
+                error.response.data = 'Váratlan szerverhiba történt, próbáld újra!';
+                error.message = error.response.data;
+            }
         }
 
         if (error.response?.status === 401 && !originalRequest._retry) {

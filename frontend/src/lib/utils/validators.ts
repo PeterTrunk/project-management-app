@@ -504,8 +504,13 @@ export function validateFileUpload(fileName: string, sizeBytes: number, contentT
     if (sizeBytes <= 0) errors.push('A fájl mérete nem lehet nulla!');
     if (sizeBytes > 64 * 1024 * 1024) errors.push('A fájl mérete maximum 64MB lehet!');
     
-    const typeReq = required(contentType, 'Fájl típus');
-    if (typeReq) errors.push(typeReq);
+    // A bongeszo a fel nem ismert kiterjesztesekre ures tipust ad (file.type === ''), es a
+    // tipus a kliensnek nem beirt adat, hanem a bongeszotol kapott. Egy "megadasa kotelezo"
+    // uzenet ezert felrevezeto: a valodi helyzet az, hogy ezt a fajltipust nem tamogatjuk -
+    // a szerveroldali whitelist MIME-tipus alapu, tehat egy megallapithatatlan tipus ugyis elbukna.
+    if (!contentType || contentType.trim() === '') {
+        errors.push('Ezt a fájltípust nem támogatjuk! Feltölthető: kép (JPG, PNG, GIF, WebP), PDF, Word, Excel, TXT és ZIP.');
+    }
     
     return errors.length > 0 ? errors.join('\n') : null;
 }

@@ -1,9 +1,9 @@
 <script lang="ts">
     import type { ProjectResponse } from '../api/projectApi';
-    import { projectStore, setLabels } from '../../lib/stores/projectStore';
+    import { projectStore } from '../../lib/stores/projectStore';
     import { updateProjectAsync, archiveProjectAsync, unarchiveProjectAsync, deleteProject } from '../../lib/api/projectApi'
     import ConfirmModal from '../components/ConfirmModal.svelte';
-    import { getLabelsAsync, deleteLabelAsync, type LabelResponse } from '../api/labelApi';
+    import { deleteLabelAsync, type LabelResponse } from '../api/labelApi';
     import LabelCard from './LabelCard.svelte';
     import CreateLabelModal from './CreateLabelModal.svelte';
     import { integrationStore } from '../stores/integrationStore';
@@ -11,7 +11,7 @@
     import IntegrationCard from './IntegrationCard.svelte';
     import CreateIntegrationModal from './CreateIntegrationModal.svelte';
 
-    import { Settings2, Tag, GitBranch, Plus } from 'lucide-svelte';
+    import { Settings2, Tag, GitBranch, Plus, Search, X } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
 
@@ -20,6 +20,13 @@
     export let project: ProjectResponse;
     let labels: LabelResponse[] = [];
     let isCreateLabelOpen = false;
+    let labelSearch = '';
+
+    //A labelek amugy is a store-ban vannak, igy a kereses nem jar szerverhivassal.
+    $: labelQuery = labelSearch.trim().toLowerCase();
+    $: filteredLabels = labelQuery === ''
+        ? labels
+        : labels.filter(l => l.name.toLowerCase().includes(labelQuery));
     let integrations: IntegrationResponse[] = [];
     let isCreateIntegrationOpen = false;
 
@@ -180,14 +187,14 @@
                     {#if project.isArchived}
                         <div class="danger-row stack-480">
                             <div>
-                                <p class="danger-title">Projekt dearchiválása</p>
+                                <p class="danger-title">Projekt aktiválása</p>
                                 <p class="danger-desc">A projekt újra aktív lesz.</p>
                             </div>
                             <button class="btn-warning" type="button" on:click={() => openConfirm(
-                                'Projekt dearchiválása',
-                                'Biztosan dearchiválni szeretnéd a projektet?',
+                                'Projekt aktiválás',
+                                'Biztosan aktiválni szeretnéd a projektet?',
                                 handleUnarchive
-                            )}>Dearchiválás</button>
+                            )}>Aktiválás</button>
                         </div>
                     {:else}
                         <div class="danger-row stack-480">
@@ -254,11 +261,30 @@
                         Új label
                     </button>
                 </div>
+                {#if labels.length > 0}
+                    <div class="search-wrapper">
+                        <Search size={14} />
+                        <input
+                            type="text"
+                            placeholder="Keresés a labelek között..."
+                            bind:value={labelSearch}
+                            class="search-input"
+                        />
+                        {#if labelSearch !== ''}
+                            <button class="search-clear" title="Keresés törlése"
+                                on:click={() => labelSearch = ''}>
+                                <X size={14} />
+                            </button>
+                        {/if}
+                    </div>
+                {/if}
                 <div class="labels-list">
-                    {#if labels.length > 0}
-                        {#each labels as label}
+                    {#if filteredLabels.length > 0}
+                        {#each filteredLabels as label (label.id)}
                             <LabelCard {label} onDelete={requestDeleteLabel} />
                         {/each}
+                    {:else if labels.length > 0}
+                        <p class="empty">Nincs a keresésnek megfelelő label</p>
                     {:else}
                         <p class="empty">Nincs még label</p>
                     {/if}
@@ -301,13 +327,12 @@
     />
 {/if}
 {#if isCreateLabelOpen}
+    <!-- Nincs onClose-beli újralekérés: a LabelCreated esemény a projekt teljes csoportjának
+         megy ki, tehát a létrehozót is eléri, és a projectStore magától felveszi az új
+         címkét. Ez a nézet a store-ból olvas (lásd a feliratkozást feljebb). -->
     <CreateLabelModal
         bind:isOpen={isCreateLabelOpen}
         projectId={project.id}
-        onClose={async () => {
-            const data = await getLabelsAsync(project.id);
-            setLabels(data);
-        }}
     />
 {/if}
 {#if isCreateIntegrationOpen}
@@ -580,6 +605,41 @@
         font-size: 0.85rem;
         color: var(--text-muted);
         padding: 1rem 0;
+    }
+
+    .search-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--border-radius);
+        padding: 0.35rem 0.75rem;
+        color: var(--text-muted);
+        min-width: 0;
+    }
+
+    .search-input {
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: var(--font-size-sm);
+        width: 100%;
+        outline: none;
+    }
+
+    .search-clear {
+        display: flex;
+        align-items: center;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        color: var(--text-muted);
+    }
+
+    .search-clear:hover {
+        color: var(--text-primary);
     }
 
     .labels-list, .integrations-list {

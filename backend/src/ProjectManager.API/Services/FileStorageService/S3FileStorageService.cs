@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 using Minio;
+using Minio.DataModel;
 using Minio.DataModel.Args;
 using ProjectManager.API.Common.Options;
 
@@ -126,29 +127,50 @@ namespace ProjectManager.API.Services.FileStorageService
                 }));
         }
 
-        public async Task<string> GeneratePresignedPutUrlAsync(string storageKey, string contentType, int expirySeconds = 120)
+        public async Task<PresignedUpload> GeneratePresignedUploadAsync(
+            string storageKey,
+            string contentType,
+            long sizeBytes,
+            int expirySeconds = 120)
         {
-            //FIGYELEM - a WithHeaders itt NEM teszi az aláírásba a Content-Type-ot.
+            //Aláírt POST policy, NEM aláírt PUT URL - és ennek mérés az oka.
             //
-            //Méréssel ellenőrizve a Minio SDK 7.0.0-val, MinIO és SeaweedFS ellen is:
-            //a kiadott URL-ben "X-Amz-SignedHeaders=host" áll, a fejléc pedig egy query paraméterként szivárog ki,
-            //a .NET típusnév értékével. Vagyis a tároló NEM utasítja el az eltérő
-            //Content-Type-pal érkező PUT-ot - mindhárom eset (helyes, eltérő, hiányzó) 200-at ad.
+            //A presigned PUT aláírása (SigV4) csak a Host fejlécet fedi: a kiadott URL-ben
+            //"X-Amz-SignedHeaders=host" áll, a Content-Type pedig akkor sem kerül az aláírásba,
+            //ha a hívó megadja. Méréssel ellenőrizve a Minio SDK 7.0.0-val: PUT-nál mindhárom
+            //eset (helyes, eltérő, hiányzó Content-Type) 200-at ad, tehát a tároló bármilyen
+            //típust elfogad.
             //
-            //Ezért a fájltípust az AttachmentService confirm lépése kényszeríti ki: ott a
-            //StatObject-ből olvasott tényleges típus össze van vetve a bejelentettel, és eltérés
-            //esetén nem jön létre Attachment rekord. A hívás itt azért marad, mert a szándékot
-            //kifejezi és költsége nincs - de védelemnek NEM tekinthető.
-            var args = new PresignedPutObjectArgs()
+            //A POST policy ezzel szemben a feltétellistát írja alá, és a tároló KIKÉNYSZERÍTI.
+            //Ugyanazon a SeaweedFS 4.46-on mérve:
+            //  - egyező típus  -> 204 | eltérő típus -> 403
+            //  - pontos méret  -> 204 | eltérő méret -> 400
+            //
+            //Ezért a fájltípus és a méret már a feltöltéskor, a tárolóban eldől - nem csak
+            //utólag, a confirm lépésben. A confirm ellenőrzései megmaradnak második rétegként.
+            var policy = new PostPolicy();
+            policy.SetBucket(_bucketName);
+            policy.SetKey(storageKey);
+            policy.SetContentType(contentType);
+
+            //A SetContentLength PONTOS hosszt köt ki (content-length-range min=max), nem felső korlátot.
+            //Itt ez a szigorúbb és egyben helyes választás: a kliens a fájl méretét előre bejelenti,
+            //a böngésző pedig pontosan annyi bájtot tölt fel.
+            policy.SetContentLength(sizeBytes);
+            policy.SetExpires(DateTime.UtcNow.AddSeconds(expirySeconds));
+
+            var args = new PresignedPostPolicyArgs()
                 .WithBucket(_bucketName)
                 .WithObject(storageKey)
-                .WithHeaders(new Dictionary<string, string>
-                {
-                    ["Content-Type"] = contentType
-                })
-                .WithExpiry(expirySeconds);
+                .WithPolicy(policy);
 
-            return await _presignedClient.PresignedPutObjectAsync(args);
+            var (uri, formData) = await _presignedClient.PresignedPostPolicyAsync(args);
+
+            return new PresignedUpload
+            {
+                Url = uri.ToString(),
+                Fields = new Dictionary<string, string>(formData)
+            };
         }
 
         public async Task<ObjectInfo?> GetObjectInfoAsync(string storageKey)

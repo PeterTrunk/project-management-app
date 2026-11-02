@@ -69,13 +69,19 @@
         </button>
         <form on:submit|preventDefault={handleCreateBoard}>
             <h1>Új Board Létrehozás {activeProject.name}-hoz</h1>
-            Új board neve:
-            <input type="text" placeholder="Board Név" bind:value={name}>
-            Új board leírása:
-            <textarea placeholder="Board Leírása (Opcionális)" bind:value={description}></textarea>
-            Legyen alapvető board? <input type="checkbox" bind:checked={isDefault}>
-            Jelenlegi alapvető board 
-            <span>{currentDefaultBoard ? currentDefaultBoard.name : 'Nincs alapvető board!'}</span>
+            <label>Új board neve:
+                <input type="text" placeholder="Board Név" bind:value={name}>
+            </label>
+            <label> Új board leírása:
+                <textarea placeholder="Board Leírása (Opcionális)" bind:value={description}></textarea>
+            </label>
+            <label>
+                Legyen alapvető board? <input type="checkbox" bind:checked={isDefault}>
+            </label>
+            <label>Jelenlegi alapvető board 
+                <span>{currentDefaultBoard ? currentDefaultBoard.name : 'Nincs alapvető board!'}</span>
+                <button style="visibility: hidden;">Dummy</button>
+            </label>
             {#if error}
                 <p id="failed">{error}</p>
             {/if}
@@ -198,6 +204,8 @@
         font-size: 1.5rem;
         word-break: break-word;
     }
+
+    label { color: var(--text-muted); }
 
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }

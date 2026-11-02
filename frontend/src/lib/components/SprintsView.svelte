@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { requireRowVersion } from '../api/concurrency';
     import { sprintStore, setSprints } from '../stores/sprintStore';
     import { getSprintsAsync, type SprintResponse } from '../api/sprintApi';
     import { type TaskResponse, deleteTaskAsync } from '../api/taskApi';
@@ -116,11 +117,11 @@
                 // Backlogba visszarakás
                 const task = allTasks.find(t => t.id === taskId);
                 if (task?.sprintId) {
-                    await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, task.rowVersion ?? 0);
+                    await removeTaskFromSprintAsync(projectId, task.sprintId, taskId, requireRowVersion(task.rowVersion, 'feladat'));
                 }
             } else {
                 const task = allTasks.find(t => t.id === taskId);
-                await assignTaskToSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
+                await assignTaskToSprintAsync(projectId, sprintId, taskId, requireRowVersion(task?.rowVersion, 'feladat'));
             }
             notify.success('Task módosítva!');
         } catch (e: any) {
@@ -131,7 +132,7 @@
     async function handleRemoveFromSprint(taskId: string, sprintId: string) {
         try {
             const task = allTasks.find(t => t.id === taskId);
-            await removeTaskFromSprintAsync(projectId, sprintId, taskId, task?.rowVersion ?? 0);
+            await removeTaskFromSprintAsync(projectId, sprintId, taskId, requireRowVersion(task?.rowVersion, 'feladat'));
             notify.success('Task módosítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a task sprintből eltávolításakor!');

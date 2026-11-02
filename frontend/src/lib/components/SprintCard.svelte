@@ -77,9 +77,9 @@
         <div class="sprint-actions">
             <button class="collapse-btn" on:click={() => collapsed = !collapsed}>
                 {#if collapsed}
-                    <ChevronRight size={14} />
+                    <ChevronRight size={14} /> Feladatok
                 {:else}
-                    <ChevronDown size={14} />
+                    <ChevronDown size={14} /> Feladatok elrejtése
                 {/if}
             </button>
             {#if sprint.state === 'Active'}

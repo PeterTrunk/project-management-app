@@ -3628,9 +3628,11 @@ használta** - nem épült be az aláírásba. A `ConfirmUploadAsync` ezen nem j
 ellenőrizte, az adatbázisba pedig a kliens által **bejelentett** típus került. A `ValidateFile`
 whitelistje így a presigned úton csak formalitás volt: a felhasználó bejelentett `image/png`-t,
 és bármit feltölthetett.
-Megoldás: `.WithHeaders(["Content-Type"] = contentType)` a presigned argumentumokba - a MinIO
-elutasítja az eltérő fejléccel érkező PUT-ot. Második rétegként a confirm összeveti a
-`StatObject` által visszaadott típust a bejelentettel.
+Megoldás: `.WithHeaders(["Content-Type"] = contentType)` a presigned argumentumokba, második
+rétegként pedig a confirm összeveti a `StatObject` által visszaadott típust a bejelentettel.
+**Ez a megoldás felében téves volt** - a `WithHeaders` nem teszi a fejlécet az aláírásba, tehát
+a tároló nem utasítja el az eltérő típussal érkező PUT-ot. A tényleges javítás az aláírt POST
+policy; lásd *Az aláírt feltöltés kikényszerítése: PUT helyett POST policy*.
 (Enyhítő tényező volt, amit az audit külön kiemelt: a letöltés `Content-Disposition: attachment`
 + `nosniff` fejlécekkel megy, tehát stored XSS ezen az úton nem volt - ez helyes tervezési döntés.)
 
@@ -4958,6 +4960,52 @@ felejtsük el őket.
 Az emlékeztető ezért **prózába** került, ahol nincs ára: a `README.md` tervezett fejlesztések
 listájába egy sor a globális szerepkörökről.
 
+### Az `xmin` konkurencia-token felülvizsgálata: megvizsgált és megtartott döntés
+
+**Kiváltó ok:** egy külső felvetés, hogy az `xmin` rendszeroszlop konkurencia-tokenként nem
+teljesen megbízható. Ez igaz, és **a PostgreSQL kézikönyve is kimondja az alapját**:
+
+> „It is unwise, however, to depend on the uniqueness of transaction IDs over the long term
+> (more than one billion transactions)." (*ddl-system-columns*)
+
+Konkrétan pedig Andres Freund, a PostgreSQL egyik core committere írta le 2020-ban a
+`pgsql-bugs` és `pgsql-hackers` listán, épp az EF Core-os használatra válaszolva, hogy ez
+„not really a safe use of xmin" - mert körbefordulhat, és mert nem kezeli jól a tranzakción
+belüli több utasítást. A megjegyzéséhez ő maga tette hozzá: „Perhaps those are low enough
+risk for you."
+
+**A két mechanizmus megmérve**, a projekt adatbázisán, nem hivatkozás alapján:
+
+| Művelet | Megváltozik az `xmin`? |
+|---|---|
+| `VACUUM FREEZE` | **Nem** - `pageinspect`-tel igazolva, hogy a sor fagyott, az érték mégis a nyers |
+| `VACUUM FULL`, `CLUSTER` | Nem |
+| `ALTER TABLE ... ALTER COLUMN ... TYPE` | **Igen**, minden soron - egy táblát újraíró migráció érvényteleníti a kinti tokeneket |
+| Két írás egy tranzakción belül | **Nem** - az `xmin` tranzakciós bélyeg, nem írásszámláló |
+| `UPDATE ... RETURNING xmin`, majd commit | A visszaadott érték a commit után is érvényes |
+
+Az első mérés egy **saját tévedést javított**: a feltevés az volt, hogy a fagyasztás után az
+érték `2`-re (`FrozenTransactionId`) változik. Nem változik - és ez nem megnyugtató, hanem épp
+a körbefordulás *előfeltétele*: egy régen nem bolygatott sor `xmin`-je illeszthető marad.
+Mérés nélkül ez fordított előjellel került volna a dokumentációba.
+
+**Az alternatíva megvizsgálva.** Egy alkalmazás által karbantartott verzió-számláló, amit a
+`SaveChangesAsync` tölt ki (a `CreatedAt` / `UpdatedAt` mintájára), **mindkét** kifogást
+megszüntetné. A költsége mérve: 46 gépies leképezés, 4 entitás-property, 4 konfigurációs sor,
+~6 sor a `SaveChangesAsync`-ben, 1 migráció - és **nulla frontend-változás**, ha a típus `uint`
+marad. Egy fókuszált félnap.
+
+**Mégsem készült el, és ez a döntés indoka.** A számláló egy valószínűségi lyukat
+**determinisztikusra** cserélne: amit nem a `SaveChangesAsync` ír, az nem növeli a verziót -
+`ExecuteUpdateAsync`, nyers SQL, és ami nem fogható le hálóval, a **kézi adatbázis-javítás**.
+Ott a régi token 100%-os valószínűséggel illeszkedne, nem 1/2³²-vel. Az `xmin` erénye pont ez:
+**az adatbázis tartja karban, így semmilyen írási út nem kerülheti meg** - ugyanaz az érvelés,
+amiért a kézi verzióoszlopot az elején is elvetettük, csak most számokkal.
+
+Az `xmin` tehát **ismert korláttal** marad, nem fenntartás nélkül. A részletes elemzés - a négy
+Npgsql-korlát és a kódbázis nulla kitettsége mindegyikre - a szakdolgozat adatmodell-fejezetének
+munkaanyagában van.
+
 ### Projekt-hatókör a kérés törzséből, és egy néma adatbázis-kényszer
 
 **Kiváltó ok:** a szakdolgozat adatmodell-fejezetéhez gyűjtött anyag összevetése a kóddal.
@@ -5588,6 +5636,58 @@ kliens állapotától. Erre külön integrációs teszt is van.
 kötelező `taskId`-t várnak, és a következő webhook esemény úgyis visszakapcsolná - ehhez egy
 külön „elutasítva" fogalom kellene.
 
+
+### Az aláírt feltöltés kikényszerítése: PUT helyett POST policy
+
+**Probléma:** a fenti *Content-type whitelist nem érvényesült* javítás **nem oldotta meg**, amit
+állított. A megoldásként rögzített `.WithHeaders(["Content-Type"] = contentType)` hívás a Minio
+SDK 7.0.0-ban nem teszi a fejlécet az aláírásba: a kiadott URL-ben `X-Amz-SignedHeaders=host`
+áll, a fejléc pedig egy query paraméterként szivárog ki, a .NET típusnév értékével. A tároló
+tehát **bármilyen** típust elfogad a presigned PUT-on. Méréssel ellenőrizve: mindhárom eset
+(helyes, eltérő, hiányzó `Content-Type`) `200`-at ad. A whitelist a presigned úton továbbra is
+csak formalitás volt, a tényleges kikényszerítés egyedül a confirm lépés `StatObject`
+összevetésében élt — akkor viszont a fájl már fent van. Ugyanebből következett, hogy a
+**méretre sem** volt feltöltéskori korlát (lásd *Tárhely-kimerítés*).
+
+**Megoldás:** aláírt **POST policy** a presigned PUT helyett. A POST policy a feltétellistát
+írja alá, és a tároló kikényszeríti. A `PresignedUpload` (URL + űrlapmezők) váltja a puszta
+URL-t, a policy pedig három feltételt köt: a kulcsot, a `Content-Type`-ot és a **pontos**
+tartalomhosszt (a `PostPolicy.SetContentLength` `content-length-range min=max` feltételt ad, nem
+felső korlátot — itt ez a helyes, mert a kliens a méretet előre bejelenti).
+
+Ugyanazon a SeaweedFS 4.46-on mérve, a valódi `S3FileStorageService`-en keresztül:
+
+| Eset | Eredmény |
+|---|---|
+| egyező típus és méret | `204` |
+| eltérő típus (bejelentett `image/png`, küldött `application/x-msdownload`) | **`403`** |
+| a bejelentettnél nagyobb fájl | **`400`** |
+| a bejelentettnél kisebb fájl | **`400`** |
+
+A fájltípus és a méret így már a feltöltéskor, a tárolóban eldől. A confirm ellenőrzései
+**megmaradnak második rétegként**, mert a kikényszerítés a tároló viselkedésén nyugszik, az
+pedig csere vagy verzióváltás után némán megváltozhat.
+
+Érintett fájlok: `IFileStorageService` (`GeneratePresignedPutUrlAsync` →
+`GeneratePresignedUploadAsync`), új `PresignedUpload`, `S3FileStorageService`,
+`PresignedUrlResponseDto` (`PresignedUrl` → `UploadUrl` + `Fields`), `AttachmentService`,
+`attachmentApi.ts` (`axios.put` → `FormData` + `axios.post`), `TaskDetailModal.svelte`,
+`TeamResources.svelte`.
+
+Két részlet, ami nélkül a feltöltés némán elbukik: a `Content-Type` **űrlapmezőként** utazik
+(a policy arra van aláírva, nem a fejlécre), és a `file` mező kötelezően az **utolsó**. A
+böngésző felé a `Content-Type` kérésfejlécet nem állítjuk be, mert a multipart boundary-t a
+böngészőnek kell generálnia.
+
+**Teszt:** `Storage/PresignedUploadPolicyTests` — saját SeaweedFS konténert indít (adatbázis nem
+kell hozzá), és a fenti négy esetet, plusz a feltöltött objektum visszaolvasott típusát és
+méretét állítja. Ez az a fajta állítás, amit **nem lehet a kódból olvasva igazolni**: a
+viselkedés a tárolóé, nem a miénk.
+
+**Nyitva maradt:** a tárhelykvóta és a bucket lifecycle szabály továbbra is üzemeltetési döntés.
+A `presigned_upload:{userId}` rate limit és az induláskor is lefutó cleanup változatlanul kell,
+mert a meg nem erősített feltöltés objektuma attól még a tárolóban marad, hogy a típusa és a
+mérete helyes.
 
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.

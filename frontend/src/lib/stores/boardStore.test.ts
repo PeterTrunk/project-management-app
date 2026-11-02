@@ -32,7 +32,8 @@ function board(id: string, overrides: Partial<BoardResponse> = {}): BoardRespons
     } as BoardResponse;
 }
 
-function column(id: string, boardId: string, position: number): ColumnResponse {
+function column(id: string, boardId: string, position: number,
+                overrides: Partial<ColumnResponse> = {}): ColumnResponse {
     return {
         id,
         boardId,
@@ -40,7 +41,8 @@ function column(id: string, boardId: string, position: number): ColumnResponse {
         mapsToStatus: 'todo',
         wipLimit: null,
         position,
-        rowVersion: 1
+        rowVersion: 1,
+        ...overrides
     } as ColumnResponse;
 }
 
@@ -77,6 +79,32 @@ describe('boardStore', () => {
             handleBoardUpdated({ boardId: 'a', name: 'Átnevezve', description: null, isDefault: false });
 
             expect(get(boardStore).activeBoard!.name).toBe('Átnevezve');
+        });
+
+        //A szerkesztő modal ebből látja meg, hogy közben módosult a board: az alapvonalhoz
+        //hasonlítja. Ha a token nem jut el az aktív boardig, a "Változások betöltése" sáv
+        //sosem jelenne meg, és a felhasználó csak a mentés bukásából tudná meg.
+        it('a konkurencia-tokent az aktív boardra is átvezeti', () => {
+            setBoards([board('a', { rowVersion: 10 })]);
+            setActiveBoard(board('a', { rowVersion: 10 }));
+
+            handleBoardUpdated({
+                boardId: 'a', name: 'Átnevezve', description: null,
+                isDefault: false, rowVersion: 11
+            });
+
+            const state = get(boardStore);
+            expect(state.boards[0].rowVersion).toBe(11);
+            expect(state.activeBoard!.rowVersion).toBe(11);
+        });
+
+        it('token nélküli payload NEM írja felül a meglévő tokent', () => {
+            setBoards([board('a', { rowVersion: 10 })]);
+            setActiveBoard(board('a', { rowVersion: 10 }));
+
+            handleBoardUpdated({ boardId: 'a', name: 'Átnevezve', description: null, isDefault: false });
+
+            expect(get(boardStore).activeBoard!.rowVersion).toBe(10);
         });
 
         it('nem nyúl az aktív boardhoz, ha másik boardot módosítottak', () => {
@@ -155,6 +183,31 @@ describe('boardStore', () => {
             expect(state.columns.find(c => c.id === 'c1')!.name).toBe('Átnevezve');
             expect(state.columns.find(c => c.id === 'c1')!.wipLimit).toBe(3);
             expect(state.columns.find(c => c.id === 'c2')!.name).toBe('Oszlop c2');
+        });
+
+        //Az oszlop-szerkesztő a store élő listájából veszi a megjelenítést és a token
+        //összehasonlítását (a szülő pillanatképet ad át). Ha a token nem jut el ide, a
+        //"Változások betöltése" sáv sosem jelenne meg.
+        it('a konkurencia-tokent is átvezeti', () => {
+            setColumns([column('c1', 'a', 1, { rowVersion: 10 })]);
+
+            handleColumnUpdated({
+                columnId: 'c1', boardId: 'a', name: 'Átnevezve',
+                mapsToStatus: 'todo', wipLimit: null, rowVersion: 11
+            });
+
+            expect(get(boardStore).columns[0].rowVersion).toBe(11);
+        });
+
+        it('token nélküli payload NEM írja felül a meglévő tokent', () => {
+            setColumns([column('c1', 'a', 1, { rowVersion: 10 })]);
+
+            handleColumnUpdated({
+                columnId: 'c1', boardId: 'a', name: 'Átnevezve',
+                mapsToStatus: 'todo', wipLimit: null
+            });
+
+            expect(get(boardStore).columns[0].rowVersion).toBe(10);
         });
 
         //A pozíciót szándékosan nem az update esemény hordozza, hanem az átrendezés

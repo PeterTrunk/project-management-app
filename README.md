@@ -454,3 +454,16 @@ Az MVP után következő munkák (SignalR refaktor, biztonsági megerősítés, 
 - **Help / Wiki modal** – beépített súgó
 
 Részletes leírások és a tudatosan kihagyott elemek indoklása (Valahol a dokentum végén): [`SCHEDULE.md`](./SCHEDULE.md)
+
+## Licenc
+
+A projekt **MIT licenc** alatt áll, lásd a [`LICENSE`](./LICENSE) fájlt. Ez azt jelenti, hogy a
+kód szabadon futtatható, módosítható és terjeszthető, akár üzleti környezetben is, egyetlen
+kikötéssel: a szerzői jogi és licencszöveget meg kell tartani. A szoftver garancia nélkül,
+"AS IS" alapon kerül közzétételre.
+
+Az infrastruktúra elemei (PostgreSQL, Redis, SeaweedFS, OpenObserve) saját licenccel
+rendelkeznek, és közülük az OpenObserve copyleft (AGPL-3.0). Mindegyik **önálló folyamatként,
+hálózati protokollon** keresztül működik együtt az alkalmazással - nincs linkelés és nincs
+továbbterjesztés -, ezért egyik sem ír elő kötelezettséget erre a kódbázisra. Ugyanez az
+érvelés szerepel a tárolócserénél és a naplóaggregátor választásánál is.

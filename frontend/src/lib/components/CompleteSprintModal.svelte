@@ -66,7 +66,7 @@
         <button class="close-btn" type="button" on:click={closeModal}>
             <X size={16} />
         </button>
-        <h1>Sprint Lezárása — {sprint.name}</h1>
+        <h1>{sprint.name} sprint lezárása</h1>
         
         {#if unfinishedTasks.length > 0}
             <div class="warning">
@@ -113,7 +113,6 @@
         {/if}
 
         <div class="buttons">
-            <button type="button" on:click={closeModal}>Mégse</button>
             <button class="complete-btn" on:click={handleComplete}>
                 <CircleCheck size={15} /> Sprint Lezárása
             </button>

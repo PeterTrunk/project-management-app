@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { updateColumnAsync, deleteColumnAsync } from '../api/columnApi';
+    import { updateColumnAsync, deleteColumnAsync, getColumnsAsync } from '../api/columnApi';
+    import { boardStore, setColumns } from '../stores/boardStore';
+    import { requireRowVersion } from '../api/concurrency';
     import type { ColumnResponse } from '../api/columnApi';
     import ConfirmModal from './ConfirmModal.svelte';
 
@@ -25,10 +27,67 @@
         onClose();
     }
 
+    //Az oszlopot a szülő PILLANATKÉPként adja át (a kattintáskori objektum), ezért magától
+    //nem követné a valós idejű frissítéseket. A megjelenítéshez ezért a store élő listájából
+    //vezetjük le, és csak akkor esünk vissza a propra, ha az oszlop nincs a store-ban.
+    $: liveColumn = ($boardStore.columns ?? []).find(c => c.id === column.id) ?? column;
+
     let isEditing = false;
     let editName = column.name;
     let editMapsToStatus = column.mapsToStatus;
     let editWipLimit: number | null = column.wipLimit;
+    let error = '';
+
+    //A SZERKESZTÉS ALAPVONALA - ugyanaz a minta, mint a feladat és a board szerkesztőjénél:
+    //a megjelenítés a store-t követi, a mentés viszont azt a tokent küldi, amellyel a
+    //szerkesztés indult. Enélkül a valós idejű frissítés a tokent is átírná, és a másik
+    //felhasználó módosítása némán felülíródna.
+    let baselineRowVersion: number | null = null;
+    //A 409 maga is bizonyíték a távoli módosításra, akkor is, ha az esemény nem jutott el.
+    let conflictDetected = false;
+    let isReloading = false;
+
+    $: hasRemoteChange = isEditing
+        && (conflictDetected || (baselineRowVersion !== null && liveColumn.rowVersion !== baselineRowVersion));
+
+    function startEditing() {
+        baselineRowVersion = liveColumn.rowVersion;
+        editName = liveColumn.name;
+        editMapsToStatus = liveColumn.mapsToStatus;
+        editWipLimit = liveColumn.wipLimit;
+        error = '';
+        conflictDetected = false;
+        isEditing = true;
+    }
+
+    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a már
+    //beírt értékeit megtartja. Szándékosan a szervertől kérdez, nem a store-ból: ha az
+    //ütközést a mentés bukásából tudtuk meg, akkor a store is állott.
+    async function acceptRemoteChanges() {
+        if (isReloading) return;
+        isReloading = true;
+        try {
+            const cols = await getColumnsAsync(projectId, boardId);
+            setColumns(cols.sort((a, b) => a.position - b.position));
+            const fresh = cols.find(c => c.id === column.id);
+            if (!fresh) {
+                error = 'Ezt az oszlopot időközben törölték.';
+                notify.error(error);
+                return;
+            }
+            column = fresh;
+            baselineRowVersion = fresh.rowVersion;
+            conflictDetected = false;
+            error = '';
+            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
+        } catch (e: any) {
+            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
+            error = message;
+            notify.error(message);
+        } finally {
+            isReloading = false;
+        }
+    }
 
     // ConfirmModal
     let isConfirmOpen = false;
@@ -49,13 +108,24 @@
                 name: editName,
                 mapsToStatus: editMapsToStatus,
                 wipLimit: !editWipLimit || editWipLimit <= 0 ? null : Number(editWipLimit),
-                rowVersion: column.rowVersion ?? ''
+                rowVersion: requireRowVersion(baselineRowVersion, 'oszlop')
             });
             column = updated;
+            baselineRowVersion = updated.rowVersion;
+            conflictDetected = false;
+            error = '';
             notify.success('Oszlop módosítva!');
             isEditing = false;
         } catch (e: any) {
+            if (e.response?.status === 409) {
+                conflictDetected = true;
+                error = 'Valaki módosította ezt az oszlopot, amíg szerkesztetted. '
+                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                notify.warning(error);
+                return;
+            }
             const message = e.response?.data ?? e.message ?? 'Hiba történt a módosítás során!';
+            error = message;
             notify.error(message);
         }
     }
@@ -81,7 +151,7 @@
 >
     <div class="modal-content">
         <div class="header-actions">
-            <button class="edit-btn" on:click={() => isEditing = !isEditing}>
+            <button class="edit-btn" on:click={() => isEditing ? isEditing = false : startEditing()}>
                 {#if isEditing}
                     <X size={15} /> Mégse
                 {:else}
@@ -98,22 +168,43 @@
             <X size={16} />
         </button>
 
-        <h1>{column.name}</h1>
-        <p>Státusz: <span>{column.mapsToStatus}</span></p>
-        <p>WIP limit: <span>{column.wipLimit ?? 'Nincs limit'}</span></p>
-
+        <h1>{liveColumn.name}</h1>
+        {#if !isEditing}
+            <p>Státusz: <span>{liveColumn.mapsToStatus}</span></p>
+            <p>WIP limit: <span>{liveColumn.wipLimit ?? 'Nincs limit'}</span></p>
+        {/if}
         {#if isEditing}
             <form on:submit|preventDefault={() => openConfirm(
                 'Módosítások mentése',
                 'Biztosan menteni szeretnéd a változtatásokat?',
                 handleUpdate
             )}>
-                Oszlop neve:
-                <input type="text" bind:value={editName} placeholder="Oszlop neve">
-                Státusz:
-                <input type="text" bind:value={editMapsToStatus} placeholder="Státusz">
-                WIP limit (üresen hagyva = nincs limit):
-                <input type="number" min="1" bind:value={editWipLimit} placeholder="Nincs limit">
+                <label>Oszlop neve:
+                    <input type="text" bind:value={editName} placeholder="Oszlop neve">
+                </label>
+                <label>Státusz:
+                    <input type="text" bind:value={editMapsToStatus} placeholder="Státusz">
+                </label>
+                <label>
+                    WIP limit (üresen hagyva = nincs limit):
+                    <input type="number" min="1" bind:value={editWipLimit} placeholder="Nincs limit">
+                </label>
+                {#if hasRemoteChange}
+                    <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
+                         hogy ütközés lesz, nem a hibaüzenetből utólag. -->
+                    <div class="remote-change">
+                        <span class="remote-change-text">
+                            Ezt az oszlopot időközben módosította valaki.
+                        </span>
+                        <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
+                                disabled={isReloading}>
+                            {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                        </button>
+                    </div>
+                {/if}
+                {#if error}
+                    <p class="msg-error">{error}</p>
+                {/if}
                 <button type="submit">Mentés</button>
             </form>
         {/if}
@@ -257,5 +348,56 @@
         font-weight: bold; 
         color: var(--text-primary);
         word-break: break-word;
+    }
+
+    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló.
+       Ugyanaz a minta, mint a feladat és a board szerkesztőjénél. */
+    .remote-change {
+        display: flex;
+        align-items: center;
+        gap: var(--gap-sm);
+        flex-wrap: wrap;
+        padding: var(--card-padding);
+        margin-bottom: var(--gap-sm);
+        border: 1px solid var(--accent-yellow);
+        border-radius: var(--border-radius);
+        background: var(--bg-secondary);
+        font-size: var(--font-size-sm);
+    }
+
+    .remote-change-text {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .btn-reload {
+        flex: 0 0 auto;
+        background: var(--accent-yellow-bg);
+        border: 1px solid var(--accent-yellow);
+        color: var(--accent-yellow);
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+    }
+
+    .btn-reload:hover:not(:disabled) {
+        background: var(--accent-yellow);
+        color: #000;
+    }
+
+    .btn-reload:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    label { color: var(--text-muted); }
+
+    .msg-error {
+        color: var(--accent-red);
+        font-size: var(--font-size-sm);
+        margin: 0 0 var(--gap-sm) 0;
     }
 </style>

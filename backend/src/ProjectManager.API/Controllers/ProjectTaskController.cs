@@ -30,7 +30,7 @@ namespace ProjectManager.API.Controllers
         }
 
         [HttpDelete("{taskId}")]
-        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [Authorize(Policy = PolicyNames.ProjectMember)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult> DeleteTaskAsync(Guid projectId, Guid taskId)

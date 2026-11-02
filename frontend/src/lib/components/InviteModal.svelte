@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { generateInviteLinkAsync, type InviteLinkResponse } from '../api/teamApi';
 
-    import { Copy, Check, RefreshCw } from 'lucide-svelte';
+    import { Copy, Check, RefreshCw, X } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
     
@@ -57,14 +57,16 @@
     tabindex="-1"
 >
     <div class="modal-content">
+        <button class="close-btn" type="button" on:click={closeModal}>
+            <X size={16} />
+        </button>
         <h1>Meghívó Link Generálása</h1>
-
         {#if !generatedInvite}
             <form on:submit|preventDefault={handleGenerate}>
                 <div class="form-group">
                     <label for="maxUses">
                         Maximális használatok száma
-                        <span class="hint">(üresen hagyva = korlátlan)</span>
+                        <span class="hint">(üresen hagyva korlátlan)</span>
                     </label>
                     <input
                         id="maxUses"
@@ -78,7 +80,7 @@
                 <div class="form-group">
                     <label for="expiresInDays">
                         Lejárat (napokban)
-                        <span class="hint">(üresen hagyva = soha nem jár le)</span>
+                        <span class="hint">(alapértelmezett 7 nap)</span>
                     </label>
                     <input
                         id="expiresInDays"
@@ -95,7 +97,6 @@
                 {/if}
 
                 <div class="buttons">
-                    <button type="button" on:click={closeModal}>Mégse</button>
                     <button type="submit" class="generate-btn">Generálás</button>
                 </div>
             </form>
@@ -135,7 +136,6 @@
                     <button type="button" on:click={() => generatedInvite = null}>
                         <RefreshCw size={14} /> Új link generálása
                     </button>
-                    <button type="button" on:click={closeModal}>Bezárás</button>
                 </div>
             </div>
         {/if}
@@ -165,7 +165,8 @@
         max-width: 95vw;
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1rem;
+        position: relative;
     }
 
     @media (max-width: 480px) {
@@ -294,6 +295,25 @@
         border-color: var(--accent-blue);
         color: var(--accent-blue);
         white-space: nowrap;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
     }
 
     .copy-btn:hover { background: var(--accent-blue); color: #fff; }
