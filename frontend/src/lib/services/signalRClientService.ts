@@ -3,7 +3,7 @@ import { handleTaskCreated, handleTaskUpdated, handleTaskMoved,
          handleTaskDeleted, handleTasksRebalanced, handleTaskAssigneeAdded,
          handleTaskAssigneeRemoved, handleTaskLabelAdded, handleTaskLabelRemoved,
          handleCommitLinked, handlePrLinked, handleAttachmentUploaded, 
-         handleAttachmentDeleted } from '../stores/taskStore';
+         handleAttachmentDeleted, taskStore } from '../stores/taskStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
 import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
          handleColumnCreated, handleColumnUpdated, handleColumnDeleted,
@@ -19,13 +19,33 @@ import { authStore } from '../stores/authStore';
 import { push } from 'svelte-spa-router';
 import { getProjectsAsync } from '../api/projectApi';
 import { handleActivityCreated } from '../stores/activityStore';
+import { notify } from '../stores/notificationStore';
+
+/**
+ * A torles kezeloje elott meg meg kell tudni, hogy a felhasznalonak EPP NYITVA van-e ez a
+ * feladat: a store a nullazas utan mar nem tudja megmondani, a szulok pedig az aktiv elem
+ * eltunesekor azonnal lebontjak az ablakot. Az indok kozlese nelkul a reszletnezet maganyos
+ * becsukodasa hibanak latszik.
+ *
+ * Az ertesites szandekosan ITT van, nem a store-ban: a tobbi store sem uzen a
+ * felhasznalonak, es a megjelenitesi dontesek ebben a retegben vannak.
+ */
+function onTaskDeleted(payload: { taskId: string }) {
+    const wasOpen = get(taskStore).activeTask?.id === payload.taskId;
+
+    handleTaskDeleted(payload);
+
+    if (wasOpen) {
+        notify.warning('Ezt a feladatot időközben törölte valaki, ezért bezártuk a részleteit.');
+    }
+}
 
 export function registerSignalREvents() {
     // Task events
     signalRService.on('TaskCreated', handleTaskCreated);
     signalRService.on('TaskUpdated', handleTaskUpdated);
     signalRService.on('TaskMoved', handleTaskMoved);
-    signalRService.on('TaskDeleted', handleTaskDeleted);
+    signalRService.on('TaskDeleted', onTaskDeleted);
     signalRService.on('TasksRebalanced', handleTasksRebalanced);
     signalRService.on('TaskAssigneeAdded', handleTaskAssigneeAdded);
     signalRService.on('TaskAssigneeRemoved', handleTaskAssigneeRemoved);

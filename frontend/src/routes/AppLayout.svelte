@@ -99,6 +99,7 @@
         await signalRService.connect(token);
         registerSignalREvents();
         signalRService.onReconnected(handleReconnected);
+        signalRService.onReconnecting(handleReconnecting);
         signalRService.onClosed(handleConnectionClosed);
 
         //A connect() nem dob, csak jelez - ha nem jött létre a kapcsolat,
@@ -111,6 +112,14 @@
         //Az új connectionId miatt a csoport-tagság elveszett, 
         //vissza kell lépni és a szakadás alatt kimaradt változásokat is pótolni kell
         resyncAfterReconnectAsync();
+    }
+
+    //A sav mar az UJRAPROBALKOZAS alatt megjelenik, nem csak a vegleges feladas utan.
+    //Az ujracsatlakozasi politika ugyanis nem adja fel, tehat egy szakadasnal az `onclose`
+    //nem fut le - enelkul a kezi gomb soha nem latszana, pedig epp akkor hasznos, amikor a
+    //felhasznalo nem akar varni a kovetkezo kiserletre.
+    function handleReconnecting() {
+        connectionLost = true;
     }
 
     function handleConnectionClosed() {
