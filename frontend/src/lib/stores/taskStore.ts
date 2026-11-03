@@ -14,12 +14,41 @@ const initialState: TaskState = {
 
 export const taskStore = writable<TaskState>(initialState);
 
+/**
+ * A STORE INVARIÁNSA: ugyanaz a feladat két helyen van - a `tasks` listában (ezt a tábla
+ * mutatja) és az `activeTask`-ban (ezt a részletnézet mutatja). A kettő SOHA nem tarthat
+ * különböző verziót ugyanarról a sorról.
+ *
+ * Ez nem elméleti szabály. A tizenkét SignalR-kezelő eddig is betartotta, a két MANUÁLIS
+ * író viszont nem, és mindkettő épp az ütközés-sáv útvonalán van:
+ *
+ * - a `setTasks` csak a listát írta, tehát egy kézi szinkronizálás vagy egy reconnect utáni
+ *   resync után a nyitott szerkesztő a RÉGI tokent látta: a sáv nem jelent meg, a mentés
+ *   pedig figyelmeztetés nélkül 409-re futott;
+ * - a `setActiveTask` csak az aktív elemet írta, tehát a "Változások betöltése" friss
+ *   állapota egyetlen tetszőleges esemény után VISSZAÁLLT a listában maradt elavult sorra
+ *   (a `syncActiveTask` onnan olvas újra) - a sáv visszajött, az adat visszaugrott.
+ *
+ * Ezért mindkét író mindkét helyre ír. A szabály itt van kikényszerítve, nem a hívási
+ * helyeken: egy következő hívó így nem tudja kihagyni.
+ */
 export function setTasks(tasks: TaskResponse[]) {
-    taskStore.update(state => ({ ...state, tasks}));
+    taskStore.update(state => ({ ...state, tasks, activeTask: syncActiveTask(state, tasks) }));
 }
 
 export function setActiveTask(task: TaskResponse | null) {
-    taskStore.update(state => ({ ...state, activeTask: task}))
+    taskStore.update(state => {
+        if (task === null) return { ...state, activeTask: null };
+
+        //A friss példány a listába is bekerül. Ha még nem szerepel benne (lezárt sprint
+        //feladata, vagy a lista szűkebb hatókörrel töltődött), akkor nem vesszük fel:
+        //a lista hatókörét nem ennek a hívásnak a dolga megváltoztatni.
+        const tasks = state.tasks.some(t => t.id === task.id)
+            ? state.tasks.map(t => (t.id === task.id ? task : t))
+            : state.tasks;
+
+        return { ...state, tasks, activeTask: task };
+    });
 }
 
 export function clearTask() {
@@ -129,7 +158,13 @@ export function handleTaskMoved(payload: {
 export function handleTaskDeleted(payload: { taskId: string }) {
     taskStore.update(state => ({
         ...state,
-        tasks: state.tasks.filter(t => t.id !== payload.taskId)
+        tasks: state.tasks.filter(t => t.id !== payload.taskId),
+        //A törölt feladat nem maradhat aktív. Enélkül a nyitott részletnézet egy MÁR NEM
+        //LÉTEZŐ feladatot mutatott tovább, a mentés pedig 404-et adott - a felhasználó
+        //szempontjából értelmezhetetlenül, hiszen a feladat ott volt előtte a képernyőn.
+        //A szülők `{#if ... && $taskStore.activeTask}` alatt rendereznek, tehát a nullázás
+        //zárja az ablakot; az indokot a SignalR-regisztráció mondja ki a felhasználónak.
+        activeTask: state.activeTask?.id === payload.taskId ? null : state.activeTask
     }));
 }
 

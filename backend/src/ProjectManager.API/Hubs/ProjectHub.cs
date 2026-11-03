@@ -10,11 +10,46 @@ namespace ProjectManager.API.Hubs
     public class ProjectHub : Hub
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<ProjectHub> _logger;
 
-        public ProjectHub(AppDbContext context)
+        public ProjectHub(AppDbContext context, ILogger<ProjectHub> logger)
         {
             _context = context;
+            _logger = logger;
         }
+        
+        public override Task OnConnectedAsync()
+        {
+            _logger.LogInformation(
+                "{EventType} | ConnectionId: {ConnectionId} | UserId: {UserId} | Instance: {Instance}",
+                "HubConnected", Context.ConnectionId, GetUserId(), Environment.MachineName);
+
+            return base.OnConnectedAsync();
+        }
+
+        public override Task OnDisconnectedAsync(Exception? exception)
+        {
+            if (exception == null)
+            {
+                _logger.LogInformation(
+                    "{EventType} | ConnectionId: {ConnectionId} | UserId: {UserId} | Instance: {Instance}",
+                    "HubDisconnected", Context.ConnectionId, GetUserId(), Environment.MachineName);
+            }
+            else
+            {
+                //Warning, nem Error: egy elvagott halozat nem a szerver hibaja, de egy
+                //sorozat belole mar jelzes. Az osszefuggo keresesert ugyanaz az EventType.
+                _logger.LogWarning(exception,
+                    "{EventType} | ConnectionId: {ConnectionId} | UserId: {UserId} | Instance: {Instance} | Ok: {Reason}",
+                    "HubDisconnected", Context.ConnectionId, GetUserId(), Environment.MachineName,
+                    exception.Message);
+            }
+
+            return base.OnDisconnectedAsync(exception);
+        }
+
+        private string GetUserId()
+            => Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "ismeretlen";
 
         public async Task JoinProject(string projectId)
         {

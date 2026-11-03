@@ -29,12 +29,52 @@ if (KEEPALIVE_ENABLED && configuredKeepalive !== keepaliveSeconds) {
 
 const KEEPALIVE_MS = keepaliveSeconds * 1000;
 
+//A szerver 15 másodpercenként pingel (ServiceCollectionExtensions: KeepAliveInterval).
+//A könyvtár alapértelmezett szerver-időtúllépése 30 másodperc, vagyis KÉT kimaradt ping
+//tartalék - egy Cloudflare-en át érkező pillanatnyi késés is bontáshoz vezethet.
+//A szerveroldali párja (ClientTimeoutInterval) ugyanezért van 60 másodpercre állítva;
+//ez a sor a kliensoldali felét teszi hozzá, hogy a két irány szimmetrikus legyen.
+const SERVER_TIMEOUT_MS = 60_000;
+
+/**
+ * Újracsatlakozási politika: gyorsan próbál, majd beáll, és NEM adja fel.
+ *
+ * Miért nem a korábbi `[0, 2000, 5000, 10000]` tömb: az négy kísérlet, összesen 17
+ * másodperc, utána a kapcsolat véglegesen megszakad. Egy TELEPÍTÉS viszont ennél tovább
+ * tart - a konténer healthcheckje 40 másodperc `start_period`-ot ad az indulási munkára
+ * (migráció és három indulási feladat az `app.Run()` előtt). A kliens tehát minden deploy
+ * után végleg feladta, és a felhasználó valós idejű frissítés nélkül maradt, amíg kézzel
+ * nem csatlakozott újra.
+ *
+ * A megoldás nem egy hosszabb tömb - az csak kitolja ugyanazt a határt -, hanem hogy
+ * legyen felső korlát a VÁRAKOZÁSON, és ne a kísérletek számán.
+ *
+ * A szóródás (jitter) nem díszítés: egy replika újraindulásakor minden kliens egyszerre
+ * veszti el a kapcsolatot, és fix késleltetéssel egyszerre is térnének vissza - épp arra
+ * a példányra, amelyik még a migrációt futtatja.
+ */
+const RECONNECT_STEPS_MS = [0, 2_000, 5_000, 10_000];
+const RECONNECT_MAX_DELAY_MS = 30_000;
+
+const reconnectPolicy: signalR.IRetryPolicy = {
+    nextRetryDelayInMilliseconds(context) {
+        const step = context.previousRetryCount < RECONNECT_STEPS_MS.length
+            ? RECONNECT_STEPS_MS[context.previousRetryCount]
+            : RECONNECT_MAX_DELAY_MS;
+
+        //±20% szóródás, az első, azonnali kísérletet kihagyva
+        if (step === 0) return 0;
+        return Math.round(step * (0.8 + Math.random() * 0.4));
+    }
+};
+
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
 
     //Az újracsatlakozás új connectionId-t ad, amivel a szerveroldali csoport-tagság elveszne.
     //A hívó (AppLayout) ezeken a hookokon keresztül tud visszalépni a projekt csoportjába és újraszinkronizálni az állapotot.
     private reconnectedCallback: (() => void) | null = null;
+    private reconnectingCallback: (() => void) | null = null;
     private closedCallback: (() => void) | null = null;
 
     //A szándékos bontásra (kijelentkezés, kézi újracsatlakozás) nem kell kapcsolatvesztés-jelzést adni
@@ -93,7 +133,8 @@ class SignalRService {
                 //stringjébe kerül, és a szerver a /hubs útvonalon onnan olvassa.
                 accessTokenFactory: () => tokenStore.get() ?? token
             })
-            .withAutomaticReconnect([0, 2000, 5000, 10000]);
+            .withAutomaticReconnect(reconnectPolicy)
+            .withServerTimeout(SERVER_TIMEOUT_MS);
 
         if (KEEPALIVE_ENABLED) {
             builder.withKeepAliveInterval(KEEPALIVE_MS);
@@ -102,7 +143,14 @@ class SignalRService {
 
         this.connection = builder.build();
 
-        this.connection.onreconnecting(() => notify.warning('Kapcsolat megszakadt, újracsatlakozás...'));
+        //A sáv a próbálkozás TELJES idejére látszik, nem csak a végleges feladás után.
+        //Mivel a politika nem adja fel, az `onclose` egy szakadásnál már nem is futna le -
+        //enélkül tehát a kézi újracsatlakozás gombja soha nem jelenne meg, és a felhasználó
+        //egyetlen eltűnő értesítésből tudná, hogy nincs élő kapcsolata.
+        this.connection.onreconnecting(() => {
+            notify.warning('Kapcsolat megszakadt, újracsatlakozás...');
+            if (this.reconnectingCallback) this.reconnectingCallback();
+        });
 
         this.connection.onreconnected(() => {
             //A sikerjelzés a resync után jön, különben azt sugallná, hogy már minden friss
@@ -145,6 +193,10 @@ class SignalRService {
 
     onReconnected(callback: () => void) {
         this.reconnectedCallback = callback;
+    }
+
+    onReconnecting(callback: () => void) {
+        this.reconnectingCallback = callback;
     }
 
     onClosed(callback: () => void) {
