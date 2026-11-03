@@ -15,6 +15,13 @@ namespace ProjectManager.API.Common.Data
     ///
     /// Ezt a láncbejárást a <c>SprintService</c> aktiválási ága vezette be; mivel a
     /// <c>Serializable</c> tranzakció hat helyen szerepel, a logika közös helyre került.
+    ///
+    /// <b>Miért SqlState és nem a hibaüzenet.</b> A hibakód a PostgreSQL szerződése, az
+    /// üzenet nem: szövege a szerver verziójától és nyelvi beállításától függ. Egy
+    /// <c>Message.Contains("unique")</c> alakú szűrő ezért csendben elromolhat egy
+    /// verzióváltáskor, és - ami rosszabb - MÁS egyediségi kényszerre is illeszkedik, mint
+    /// amire szánták. A csatolmány-feltöltésnél pontosan ez a szűrő állt, és emiatt egy
+    /// elsődleges kulcs ütközése is "próbáld újra" ágra futott volna.
     /// </remarks>
     public static class ConcurrencyErrors
     {
@@ -25,22 +32,38 @@ namespace ProjectManager.API.Common.Data
         public const string UniqueViolation = "23505";
 
         /// <summary>
-        /// Igaz, ha a kivétel-láncban szerializációs ütközés vagy egyediség-sértés található.
-        /// Mindkettő ugyanazt jelenti a hívó szempontjából: valaki más ugyanezen az adaton
-        /// dolgozott, a műveletet újra kell próbálni.
+        /// Holtpont: a szerver két tranzakció közül az egyiket megszakította.
+        /// </summary>
+        /// <remarks>
+        /// Azért tartozik ide, mert a hívó szempontjából ugyanazt jelenti, mint a
+        /// szerializációs hiba: a műveletet nem hajtotta végre senki, újra lehet próbálni.
+        ///
+        /// Hogy a rendszerben ELŐFORDUL-e, azt nem mértük. Két többsoros írás van, amelyik
+        /// elvben kiváltja (az oszlop-átrendezés és az újrasorszámozás): ha két tranzakció
+        /// eltérő sorrendben éri el ugyanazokat a sorokat, a szerver holtpontot jelez a
+        /// szerializációs hiba HELYETT. A felvétele azért indokolt mégis, mert a hiányából
+        /// következő kár aszimmetrikus: ha nem fordul elő, ez a konstans nem csinál semmit;
+        /// ha előfordul, nélküle egy kezelt helyzetből <c>500</c> lesz.
+        /// </remarks>
+        public const string DeadlockDetected = "40P01";
+
+        /// <summary>
+        /// Igaz, ha a exception chain-ben: szerializációs ütközés, holtpont vagy egyediség-sértés található.
         /// </summary>
         public static bool IsConflict(Exception exception)
         {
             for (var current = exception; current != null; current = current.InnerException)
             {
-                if (current is PostgresException postgres &&
-                    (postgres.SqlState == SerializationFailure || postgres.SqlState == UniqueViolation))
-                {
+                if (current is PostgresException postgres && IsConflictState(postgres.SqlState))
                     return true;
-                }
             }
 
             return false;
         }
+
+        private static bool IsConflictState(string sqlState)
+            => sqlState == SerializationFailure
+            || sqlState == DeadlockDetected
+            || sqlState == UniqueViolation;
     }
 }

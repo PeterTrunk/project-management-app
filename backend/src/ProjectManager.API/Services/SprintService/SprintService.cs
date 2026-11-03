@@ -199,6 +199,9 @@ namespace ProjectManager.API.Services.SprintService
                 .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
             if (sprint == null)
                 throw new NotFoundException("Sprint nem található");
+            
+            if (sprint.State == SprintStates.Completed)
+                throw new ValidationException("Ez a sprint már le van zárva!");
 
             if (targetSprintId.HasValue)
             {
@@ -745,7 +748,8 @@ namespace ProjectManager.API.Services.SprintService
             if (sprint == null)
                 throw new NotFoundException("Sprint nem található");
 
-            _context.Entry(sprint).OriginalValues["xmin"] = dto.RowVersion;
+            _context.RequireRowVersion(sprint, dto.RowVersion,
+                "A sprint időközben módosult, kérjük próbáld újra!");
 
             if (dto.Name != null) sprint.Name = dto.Name;
             if (dto.Goal != null) sprint.Goal = dto.Goal;
@@ -814,7 +818,8 @@ namespace ProjectManager.API.Services.SprintService
             if (task == null)
                 throw new NotFoundException("Task nem található");
 
-            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
+            _context.RequireRowVersion(task, dto.RowVersion,
+                "A task időközben módosult, kérjük próbáld újra!");
 
             var sprint = await _context.Sprints
                 .FirstOrDefaultAsync(s => s.Id == sprintId && s.ProjectId == projectId);
@@ -928,7 +933,8 @@ namespace ProjectManager.API.Services.SprintService
             if (task == null)
                 throw new NotFoundException("Task nem található");
 
-            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
+            _context.RequireRowVersion(task, dto.RowVersion,
+                "A task időközben módosult, kérjük próbáld újra!");
 
             if (task.BoardId.HasValue)
             {

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Boards;
@@ -253,7 +254,8 @@ namespace ProjectManager.API.Services.BoardService
             if (board == null)
                 throw new NotFoundException("Board nem található");
 
-            _context.Entry(board).OriginalValues["xmin"] = dto.RowVersion;
+            _context.RequireRowVersion(board, dto.RowVersion,
+                "A board időközben módosult, kérjük próbáld újra!");
 
             if (dto.Name != null) board.Name = dto.Name;
             if(dto.Description != null) board.Description = dto.Description;

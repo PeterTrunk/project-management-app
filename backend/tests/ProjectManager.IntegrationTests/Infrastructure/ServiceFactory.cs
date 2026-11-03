@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Data;
 using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.AttachmentService;
+using ProjectManager.API.Services.FileStorageService;
 using ProjectManager.API.Services.Auth;
 using ProjectManager.API.Services.BoardService;
 using ProjectManager.API.Services.ColumnService;
@@ -63,6 +65,36 @@ namespace ProjectManager.IntegrationTests.Infrastructure
         {
             var user = new FakeCurrentUserService(currentUserId, displayName);
             return (user, new RecordingHubContext(), new ActivityService(context, user));
+        }
+
+        /// <summary>
+        /// Az AttachmentService valódi adatbázissal és kézi tároló-duplával.
+        /// </summary>
+        /// <remarks>
+        /// A tároló az egyetlen helyettesített függőség, mert a vizsgált viselkedés az
+        /// adatbázisban van (a megerősítés igénylése és visszavonása). A kérelemkorlátozás
+        /// is duplát kap: a megerősítési tesztek egymás után több hívást indítanak, és egy
+        /// valódi korlát a harmadiknál a vizsgált viselkedés ELŐTT szállna ki.
+        /// </remarks>
+        public static (AttachmentService Sut, FakeFileStorageService Storage, FakeRateLimitService RateLimit)
+            CreateAttachmentService(
+                AppDbContext context, Guid currentUserId, string currentUserDisplayName = "Teszt Elek")
+        {
+            var (user, hub, activity) = Common(context, currentUserId, currentUserDisplayName);
+            var storage = new FakeFileStorageService();
+            var rateLimit = new FakeRateLimitService();
+
+            var sut = new AttachmentService(
+                context,
+                storage,
+                activity,
+                user,
+                hub,
+                NullLogger<AttachmentService>.Instance,
+                Options.Create(new AttachmentOptions()),
+                rateLimit);
+
+            return (sut, storage, rateLimit);
         }
 
         public static (TaskService Sut, ServiceContext Ctx) CreateTaskService(

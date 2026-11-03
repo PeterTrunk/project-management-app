@@ -363,8 +363,15 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new NotFoundException("Feladat nem található");
 
-            //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
+            //A token ellenőrzése ÉS beállítása. Itt a sorrend többet jelent, mint a többi
+            //helyen: ez a metódus a mentés előtt ÍRHAT a sorra (egy újrasorszámozás az egész
+            //oszlopot átírja, benne ezt a feladatot is). Ellenőrzés nélkül tehát először
+            //felülírnánk egy másik felhasználó módosítását, és csak utána kérdeznénk meg,
+            //volt-e ilyen - amit akkor már nem is lehetne, mert a saját írásunk elmosta a
+            //nyomát. Az itt megállapított tény az, ami feljogosít arra, hogy az
+            //újrasorszámozás utáni új tokent alapvonalként átvegyük.
+            _context.RequireRowVersion(task, dto.RowVersion,
+                "A task időközben módosult, kérjük próbáld újra!");
 
             if (task.ClosedAt.HasValue)
                 throw new ValidationException("Lezárt sprint taskja nem mozgatható!");
@@ -379,6 +386,22 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 if (column == null)
                     throw new NotFoundException("Oszlop nem található");
 
+                //A WIP limit ellenőrzése. VÁLLALT KORLÁT, hogy ez nem versenyhelyzet-biztos:
+                //a darabszám leolvasása és a mozgatás mentése között egy másik felhasználó is
+                //behúzhat egy feladatot, és a limit egyel túlléphető.
+                //
+                //Nem azért maradt így, mert nem tűnt fel. A rés megszüntetése ugyanazt az
+                //eszközt igényelné, mint az oszloptörlésnél (sorosított tranzakció, mert az
+                //állítás a sorok HALMAZÁRA szól) - csak itt a rendszer legforgalmasabb
+                //műveletére, a DND mozgatásra kerülne rá, amit több felhasználó
+                //másodpercenként többször is kiadhat, és ami már ma is több lekérdezést és
+                //esetleg egy újrasorszámozást futtat.
+                //
+                //A csereüzlet azért rossz, mert a WIP limit TANÁCSADÓ szabály: a csapat
+                //figyelmeztetésnek szánja, nem adatintegritási kényszernek. Egy eggyel
+                //túllépett limit magától helyreáll (a következő mozgatás már elbukik), és
+                //semmilyen adat nem lesz tőle elérhetetlen vagy ellentmondásos - szemben a
+                //törölt oszlopban ragadó feladattal, amit ezért ott meg is védünk.
                 if (column.WipLimit.HasValue)
                 {
                     var currentTaskCount = await _context.ProjectTasks
@@ -423,7 +446,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 nextTask != null &&
                 _lexorankService.HasCollision(prevTask.Position, nextTask.Position))
             {
-                await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position);
+                var rebalancedRowVersion =
+                    await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position, taskId);
+
+                //Az újrasorszámozás szerződése szerint innen semmi nem követett - a
+                //feladatot újra be kell olvasni, különben az EF a mozgatást NEM írná ki.
+                task = await ReloadTaskAfterRebalanceAsync(
+                    projectId, taskId, dto.RowVersion, rebalancedRowVersion);
 
                 prevTask = dto.AfterTaskId != null
                     ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
@@ -454,10 +483,14 @@ namespace ProjectManager.API.Services.ProjectTaskService
             }
             catch (InvalidOperationException)
             {
-                await RebalanceColumnAsync(
+                var rebalancedRowVersion = await RebalanceColumnAsync(
                     dto.ColumnId!.Value,
-                    prevTask?.Position ?? nextTask!.Position
+                    prevTask?.Position ?? nextTask!.Position,
+                    taskId
                 );
+
+                task = await ReloadTaskAfterRebalanceAsync(
+                    projectId, taskId, dto.RowVersion, rebalancedRowVersion);
 
                 prevTask = dto.AfterTaskId != null
                     ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
@@ -615,8 +648,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new NotFoundException("Feladat nem található");
 
-            //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
+            //A token ellenőrzése ÉS beállítása - lásd a ConcurrencyGuard leírását arról,
+            //miért nem elég a mentés közbeni ellenőrzés.
+            _context.RequireRowVersion(task, dto.RowVersion,
+                "A task időközben módosult, kérjük próbáld újra!");
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == task.CreatedById);
             if (user == null)
@@ -715,8 +750,10 @@ namespace ProjectManager.API.Services.ProjectTaskService
             if (task == null)
                 throw new NotFoundException("Task nem található");
 
-            //RowVersion beállítása az optimistic concurrency-hez
-            _context.Entry(task).OriginalValues["xmin"] = dto.RowVersion;
+            //A token ellenőrzése ÉS beállítása - lásd a ConcurrencyGuard leírását arról,
+            //miért nem elég a mentés közbeni ellenőrzés.
+            _context.RequireRowVersion(task, dto.RowVersion,
+                "A task időközben módosult, kérjük próbáld újra!");
 
             if (!dto.BoardId.HasValue)
             {
@@ -911,6 +948,23 @@ namespace ProjectManager.API.Services.ProjectTaskService
             return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
         }
 
+        // A mozgatott feladat újraolvasása és a konkurencia-alapvonal helyreállítása egy
+        // újrasorszámozás után.
+        private async Task<ProjectTask> ReloadTaskAfterRebalanceAsync(
+            Guid projectId, Guid taskId, uint clientRowVersion, uint? rebalancedRowVersion)
+        {
+            var task = await _context.ProjectTasks
+                .Include(t => t.CreatedByUser)
+                .FirstOrDefaultAsync(t => t.Id == taskId && t.ProjectId == projectId);
+
+            //Az újrasorszámozás tranzakciója alatt más törölhette a feladatot.
+            if (task == null)
+                throw new NotFoundException("Feladat nem található");
+
+            _context.Entry(task).OriginalValues["xmin"] = rebalancedRowVersion ?? clientRowVersion;
+            return task;
+        }
+
         /// <summary>
         /// Egy oszlop összes feladatának újrasorszámozása a következő bucketben.
         /// </summary>
@@ -925,33 +979,72 @@ namespace ProjectManager.API.Services.ProjectTaskService
         /// újrasorszámozás) a művelet ELŐFELTÉTELE, ott a hiba nem elnyelhető; a harmadik
         /// (hossztúllépés utáni karbantartás) elhalasztható - lásd ott.
         /// </remarks>
-        private async Task RebalanceColumnAsync(Guid columnId, string position)
+        /// <param name="columnId">Az újrasorszámozandó oszlop azonosítója.</param>
+        /// <param name="position">
+        /// Egy pozíció az oszlop JELENLEGI bucketjéből; ebből adódik a következő bucket.
+        /// </param>
+        /// <param name="trackedTaskId">
+        /// Annak a feladatnak az azonosítója, amelyet a HÍVÓ ment el ezután. Ha az
+        /// újrasorszámozás ezt a sort is átírta, a metódus a <b>maga által írt</b> új
+        /// konkurencia-tokent adja vissza.
+        /// </param>
+        /// <returns>
+        /// A <paramref name="trackedTaskId"/> feladat új tokenje, ha az újrasorszámozás
+        /// érintette; egyébként <c>null</c>.
+        ///
+        /// Ez azért kell, mert az újrasorszámozás a RENDSZER saját írása, nem emberi
+        /// ütközés. A hívó alapvonalát ezért nem lehet sem meghagyni (akkor a mentés 409-cel
+        /// bukna egy teljesen jogos mozgatásnál), sem a friss adatbázis-értékre állítani
+        /// (akkor egy közben beérkező IDEGEN írás is némán elfogadódna). A helyes érték az,
+        /// amit mi magunk írtunk - azt adja vissza ez a metódus.
+        ///
+        /// <b>A metódus szerződése a változáskövetőre nézve:</b> visszatérés után
+        /// <b>semmi nem követett</b>. A hívónak újra be kell olvasnia, amivel dolgozni akar.
+        /// Ez szándékosan egységes a sikeres és a bukott ágon. Korábban a kettő eltért, és
+        /// ez két néma hibát okozott: újrapróbálásnál a <c>ChangeTracker.Clear()</c> a hívó
+        /// feladatát is leválasztotta (az EF ezután nem írta ki a mozgatást, a válasz mégis
+        /// 200 volt), siker esetén pedig a mentés visszaállította a token alapvonalát, tehát
+        /// a mozgatás ütközés-ellenőrzés nélkül maradt. Egy kiszámíthatatlan mellékhatás
+        /// helyett így van egy kimondott szabály.
+        /// </returns>
+        private async Task<uint?> RebalanceColumnAsync(Guid columnId, string position, Guid? trackedTaskId = null)
         {
             const int maxAttempts = 3;
 
-            for (var attempt = 0; attempt < maxAttempts; attempt++)
+            try
             {
-                try
+                for (var attempt = 0; attempt < maxAttempts; attempt++)
                 {
-                    await RebalanceColumnOnceAsync(columnId, position);
-                    return;
+                    try
+                    {
+                        return await RebalanceColumnOnceAsync(columnId, position, trackedTaskId);
+                    }
+                    catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex) && attempt < maxAttempts - 1)
+                    {
+                        //A bukott kísérlet entitásállapotát el kell dobni, különben a következő
+                        //próbálkozás a már módosított, nem mentett pozíciókkal indulna.
+                        _context.ChangeTracker.Clear();
+                        await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)));
+                    }
+                    catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+                    {
+                        throw new ConflictException(
+                            "A feladatok sorrendje időközben módosult. Töltsd újra az oldalt, és próbáld újra!");
+                    }
                 }
-                catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex) && attempt < maxAttempts - 1)
-                {
-                    //A bukott kísérlet entitásállapotát el kell dobni, különben a következő
-                    //próbálkozás a már módosított, nem mentett pozíciókkal indulna.
-                    _context.ChangeTracker.Clear();
-                    await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)));
-                }
-                catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
-                {
-                    throw new ConflictException(
-                        "A feladatok sorrendje időközben módosult. Töltsd újra az oldalt, és próbáld újra!");
-                }
+
+                return null;
+            }
+            finally
+            {
+                //A hívó sosem kaphat félig követett állapotot vissza.
+                //A `finally` azért kell, hogy a kiszálló ágon (ConflictException) se maradjon
+                //bent a részlegesen módosított oszlop.
+                _context.ChangeTracker.Clear();
             }
         }
 
-        private async Task RebalanceColumnOnceAsync(Guid columnId, string position)
+        private async Task<uint?> RebalanceColumnOnceAsync(Guid columnId, string position, Guid? trackedTaskId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
@@ -971,7 +1064,7 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 if (allTasksInColumn.Count == 0)
                 {
                     await transaction.RollbackAsync();
-                    return;
+                    return null;
                 }
 
                 var newPositions = _lexorankService.RebalancePositions(
@@ -986,6 +1079,13 @@ namespace ProjectManager.API.Services.ProjectTaskService
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                //A hívó feladatának új tokenje, amit MI írtunk. A mentés után az EF
+                //visszaolvasta a sor friss xmin-jét, tehát ez az az érték, amely a
+                //hívó mentésének WHERE záradékába kerülhet - lásd a metódus leírását.
+                var trackedTaskRowVersion = trackedTaskId.HasValue
+                    ? allTasksInColumn.FirstOrDefault(t => t.Id == trackedTaskId.Value)?.xmin
+                    : null;
 
                 try
                 {
@@ -1007,7 +1107,8 @@ namespace ProjectManager.API.Services.ProjectTaskService
                     _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
                         "TasksRebalanced", column!.Board.ProjectId);
                 }
-                
+
+                return trackedTaskRowVersion;
             }
             catch (Exception)
             {
