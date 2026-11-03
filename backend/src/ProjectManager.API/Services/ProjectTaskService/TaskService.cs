@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Pipelines.Sockets.Unofficial.Arenas;
 using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;

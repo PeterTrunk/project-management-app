@@ -27,16 +27,23 @@ namespace ProjectManager.IntegrationTests.Concurrency
     /// <c>AppDbContext.SaveChangesAsync</c> a módosított entitásokra <c>UpdatedAt</c>
     /// bélyegzőt tesz, DE csak ha az entitásnak van ilyen tulajdonsága.
     ///
-    /// A négy konkurencia-tokennel védett entitás közül háromnak (tábla, sprint, feladat)
-    /// VAN <c>UpdatedAt</c> mezője, az oszlopdefiníciónak NINCS. Vagyis az első háromnál az
-    /// elavult tokent eddig is elkapta a mentés - de nem tervezésből, hanem azért, mert
-    /// történetesen van egy időbélyegük, amit a bélyegző mindig átír. Az oszlopnál nem volt
-    /// mit írni, tehát <c>UPDATE</c> sem készült, és az ellenőrzés elmaradt.
+    /// A felülvizsgálat idején a négy konkurencia-tokennel védett entitás közül háromnak
+    /// (tábla, sprint, feladat) VOLT <c>UpdatedAt</c> mezője, az oszlopdefiníciónak nem.
+    /// Vagyis az első háromnál az elavult tokent már akkor is elkapta a mentés - de nem
+    /// tervezésből, hanem azért, mert történetesen volt egy időbélyegük, amit a bélyegző
+    /// mindig átír. Az oszlopnál nem volt mit írni, tehát <c>UPDATE</c> sem készült, és az
+    /// ellenőrzés elmaradt.
     ///
-    /// Ezért van mind a négyre teszt, pedig a mutációs próba szerint csak az oszlopé bukik
-    /// el a javítás nélkül: a másik háromé azt rögzíti, hogy a védelem ne egy
-    /// időbélyeg-mező MEGLÉTÉN álljon. Ha valaki egyszer elhagyja az <c>UpdatedAt</c>-et
-    /// valamelyik entitásról, ezek a tesztek jeleznek.
+    /// <b>Ezért két réteg védi ma, és ezek a tesztek MINDKETTŐT rögzítik.</b> Az
+    /// oszlopdefiníció azóta megkapta a hiányzó <c>UpdatedAt</c> mezőt, tehát a mentéskori
+    /// ellenőrzés mind a négy entitásnál egyformán működik; a <c>ConcurrencyGuard</c>
+    /// explicit ellenőrzése pedig attól függetlenné teszi a védelmet, hogy egy entitásnak
+    /// van-e időbélyege.
+    ///
+    /// Emiatt ezek SZERZŐDÉS-tesztek, nem egy konkrét javítás regressziós tesztjei: mérve,
+    /// hogy a két réteg BÁRMELYIKE önmagában is zöldre hozza őket. A javítás előtti
+    /// állapotot - amikor sem az őr, sem az oszlop időbélyege nem volt meg - viszont
+    /// elbuktatják. A szerződés az, ami rögzítve van, nem a mechanizmus.
     ///
     /// A <c>ConcurrencyTokenRoundTripTests</c> a TARTALMAS módosítást fedi; ez a kettő
     /// együtt adja ki a szerződést.

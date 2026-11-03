@@ -305,6 +305,9 @@ public class AppDbContext : DbContext
 
             // WipLimit szándékosan nincs IsRequired() — null = nincs limit
 
+            entity.Property(c => c.UpdatedAt)
+                  .IsRequired();
+
             //Indexes
             entity.HasIndex(c => new { c.BoardId, c.Name })
                   .IsUnique();

@@ -20,11 +20,17 @@ namespace ProjectManager.API.Common.Data
     /// amit írni kell. Ha a kérés egyetlen tulajdonságot sem változtat meg (a módosító DTO
     /// minden mezője <c>null</c>), akkor ez azon fordul meg, hogy a
     /// <c>AppDbContext.SaveChangesAsync</c> talál-e <c>UpdatedAt</c> mezőt, amit
-    /// bélyegezhet. A négy védett entitás közül háromnak van, az oszlopdefiníciónak nincs -
-    /// vagyis a védelem egy TIMESTAMP-MEZŐ MEGLÉTÉN állt, nem tervezésen. Ahol nem volt mit
-    /// írni, ott <c>UPDATE</c> sem készült, és egy ELAVULT tokennel érkező kérés is
-    /// <c>200</c>-at kapott. A kliens ebből azt olvassa, hogy a kezében lévő token érvényes
-    /// volt, pedig nem - és a következő, immár tartalmas mentését arra épít.
+    /// bélyegezhet. A felülvizsgálat idején a négy védett entitás közül háromnak volt, az
+    /// oszlopdefiníciónak nem - vagyis a védelem egy TIMESTAMP-MEZŐ MEGLÉTÉN állt, nem
+    /// tervezésen. Ahol nem volt mit írni, ott <c>UPDATE</c> sem készült, és egy ELAVULT
+    /// tokennel érkező kérés is <c>200</c>-at kapott. A kliens ebből azt olvassa, hogy a
+    /// kezében lévő token érvényes volt, pedig nem - és a következő, immár tartalmas
+    /// mentését arra épít.
+    ///
+    /// Az oszlopdefiníció azóta megkapta a hiányzó időbélyeget, tehát a mentéskori
+    /// ellenőrzés ma mind a négy entitásnál egyformán működik. Ez a helper mégsem
+    /// fölösleges: attól függetlenné teszi a védelmet, hogy egy entitásnak VAN-E
+    /// időbélyege. Egy jövőbeli entitás ugyanabba a csapdába esne nélküle.
     ///
     /// Ez a helper ezért az ellenőrzést kimondottan elvégzi, a mentés előtt. Ahol a token
     /// egyezik, ott a beállítás amúgy is műveletmentes (a frissen betöltött eredeti érték
