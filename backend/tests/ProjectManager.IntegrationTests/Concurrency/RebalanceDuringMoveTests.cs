@@ -44,13 +44,14 @@ namespace ProjectManager.IntegrationTests.Concurrency
         /// nincs közéjük beszúrható érték. A sorrendkezelő ilyenkor kivételt dob, amit a
         /// mozgatás elkap, és újrasorszámozást indít.
         ///
-        /// <b>Miért nem azonos pozíciókkal váltjuk ki.</b> Az első változat két AZONOS
-        /// pozíciót írt be, mert a kód ütközés-ága erre figyel
-        /// (<c>HasCollision(prev, next) =&gt; prev == next</c>). Méréssel kiderült, hogy ez az
-        /// ág NEM ÉRHETŐ EL: a következő feladat lekérdezése
-        /// <c>string.Compare(t.Position, prevTask.Position) &gt; 0</c>-ra szűr, tehát a
-        /// megtalált szomszéd pozíciója szigorúan NAGYOBB - azonos sosem lehet. A hossz
-        /// kimerülése az egyetlen út, amelyen a mozgatás újrasorszámozást indít.
+        /// <b>Miért a hossz kimerülésével váltjuk ki.</b> Az első változat két AZONOS
+        /// pozíciót írt be, mert a kódnak van egy erre figyelő ága. Méréssel kiderült, hogy az
+        /// az ág akkor NEM VOLT ELÉRHETŐ: a szomszéd lekérdezése szigorúan nagyobb pozícióra
+        /// szűrt, tehát azonosat sosem adott vissza. Ez a 7. találat, és azóta javítva van
+        /// (lásd <c>DuplicatePositionRepairTests</c>) - de ez a tesztosztály szándékosan a
+        /// MÁSIK kiváltó utat használja, a hossz kimerülését, mert az itt vizsgált viselkedés
+        /// (a változáskövetés és a konkurencia-alapvonal) független attól, mi indította az
+        /// újrasorszámozást.
         ///
         /// A pozíciókat nyers SQL-lel írjuk be, mert ezt az állapotot a szolgáltatáson
         /// keresztül nem lehet előállítani - épp az a feladata, hogy ne keletkezzen.

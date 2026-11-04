@@ -411,64 +411,30 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 }
             }
 
-            ProjectTask? prevTask = null;
-            if (dto.AfterTaskId != null)
-            {
-                prevTask = await _context.ProjectTasks
-                    .FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId);
-                if (prevTask == null)
-                    throw new NotFoundException("Előző feladat nem található");
-            }
+            var neighbours = await FindNeighboursAsync(projectId, dto.ColumnId, dto.AfterTaskId, taskId);
 
-            ProjectTask? nextTask;
-            if (prevTask == null)
-            {
-                nextTask = await _context.ProjectTasks
-                    .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
-                    .OrderBy(t => t.Position)
-                    .FirstOrDefaultAsync();
-            }
-            else
-            {
-                nextTask = await _context.ProjectTasks
-                    .Where(t => t.ProjectId == projectId
-                             && t.ColumnId == dto.ColumnId
-                             && string.Compare(t.Position, prevTask.Position) > 0
-                             && t.Id != taskId)
-                    .OrderBy(t => t.Position)
-                    .FirstOrDefaultAsync();
-            }
+            if (dto.AfterTaskId != null && neighbours.Prev == null)
+                throw new NotFoundException("Előző feladat nem található");
 
-            // Ütközés esetén rebalance, majd újra lekérés
-            if (dto.ColumnId.HasValue &&
-                prevTask != null &&
-                nextTask != null &&
-                _lexorankService.HasCollision(prevTask.Position, nextTask.Position))
+            var prevTask = neighbours.Prev;
+            var nextTask = neighbours.Next;
+
+            // Duplikált sorrendkulcs esetén újrasorszámozás, majd újra lekérés
+            if (dto.ColumnId.HasValue && neighbours.ColumnHasDuplicate)
             {
-                var rebalancedRowVersion =
-                    await RebalanceColumnAsync(dto.ColumnId.Value, prevTask.Position, taskId);
+                var rebalancedRowVersion = await RebalanceColumnAsync(
+                    dto.ColumnId.Value,
+                    prevTask?.Position ?? nextTask!.Position,
+                    taskId);
 
                 //Az újrasorszámozás szerződése szerint innen semmi nem követett - a
                 //feladatot újra be kell olvasni, különben az EF a mozgatást NEM írná ki.
                 task = await ReloadTaskAfterRebalanceAsync(
                     projectId, taskId, dto.RowVersion, rebalancedRowVersion);
 
-                prevTask = dto.AfterTaskId != null
-                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
-                    : null;
-
-                nextTask = prevTask == null
-                    ? await _context.ProjectTasks
-                        .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
-                        .OrderBy(t => t.Position)
-                        .FirstOrDefaultAsync()
-                    : await _context.ProjectTasks
-                        .Where(t => t.ProjectId == projectId
-                                 && t.ColumnId == dto.ColumnId
-                                 && string.Compare(t.Position, prevTask.Position) > 0
-                                 && t.Id != taskId)
-                        .OrderBy(t => t.Position)
-                        .FirstOrDefaultAsync();
+                neighbours = await FindNeighboursAsync(projectId, dto.ColumnId, dto.AfterTaskId, taskId);
+                prevTask = neighbours.Prev;
+                nextTask = neighbours.Next;
             }
 
             // Pozíció számítás – ha extrém edge case-ben kimerülne a hely, rebalance és újra
@@ -491,22 +457,9 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 task = await ReloadTaskAfterRebalanceAsync(
                     projectId, taskId, dto.RowVersion, rebalancedRowVersion);
 
-                prevTask = dto.AfterTaskId != null
-                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == dto.AfterTaskId && t.ProjectId == projectId)
-                    : null;
-
-                nextTask = prevTask == null
-                    ? await _context.ProjectTasks
-                        .Where(t => t.ProjectId == projectId && t.ColumnId == dto.ColumnId && t.Id != taskId)
-                        .OrderBy(t => t.Position)
-                        .FirstOrDefaultAsync()
-                    : await _context.ProjectTasks
-                        .Where(t => t.ProjectId == projectId
-                                 && t.ColumnId == dto.ColumnId
-                                 && string.Compare(t.Position, prevTask.Position) > 0
-                                 && t.Id != taskId)
-                        .OrderBy(t => t.Position)
-                        .FirstOrDefaultAsync();
+                neighbours = await FindNeighboursAsync(projectId, dto.ColumnId, dto.AfterTaskId, taskId);
+                prevTask = neighbours.Prev;
+                nextTask = neighbours.Next;
 
                 newPosition = _lexorankService.GetMiddle(prevTask?.Position, nextTask?.Position);
             }
@@ -945,6 +898,94 @@ namespace ProjectManager.API.Services.ProjectTaskService
                 .ToListAsync();
 
             return MapToTaskResponseDto(task, assignments, labels, commitLinks, prLinks, attachments);
+        }
+
+        // A mozgatás referenciája és a mögötte következő feladat, plusz az a jelzés, hogy az
+        // oszlopban van-e duplikált sorrendkulcs a beszúrás helyén.
+        private sealed record NeighbourLookup(
+            ProjectTask? Prev, ProjectTask? Next, bool ColumnHasDuplicate);
+
+        /// <summary>
+        /// A beszúrás két szomszédjának megkeresése, a duplikált kulcs felismerésével.
+        /// </summary>
+        /// <remarks>
+        /// <b>Miért van ez egy helyen?</b> Ugyanez a lekérdezés háromszor szerepelt a
+        /// mozgatásban (az első keresés és két újrakeresés újrasorszámozás után), és a három
+        /// példány között volt egy apró eltérés, amely egy teljes védelmi ágat tett halottá -
+        /// lásd alább. Egy ismételt lekérdezés, amelynek a szemantikája számít, pontosan az,
+        /// amit egy helyen kell kimondani.
+        ///
+        /// <b>A javított hiba.</b> A szomszédot korábban szigorúan nagyobb pozícióra szűrtük
+        /// (<c>&gt; 0</c>), miközben az ütközés-vizsgálat egyenlőséget keres
+        /// (<c>HasCollision(a, b) =&gt; a == b</c>). A két feltétel kizárta egymást: a
+        /// megtalált szomszéd pozíciója sosem lehetett egyenlő a horgonnyal, tehát az
+        /// újrasorszámozást kiváltó ág SOHA nem futott le. A szűrő mostantól
+        /// <c>&gt;= 0</c>, és a referenciát magát zárja ki - így a referencia ikerpárja
+        /// megtalálható, és a duplikáció felismerhető.
+        ///
+        /// <b>Amit ez megold, és amit nem.</b> Ez JAVÍTÁS, nem megelőzés. Két egyidejű,
+        /// ugyanabba a résbe irányuló mozgatás továbbra is létrehozhat két azonos kulcsú
+        /// feladatot: a számítás pillanatában még egyik kérés sem lát duplikációt. Amit
+        /// megad, az az, hogy a duplikáció nem él tovább korlátlanul - a következő, a
+        /// duplikált kulcsra referáló beszúrás kitakarítja az oszlopot.
+        ///
+        /// <b>Az oszlop elejére szúrás külön eset.</b> Ott nincs referencia, amihez hasonlítani
+        /// lehetne, ezért a lekérdezés az első KETTŐ feladatot hozza, és a duplikációt azok
+        /// egyenlősége jelzi. Enélkül az oszlop elején lévő ikerpár soha nem javulna, mert az
+        /// elejére szúrás mindig mindkettő ELÉ kerül - tehát sosem keletkezne jelzés. Ugyanaz
+        /// az invariáns ("egy oszlopon belül a kulcsok egyediek"), két felismerési móddal.
+        ///
+        /// <b>Miért nem drágább ez a gyakori úton.</b> A lekérdezés darabszáma nem változik,
+        /// és egyedi kulcsok mellett a <c>&gt;=</c> ugyanazt a sort adja, mint a <c>&gt;</c> -
+        /// a referencia ki van zárva, rajta kívül pedig nincs vele egyenlő. Tehát a mozgatás
+        /// továbbra is EGY sort ír; az N soros újrasorszámozás ugyanúgy kivételes marad, mint
+        /// a hossztúllépésnél.
+        /// </remarks>
+        private async Task<NeighbourLookup> FindNeighboursAsync(
+            Guid projectId, Guid? columnId, Guid? afterTaskId, Guid movedTaskId)
+        {
+            ProjectTask? prev = null;
+            if (afterTaskId != null)
+            {
+                prev = await _context.ProjectTasks
+                    .FirstOrDefaultAsync(t => t.Id == afterTaskId && t.ProjectId == projectId);
+            }
+
+            if (prev == null)
+            {
+                //Az oszlop elejére: az első kettő kell, hogy az ikerpár látszódjon.
+                var firstTwo = await _context.ProjectTasks
+                    .Where(t => t.ProjectId == projectId
+                             && t.ColumnId == columnId
+                             && t.Id != movedTaskId)
+                    .OrderBy(t => t.Position)
+                    .Take(2)
+                    .ToListAsync();
+
+                var hasDuplicateAtFront = firstTwo.Count == 2
+                    && _lexorankService.HasCollision(firstTwo[0].Position, firstTwo[1].Position);
+
+                return new NeighbourLookup(null, firstTwo.FirstOrDefault(), hasDuplicateAtFront);
+            }
+
+            var next = await _context.ProjectTasks
+                .Where(t => t.ProjectId == projectId
+                         && t.ColumnId == columnId
+                         && string.Compare(t.Position, prev.Position) >= 0
+                         && t.Id != movedTaskId
+                         && t.Id != prev.Id)
+                .OrderBy(t => t.Position)
+                .FirstOrDefaultAsync();
+
+            //A referencia oszlopához kötve: a kérés átadhat egy MÁS oszlopban lévő feladatot
+            //referenciaként (a lekérdezése nem szűr oszlopra), és olyankor a cél oszlop egy
+            //véletlenül egyező pozíciója téves újrasorszámozást váltana ki. A duplikáció
+            //állítása csak akkor értelmes, ha a referencia tényleg ebben az oszlopban van.
+            var hasDuplicate = next != null
+                && prev.ColumnId == columnId
+                && _lexorankService.HasCollision(prev.Position, next.Position);
+
+            return new NeighbourLookup(prev, next, hasDuplicate);
         }
 
         // A mozgatott feladat újraolvasása és a konkurencia-alapvonal helyreállítása egy
