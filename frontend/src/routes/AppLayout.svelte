@@ -243,7 +243,13 @@
     let currentProjectId = '';
 
     // Párhuzamos initial load - projektváltáskor és újracsatlakozás utáni resync során is ez fut
+    //A pufferelés a TELJES Promise.all-t veszi körül, nem az egyes .then-eket: különben egy
+    //közben érkező esemény a feladatok után, de a boardok előtt játszódna vissza.
     async function loadProjectData(projectId: string) {
+        return signalRService.withEventBuffer(() => loadProjectDataCoreAsync(projectId));
+    }
+
+    async function loadProjectDataCoreAsync(projectId: string) {
         try {
             await Promise.all([
                 getTasksAsync(projectId, undefined, undefined, 'initial')
@@ -277,35 +283,46 @@
         if (isResyncing) return;
         isResyncing = true;
 
-        const projectId = currentProjectId;
-
+        //A pufferelés a csoportba való visszalépéstől a teljes állapot betöltéséig tart.
+        //
+        //EZ A LÉNYEGI PONT: a `joinProject` UTÁN már jönnek az események, a lekérdezések
+        //pillanatképe viszont régebbi lehet náluk, és később ér be - vagyis a betöltés
+        //felülírná a közben alkalmazott friss módosítást. A beágyazott `loadProjects` és
+        //`loadProjectData` szintén pufferel; a puffer mélységet számol, tehát a kiürítés
+        //ennek a hatókörnek a végén történik, egyszer.
         try {
-            if (projectId) {
-                try {
-                    await signalRService.joinProject(projectId);
-                } catch {
-                    //Ha a hub elutasít (pl. közben kikerültünk a projektből),
-                    //a projektlista frissítése deríti ki a pontos okot
-                }
-            }
-
-            await loadProjects();
-
-            if (projectId) {
-                if (!projects.some(p => p.id === projectId)) {
-                    setActiveProject(null);
-                    currentProjectId = '';
-                    notify.warning('A projekt közben megszűnt, vagy kikerültél belőle!');
-                    return;
-                }
-
-                await loadProjectData(projectId);
-            }
-
-            notify.success('Kapcsolat helyreállt, az adatok frissültek!');
+            await signalRService.withEventBuffer(() => resyncCoreAsync());
         } finally {
             isResyncing = false;
         }
+    }
+
+    async function resyncCoreAsync() {
+        const projectId = currentProjectId;
+
+        if (projectId) {
+            try {
+                await signalRService.joinProject(projectId);
+            } catch {
+                //Ha a hub elutasít (pl. közben kikerültünk a projektből),
+                //a projektlista frissítése deríti ki a pontos okot
+            }
+        }
+
+        await loadProjects();
+
+        if (projectId) {
+            if (!projects.some(p => p.id === projectId)) {
+                setActiveProject(null);
+                currentProjectId = '';
+                notify.warning('A projekt közben megszűnt, vagy kikerültél belőle!');
+                return;
+            }
+
+            await loadProjectData(projectId);
+        }
+
+        notify.success('Kapcsolat helyreállt, az adatok frissültek!');
     }
 
     // projectStore figyelése
@@ -326,12 +343,14 @@
 
     // Oldal betöltésekor lekéri a projekteket
     async function loadProjects() {
-        try {
-            const data = await getProjectsAsync();
-            setProjects(data);
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba a projektek lekérésekor!');
-        }
+        return signalRService.withEventBuffer(async () => {
+            try {
+                const data = await getProjectsAsync();
+                setProjects(data);
+            } catch (e: any) {
+                notify.error(e.response?.data ?? e.message ?? 'Hiba a projektek lekérésekor!');
+            }
+        });
     }
 
     onMount(async () => {

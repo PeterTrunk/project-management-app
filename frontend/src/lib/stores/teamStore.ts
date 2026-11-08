@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { MemberResponse } from '../api/teamApi';
+import { insertIfAbsentBy } from './collections';
 
 interface TeamState {
     members: MemberResponse[];
@@ -37,7 +38,9 @@ export function handleMemberAdded(payload: {
 }) {
     teamStore.update(state => ({
         ...state,
-        members: [...state.members, payload as unknown as MemberResponse]
+        //A kulcs a userId, nem az id: a tagság a (projekt, felhasználó) páron azonosítódik.
+        members: insertIfAbsentBy(
+            state.members, payload as unknown as MemberResponse, m => m.userId)
     }));
 }
 

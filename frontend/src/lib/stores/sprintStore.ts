@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { SprintResponse } from '../api/sprintApi';
+import { insertIfAbsentBy } from './collections';
 
 interface SprintState {
     sprints: SprintResponse[];
@@ -38,7 +39,8 @@ export function handleSprintCreated(payload: {
 }) {
     sprintStore.update(state => ({
         ...state,
-        sprints: [...state.sprints, payload as unknown as SprintResponse]
+        sprints: insertIfAbsentBy(
+            state.sprints, payload as unknown as SprintResponse, s => s.id)
     }));
 }
 

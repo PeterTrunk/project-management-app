@@ -1,6 +1,7 @@
 ﻿import { writable, get } from 'svelte/store';
 import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
+import { insertIfAbsentBy } from './collections';
 
 interface TaskState {
     tasks: TaskResponse[];
@@ -76,7 +77,12 @@ export function handleTaskCreated(payload: {
     const projectId = get(projectStore).activeProject?.id ?? '';
     taskStore.update(state => ({
         ...state,
-        tasks: [...state.tasks, {
+        //A gárda KIHAGY, és nem felülír. Ez itt nem stílus kérdése: az alábbi objektum a
+        //payloadból csak azt tudja, amit az esemény hordoz, a többit HELYKITÖLTŐVEL pótolja
+        //(leírás, státusz, felelősök, címkék). Ha a feladat már a tárolóban van - mert egy
+        //teljes újratöltés pillanatképe tartalmazta -, a felülírás ezekre a helykitöltőkre
+        //cserélné a valódi értékeket.
+        tasks: insertIfAbsentBy(state.tasks, {
             ...payload,
             projectId,
             description: null,
@@ -89,7 +95,7 @@ export function handleTaskCreated(payload: {
             createdByName: '',
             closedAt: null,
             updatedAt: null
-        } as unknown as TaskResponse]
+        } as unknown as TaskResponse, t => t.id)
     }));
 }
 

@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import type { BoardResponse } from '../api/boardApi';
 import type { ColumnResponse } from '../api/columnApi';
+import { insertIfAbsentBy } from './collections';
 
 interface BoardState {
     boards: BoardResponse[];
@@ -42,7 +43,8 @@ export function handleBoardCreated(payload: {
 }) {
     boardStore.update(state => ({
         ...state,
-        boards: [...state.boards, payload as unknown as BoardResponse]
+        boards: insertIfAbsentBy(
+            state.boards, payload as unknown as BoardResponse, b => b.id)
     }));
 }
 
@@ -87,7 +89,8 @@ export function handleColumnCreated(payload: {
 }) {
     boardStore.update(state => ({
         ...state,
-        columns: [...state.columns, payload as unknown as ColumnResponse]
+        columns: insertIfAbsentBy(
+            state.columns, payload as unknown as ColumnResponse, c => c.id)
     }));
 }
 

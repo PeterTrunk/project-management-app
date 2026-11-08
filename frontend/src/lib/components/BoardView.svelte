@@ -9,6 +9,7 @@
     import { getTasksAsync, moveTaskAsync, type TaskResponse } from '../api/taskApi';
     import { setTasks, taskStore, setActiveTask } from '../stores/taskStore';
     import { projectStore } from '../stores/projectStore';
+    import { signalRService } from '../services/signalRService';
     import { onMount } from 'svelte';
     import { reorderColumnsAsync } from '../api/columnApi';
     import { dndzone } from 'svelte-dnd-action';
@@ -164,17 +165,22 @@
         if (isSyncing || syncCooldown || !activeProjectId) return;
         isSyncing = true;
         try {
-            const [freshTasks, freshColumns] = await Promise.all([
-                getTasksAsync(activeProjectId, undefined, undefined, 'initial'),
-                activeBoard?.id
-                    ? getColumnsAsync(activeProjectId, activeBoard.id)
-                    : Promise.resolve(null)
-            ]);
+            //A pufferelés itt a legfontosabb: a felhasználó KIFEJEZETTEN friss állapotot kér,
+            //és egy közben érkező esemény hatását a később beérkező, de régebbi pillanatkép
+            //írná felül - vagyis épp a szinkronizálás tüntetne el egy friss módosítást.
+            await signalRService.withEventBuffer(async () => {
+                const [freshTasks, freshColumns] = await Promise.all([
+                    getTasksAsync(activeProjectId, undefined, undefined, 'initial'),
+                    activeBoard?.id
+                        ? getColumnsAsync(activeProjectId, activeBoard.id)
+                        : Promise.resolve(null)
+                ]);
 
-            setTasks(freshTasks);
-            if (freshColumns) {
-                setColumns(freshColumns.sort((a, b) => a.position - b.position));
-            }
+                setTasks(freshTasks);
+                if (freshColumns) {
+                    setColumns(freshColumns.sort((a, b) => a.position - b.position));
+                }
+            });
             notify.success('Szinkronizálva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a szinkronizálás során!');
@@ -189,7 +195,7 @@
 
     function distributeTasks(allTasks: TaskResponse[]) {
         const map: Record<string, TaskResponse[]> = {};
-        const cols = columns.filter(c => c.position > 0);  // ← direkt szűrés
+        const cols = columns.filter(c => c.position > 0);  // direkt szűrés
         cols.forEach(col => {
             map[col.id] = allTasks
                 .filter(t => t.columnId === col.id)
