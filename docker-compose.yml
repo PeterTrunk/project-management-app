@@ -3,9 +3,7 @@ services:
     image: postgres:17
     container_name: pm-postgres
     restart: unless-stopped
-    # Ugyanaz, mint elesben: a 100 az alapertelmezes, de a kod ebbol szarmaztatja a
-    # kapcsolatkeszlet meretet, ezert kiirva all. Lasd a docker-compose.prod.yml-t.
-    command: postgres -c max_connections=100
+    command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-100}
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

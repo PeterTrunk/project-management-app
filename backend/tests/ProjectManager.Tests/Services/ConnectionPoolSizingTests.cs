@@ -23,6 +23,13 @@ namespace ProjectManager.Tests.Services
         private const string BaseConnectionString =
             "Host=localhost;Port=5432;Database=projectmanager;Username=pmuser;Password=pmpassword";
 
+        /// <summary>
+        /// A `POSTGRES_MAX_CONNECTIONS` alapértéke, ami egyben a PostgreSQL alapértelmezése is.
+        /// A tesztek nagy része ezzel számol, hogy az eddigi elvárások változatlanul mérhetők
+        /// legyenek; az ettől eltérő értéket külön tesztek vizsgálják.
+        /// </summary>
+        private const int DefaultMaxConnections = 100;
+
         [Theory]
         //Mérve: ez a két írásmód az, amit az Npgsql elfogad - a `Max Pool Size`,
         //a `maximumpoolsize` és a `MAX_POOL_SIZE` ArgumentException-t dob.
@@ -88,7 +95,9 @@ namespace ProjectManager.Tests.Services
         {
             //Ugyanaz a számítás, mint az AddDatabase-ben. Szándékosan megismételve: ez az
             //OPERATIONS.md 3. fejezetének táblázatát rögzíti, amire az üzemeltető hagyatkozik.
-            const int postgresMaxConnections = 100;
+            //A 100 itt az ALAPÉRTÉK, nem a kódba égetett korlát - a `max_connections` a
+            //POSTGRES_MAX_CONNECTIONS-ból jön, és a táblázat is erre az alapértékre szól.
+            const int postgresMaxConnections = DefaultMaxConnections;
             const int reservedConnections = 20;
             const int minimumPoolSize = 10;
 
@@ -107,7 +116,7 @@ namespace ProjectManager.Tests.Services
             //nem is adja át az értéket a DbContextnek. A connection stringet ezért a
             //felépített DbContextOptionsból olvassuk vissza, nem a számításból.
             var services = new ServiceCollection();
-            services.AddDatabase(BaseConnectionString, apiReplicas);
+            services.AddDatabase(BaseConnectionString, apiReplicas, DefaultMaxConnections);
 
             using var provider = services.BuildServiceProvider();
             var options = provider.GetRequiredService<DbContextOptions<AppDbContext>>();
@@ -124,7 +133,8 @@ namespace ProjectManager.Tests.Services
         {
             //Az üzemeltető felülírása nyer - ez az előző teszt párja.
             var services = new ServiceCollection();
-            services.AddDatabase($"{BaseConnectionString};Maximum Pool Size=7", apiReplicas: 2);
+            services.AddDatabase(
+                $"{BaseConnectionString};Maximum Pool Size=7", apiReplicas: 2, DefaultMaxConnections);
 
             using var provider = services.BuildServiceProvider();
             var options = provider.GetRequiredService<DbContextOptions<AppDbContext>>();
@@ -134,13 +144,54 @@ namespace ProjectManager.Tests.Services
             Assert.Equal(7, applied.MaxPoolSize);
         }
 
+        [Theory]
+        //(max_connections - 20) / 2 peldany
+        [InlineData(100, 40)]
+        [InlineData(200, 90)]
+        [InlineData(500, 240)]
+        public void AHigherMaxConnections_RaisesThePoolSize(int postgresMaxConnections, int expected)
+        {
+            //EZ A LÉNYEGI ÁLLÍTÁS a változtatásra: a `max_connections` mostantól a telepítés
+            //paramétere, nem a kódba égetett szám. Enélkül egy saját adatbázis-kiszolgálóra
+            //költözés után a példányszám emelése csak felosztotta volna ugyanazt a 100
+            //kapcsolatot, vagyis a nagyobb kapacitás kihasználatlan maradt volna.
+            var services = new ServiceCollection();
+            services.AddDatabase(BaseConnectionString, apiReplicas: 2, postgresMaxConnections);
+
+            using var provider = services.BuildServiceProvider();
+            var options = provider.GetRequiredService<DbContextOptions<AppDbContext>>();
+            var applied = new NpgsqlConnectionStringBuilder(
+                RelationalOptionsExtension.Extract(options).ConnectionString);
+
+            Assert.Equal(expected, applied.MaxPoolSize);
+        }
+
+        [Fact]
+        public void AnUnreasonablySmallMaxConnections_FallsBackToTheFloor()
+        {
+            //A másik szélső eset, amit az új paraméter behoz: ha a megadott érték kisebb a
+            //20-as tartaléknál, a képlet nullát vagy negatív számot ad. Nem szabad, hogy ebből
+            //0 vagy negatív pool legyen - az Npgsql a 0-t korlátlanként értelmezi, tehát pont
+            //az ellenkezőjét kapnánk annak, amit a méretezés ad. A padló ezt elfogja, és az
+            //induláskor WRN sor (DbPoolFloorReached) megadja a szükséges értéket.
+            var services = new ServiceCollection();
+            services.AddDatabase(BaseConnectionString, apiReplicas: 2, postgresMaxConnections: 10);
+
+            using var provider = services.BuildServiceProvider();
+            var options = provider.GetRequiredService<DbContextOptions<AppDbContext>>();
+            var applied = new NpgsqlConnectionStringBuilder(
+                RelationalOptionsExtension.Extract(options).ConnectionString);
+
+            Assert.Equal(10, applied.MaxPoolSize);
+        }
+
         [Fact]
         public void UpToEightReplicas_TheTotalStaysWithinMaxConnections()
         {
             //A változtatás lényegi állítása: a példányok EGYÜTT nem kérhetnek többet, mint
             //amennyi van. Nyolc példányig ennek tartania kell; felette a padló miatt nem,
             //és ezért ad az induláskor WRN sort (DbPoolFloorReached).
-            const int postgresMaxConnections = 100;
+            const int postgresMaxConnections = DefaultMaxConnections;
             const int reservedConnections = 20;
 
             for (var replicas = 1; replicas <= 8; replicas++)
