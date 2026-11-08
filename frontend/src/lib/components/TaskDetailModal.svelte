@@ -93,7 +93,6 @@
     //SignalR-esemény nem jutott el hozzánk (megszakadt kapcsolat, kimaradt üzenet). Enélkül
     //az ütközés-üzenet olyat kért a felhasználótól, amihez nem volt kapcsoló a felületen.
     let conflictDetected = false;
-    let isReloading = false;
 
     //Igaz, ha a szerkesztés kezdete óta valaki más módosította ezt a feladatot - akár a
     //store-ból látjuk, akár a mentés bukásából tudjuk.
@@ -113,28 +112,21 @@
         isEditing = true;
     }
 
-    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a MÁR
-    //BEÍRT értékeit megtartja. Enélkül az ütközés zsákutca volt: az "újra próbálom" ugyanazt
-    //a tokent küldte, tehát másodszor is elbukott.
-    async function acceptRemoteChanges() {
-        if (isReloading) return;
-        isReloading = true;
+    function acknowledgeRemoteChange() {
+        baselineRowVersion = currentTask.rowVersion;
+        conflictDetected = false;
+        error = '';
+    }
+    
+    //A gyakori eset (az esemény megjött) ezt az utat NEM járja be: ott a tároló már friss.
+    async function refreshAfterConflictAsync() {
         try {
-            //Szándékosan a szervertől, nem a store-ból: ha az ütközést a mentés bukásából
-            //tudtuk meg, akkor a store is állott - a SignalR-esemény nem jött meg.
             const fresh = await getTaskByIdAsync(projectId, task.id);
             setActiveTask(fresh);
             task = fresh;
-            baselineRowVersion = fresh.rowVersion;
-            conflictDetected = false;
-            error = '';
-            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
-        } catch (e: any) {
-            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
-            error = message;
-            notify.error(message);
-        } finally {
-            isReloading = false;
+        } catch {
+            //A nyugtázás ettől függetlenül működik; a felhasználó a sávon át továbbléphet.
+            //Egy hibaüzenet itt csak elterelné attól, amit a sáv mond.
         }
     }
     let editTitle = task.title;
@@ -248,8 +240,11 @@
                 //Az ütközés nem technikai hiba, hanem döntési helyzet: a beírt értékek
                 //megmaradnak, és a felhasználó a sávon át veszi át a friss állapotot.
                 conflictDetected = true;
+                //A tároló itt állott lehet (nem jött meg az esemény), ezért egyszer
+                //megkérdezzük a szervert - lásd a függvény kommentjét.
+                await refreshAfterConflictAsync();
                 error = 'Valaki módosította ezt a feladatot, amíg szerkesztetted. '
-                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                      + 'A módosításaid megmaradtak - az „Értettem" után mentheted újra.';
                 notify.warning(error);
                 return;
             }
@@ -722,7 +717,42 @@
                         {/if}
                     </div>
 
+                    <div class="section">
+                        <div class="section-header">
+                            <h3>Jelenlegi adatok</h3>
+                        </div>
+                        <div class="meta-grid">
+                            <span class="meta-label">Feladat címe</span>
+                            <span class="meta-value">
+                                {task.title}
+                            </span>
+
+                            <span class="meta-label">Leírás</span>
+                            <span class="meta-value">
+                                {task.description?.trim() ? task.description : 'Nincs leírás'}
+                            </span>
+
+                            <span class="meta-label">Prioritás</span>
+                            <span class="meta-value">
+                                {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
+                                    <span class="priority priority-{task.priority}">{task.priority}</span>
+                                {:else}
+                                    <span>Nincs</span>
+                                {/if}
+                            </span>
+                            
+                            <span class="meta-label">Becsült idő</span>
+                            <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
+
+                            <span class="meta-label">Határidő</span>
+                            <span class="meta-value">{task.dueDate ? new Date(task.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</span>
+                        </div>
+                    </div>
+
                     <form id="edit-form">
+                        <div class="section-header">
+                            <h3>Szerkesztő űrlap</h3>
+                        </div>
                         <div class="field">
                             <label>Task címe 
                                 <input bind:value={editTitle} placeholder="Maximum 200 karakter">
@@ -755,21 +785,17 @@
                             </label>
                         </div>
                         {#if hasRemoteChange}
-                            <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
-                                 hogy ütközés lesz, nem a hibaüzenetből utólag. -->
                             <div class="remote-change">
                                 <span class="remote-change-text">
-                                    Ezt a feladatot időközben módosította valaki.
+                                    Ezt a feladatot időközben módosította vagy áthelyezte valaki. A fenti <strong>Jelenlegi adatok</strong> szekció már a friss állapotot mutatja. Nézd át hogy mi változott, majd nyomj az <strong>Értettem</strong> gombra hogy menthess.
                                 </span>
-                                <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
-                                        disabled={isReloading}>
-                                    {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                                <button type="button" class="btn-reload" on:click={acknowledgeRemoteChange}>
+                                    Értettem
                                 </button>
                             </div>
                         {/if}
-                        <!--{#if error}<p class="msg error">{error}</p>{/if} -->
-                        {#if success}<p class="msg success">{success}</p>{/if}
-                        <button type="button" class="btn-primary" on:click={() => openConfirm(
+                        <button type="button" class="btn-primary" disabled={hasRemoteChange}
+                                on:click={() => openConfirm(
                             'Módosítások mentése',
                             'Biztosan menteni szeretnéd a változtatásokat?',
                             handleEdit
@@ -1136,7 +1162,14 @@
         transition: background 0.15s;
     }
 
-    .btn-primary:hover { background: var(--accent-blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-blue); color: #fff; }
+
+    .btn-primary:disabled {
+        background: var(--bg-hover);
+        border-color: var(--border-hover);
+        color: var(--text-muted);
+        cursor: not-allowed;
+    }
 
     .btn-add {
         display: flex;
@@ -1315,7 +1348,7 @@
         color: var(--text-muted);
         padding: 0.5rem 0;
     }
-    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló. */
+
     .remote-change {
         display: flex;
         align-items: center;
@@ -1330,12 +1363,10 @@
     }
 
     .remote-change-text {
-        /* A szöveg kitölti a maradék helyet, így a gomb a jobb szélre kerül. */
         flex: 1 1 auto;
         min-width: 0;
     }
 
-    /* A projekt btn-warning mintáját követi: ez figyelmeztetés, nem elsődleges művelet. */
     .btn-reload {
         flex: 0 0 auto;
         background: var(--accent-yellow-bg);

@@ -45,7 +45,6 @@
     let baselineRowVersion: number | null = null;
     //A 409 maga is bizonyíték a távoli módosításra, akkor is, ha az esemény nem jutott el.
     let conflictDetected = false;
-    let isReloading = false;
 
     $: hasRemoteChange = isEditing
         && (conflictDetected || (baselineRowVersion !== null && liveColumn.rowVersion !== baselineRowVersion));
@@ -60,32 +59,23 @@
         isEditing = true;
     }
 
-    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a már
-    //beírt értékeit megtartja. Szándékosan a szervertől kérdez, nem a store-ból: ha az
-    //ütközést a mentés bukásából tudtuk meg, akkor a store is állott.
-    async function acceptRemoteChanges() {
-        if (isReloading) return;
-        isReloading = true;
+    function acknowledgeRemoteChange() {
+        baselineRowVersion = liveColumn.rowVersion;
+        conflictDetected = false;
+        error = '';
+    }
+
+    //Csak akkor fordulunk szerverhez, ha az ütközést a MENTÉS BUKÁSÁBÓL tudtuk meg: ilyenkor
+    //az esemény nem jutott el hozzánk, tehát a tároló is állott, és a nyugtázás ugyanazt az
+    //elavult tokent léptetné alapvonalra. A gyakori eset (az esemény megjött) ezt kihagyja.
+    async function refreshAfterConflictAsync() {
         try {
             const cols = await getColumnsAsync(projectId, boardId);
             setColumns(cols.sort((a, b) => a.position - b.position));
             const fresh = cols.find(c => c.id === column.id);
-            if (!fresh) {
-                error = 'Ezt az oszlopot időközben törölték.';
-                notify.error(error);
-                return;
-            }
-            column = fresh;
-            baselineRowVersion = fresh.rowVersion;
-            conflictDetected = false;
-            error = '';
-            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
-        } catch (e: any) {
-            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
-            error = message;
-            notify.error(message);
-        } finally {
-            isReloading = false;
+            if (fresh) column = fresh;
+        } catch {
+            //A nyugtázás ettől függetlenül működik.
         }
     }
 
@@ -111,6 +101,10 @@
                 rowVersion: requireRowVersion(baselineRowVersion, 'oszlop')
             });
             column = updated;
+            
+            setColumns(
+                ($boardStore.columns ?? []).map(c => (c.id === updated.id ? updated : c)));
+
             baselineRowVersion = updated.rowVersion;
             conflictDetected = false;
             error = '';
@@ -119,8 +113,9 @@
         } catch (e: any) {
             if (e.response?.status === 409) {
                 conflictDetected = true;
+                await refreshAfterConflictAsync();
                 error = 'Valaki módosította ezt az oszlopot, amíg szerkesztetted. '
-                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                      + 'A módosításaid megmaradtak - az „Értettem" után mentheted újra.';
                 notify.warning(error);
                 return;
             }
@@ -170,15 +165,48 @@
 
         <h1>{liveColumn.name}</h1>
         {#if !isEditing}
-            <p>Státusz: <span>{liveColumn.mapsToStatus}</span></p>
-            <p>WIP limit: <span>{liveColumn.wipLimit ?? 'Nincs limit'}</span></p>
+            <div class="section">
+                <div class="meta-grid">
+                    <span class="meta-label">Státusz</span>
+                    <span class="meta-value">
+                        {liveColumn.mapsToStatus}
+                    </span>
+
+                    <span class="meta-label">WIP limit</span>
+                    <span class="meta-value">
+                        {liveColumn.wipLimit ?? 'Nincs limit'}
+                    </span>
+                </div>
+            </div>
         {/if}
         {#if isEditing}
+            <h2 class="edit-title">Szerkesztés</h2>
+
+            <div class="section">
+                <div class="section-header">
+                    <h3>Jelenlegi adatok</h3>
+                </div>
+                <div class="meta-grid">
+                    <span class="meta-label">Státusz</span>
+                    <span class="meta-value">
+                        {liveColumn.mapsToStatus}
+                    </span>
+
+                    <span class="meta-label">WIP limit</span>
+                    <span class="meta-value">
+                        {liveColumn.wipLimit ?? 'Nincs limit'}
+                    </span>
+                </div>
+            </div>
+
             <form on:submit|preventDefault={() => openConfirm(
                 'Módosítások mentése',
                 'Biztosan menteni szeretnéd a változtatásokat?',
                 handleUpdate
             )}>
+                <div class="section-header">
+                    <h3>Szerkesztő űrlap</h3>
+                </div>
                 <label>Oszlop neve:
                     <input type="text" bind:value={editName} placeholder="Oszlop neve">
                 </label>
@@ -190,22 +218,19 @@
                     <input type="number" min="1" bind:value={editWipLimit} placeholder="Nincs limit">
                 </label>
                 {#if hasRemoteChange}
-                    <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
-                         hogy ütközés lesz, nem a hibaüzenetből utólag. -->
                     <div class="remote-change">
                         <span class="remote-change-text">
-                            Ezt az oszlopot időközben módosította valaki.
+                            Ezt az oszlopot időközben módosította valaki. A fenti <strong>Jelenlegi adatok</strong> szekció már a friss állapotot mutatja. Nézd át hogy mi változott, majd nyomj az <strong>Értettem</strong> gombra hogy menthess.
                         </span>
-                        <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
-                                disabled={isReloading}>
-                            {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                        <button type="button" class="btn-reload" on:click={acknowledgeRemoteChange}>
+                            Értettem
                         </button>
                     </div>
                 {/if}
                 {#if error}
                     <p class="msg-error">{error}</p>
                 {/if}
-                <button type="submit">Mentés</button>
+                <button type="submit" disabled={hasRemoteChange}>Mentés</button>
             </form>
         {/if}
     </div>
@@ -255,10 +280,47 @@
     }
 
     .modal-content h1 {
-        margin-top: 2.5rem;
+        margin-top: 1rem;
         padding-bottom: 1rem;
         border-bottom: 1px solid var(--border);
         word-break: break-word;
+    }
+
+    .section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .meta-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+    }
+
+    .meta-label { color: var(--text-muted); white-space: nowrap; }
+    .meta-value { color: var(--text-primary); font-weight: 500; }
+
+    h3 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-muted);
+    }
+
+    .edit-title {
+        font-size: 1.1rem;
+        color: var(--text-primary);
+        margin: 0;
     }
 
     .header-actions {
@@ -339,9 +401,16 @@
         transition: background 0.15s;
     }
 
-    button[type="submit"]:hover {
+    button[type="submit"]:hover:not(:disabled) {
         background: var(--accent-blue);
         color: #fff;
+    }
+
+    button[type="submit"]:disabled {
+        background: var(--bg-hover);
+        border-color: var(--border-hover);
+        color: var(--text-muted);
+        cursor: not-allowed;
     }
 
     span { 
@@ -350,8 +419,6 @@
         word-break: break-word;
     }
 
-    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló.
-       Ugyanaz a minta, mint a feladat és a board szerkesztőjénél. */
     .remote-change {
         display: flex;
         align-items: center;
