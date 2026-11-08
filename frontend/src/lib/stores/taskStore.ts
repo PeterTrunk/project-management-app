@@ -188,64 +188,83 @@ export function handleTasksRebalanced(payload: {
     });
 }
 
+/**
+ * A hozzárendelési kezelők a változást MINDKÉT helyre KÜLÖN alkalmazzák: a listára és az aktív
+ * elemre is.
+ *
+ * Korábban az aktív elem a frissített LISTÁBÓL származott újra - és ez egy néma hézagot
+ * hordozott: ha a feladat nincs a listában, a `find` semmit nem ad, a visszaesés pedig a
+ * MÓDOSÍTÁS NÉLKÜLI aktív elemet tartja meg. A változás tehát elvész.
+ *
+ * Ez nem elméleti eset: a lista `scope: "initial"`-lal töltődik, ami a lezárt sprintek
+ * feladatait kiszűri. Egy ilyen feladat részletnézetében a címke- vagy
+ * személy-hozzárendelés nem jelent meg.
+ *
+ * Eddig azért nem látszott, mert a részletnézet a saját írásával (`setActiveTask`) elfedte -
+ * az ugyanis a listától függetlenül állítja az aktív elemet. Amikor a komponens átállt arra,
+ * hogy ugyanezt a kezelőt hívja, a hézag előjött.
+ *
+ * Ugyanaz a tanulság, mint a `setTasks` / `setActiveTask` párnál: az egyiket a másikból
+ * származtatni rejtett függőséget csinál. Mindkettőre külön alkalmazzuk.
+ */
 export function handleTaskAssigneeAdded(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, assigneeIds: t.assigneeIds.includes(payload.userId) 
-                    ? t.assigneeIds 
-                    : [...t.assigneeIds, payload.userId] }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    //A deduplikáció azért kell, mert ugyanez a kezelő fut a részletnézet saját műveletére ÉS
+    //a szerver eseményére is - a kettő ugyanazt a hozzárendelést hozhatja.
+    const apply = (t: TaskResponse): TaskResponse => ({
+        ...t,
+        assigneeIds: t.assigneeIds.includes(payload.userId)
+            ? t.assigneeIds
+            : [...t.assigneeIds, payload.userId]
     });
+    applyToTaskAndActive(payload.taskId, apply);
 }
 
+/** @see handleTaskAssigneeAdded */
 export function handleTaskAssigneeRemoved(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, assigneeIds: t.assigneeIds.filter(id => id !== payload.userId) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        assigneeIds: t.assigneeIds.filter(id => id !== payload.userId)
+    }));
 }
 
+/**
+ * @see handleTaskAssigneeAdded
+ *
+ * A deduplikáció itt a legélesebb: a board kártyája KULCSOLT each blokkban rendereli a
+ * címkéket, és egy duplikált azonosító ott futásidejű hibát dob - a kártya frissítése
+ * megszakad, tehát csak az első címke jelenik meg. A részletnézet kulcs nélküli listája
+ * ugyanazt a duplikátumot hibátlanul, kétszer kirendereli.
+ */
 export function handleTaskLabelAdded(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, labelIds: t.labelIds.includes(payload.labelId)
-                    ? t.labelIds
-                    : [...t.labelIds, payload.labelId] }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        labelIds: t.labelIds.includes(payload.labelId)
+            ? t.labelIds
+            : [...t.labelIds, payload.labelId]
+    }));
 }
 
+/** @see handleTaskAssigneeAdded */
 export function handleTaskLabelRemoved(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, labelIds: t.labelIds.filter(id => id !== payload.labelId) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        labelIds: t.labelIds.filter(id => id !== payload.labelId)
+    }));
+}
+
+/**
+ * Egy változás alkalmazása a LISTÁRA és az AKTÍV ELEMRE is, egymástól függetlenül.
+ *
+ * A függetlenség a lényeg: az aktív elemet nem a frissített listából származtatjuk, mert a
+ * feladat nem feltétlenül van benne (lezárt sprint, szűkebb hatókör) - lásd
+ * `handleTaskAssigneeAdded`.
+ */
+function applyToTaskAndActive(taskId: string, apply: (t: TaskResponse) => TaskResponse) {
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(t => (t.id === taskId ? apply(t) : t)),
+        activeTask: state.activeTask?.id === taskId ? apply(state.activeTask) : state.activeTask
+    }));
 }
 
 /**

@@ -1,6 +1,10 @@
 ﻿<script lang="ts">
     import { onMount } from 'svelte';
-    import { setActiveTask, taskStore } from '../stores/taskStore';
+    import {
+        setActiveTask, taskStore,
+        handleTaskLabelAdded, handleTaskLabelRemoved,
+        handleTaskAssigneeAdded, handleTaskAssigneeRemoved
+    } from '../stores/taskStore';
     import { gitLinkStore, linksForTask } from '../stores/gitLinkStore';
     import {
         attachmentStore, attachmentsForTask,
@@ -22,7 +26,7 @@
     import type { SprintResponse } from '../api/sprintApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
-    import { type AttachmentResponse, getTaskPresignedUrlAsync, uploadToStorageAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
+    import { getTaskPresignedUrlAsync, uploadToStorageAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -307,12 +311,33 @@
         }
     }
 
+    //A NÉGY HOZZÁRENDELÉSI MŰVELET UGYANAZT A TÁROLÓ-KEZELŐT hívja, amit a szerver eseménye
+    //is - nem építi újra a feladat objektumát.
+    //
+    //MIÉRT: a korábbi alak `{ ...task, labelIds: [...task.labelIds, labelId] }` volt, DEDUP
+    //NÉLKÜL. A `SCHEDULE.md` szerint a deduplikáció a *Added kezelőkbe került (TaskStore
+    //reaktivitás javítás - Label és Assignee), de a komponens optimista írása soha nem kapta
+    //meg. Márpedig az `await` ALATT megérkezhet a szerver eseménye: a kezelő akkor már
+    //felvette a címkét, és a rá következő fűzés MÁSODSZOR is felveszi.
+    //
+    //A duplikátum két, látszólag független tünetet adott, és mindkettőt a renderelés alakja
+    //magyarázza:
+    //
+    //  - a board kártyája KULCSOLT each blokkot használ (`as labelId (labelId)`), és egy
+    //    duplikált kulcs ott futásidejű hibát dob - a kártya frissítése megszakad, ezért
+    //    CSAK AZ ELSŐ címke jelent meg;
+    //  - a részletnézet chips-listája kulcs nélküli, tehát hibátlanul kirendereli a
+    //    duplikátumot - ott DUPLÁN látszott.
+    //
+    //A hozzárendelt személyeknél ugyanez a hiba megvolt, de nem omlott össze: ott minden
+    //megjelenítés kulcs nélküli, tehát egy duplikátum csak némán kétszer látszott volna.
+    //
+    //A kezelő hívásával az optimista út és az esemény útja AZONOS lett, tehát nem tud
+    //elválni: a dedup, az `activeTask` szinkronja és a lista frissítése egy helyen van.
     async function handleAddLabel(labelId: string) {
         try {
             await addLabelToTaskAsync(projectId, task.id, labelId);
-            const updated = { ...task, labelIds: [...task.labelIds, labelId] };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskLabelAdded({ taskId: task.id, labelId });
             notify.success('Label hozzáadva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag hozzáadásakor!');
@@ -322,9 +347,7 @@
     async function handleRemoveLabel(labelId: string) {
         try {
             await removeLabelFromTaskAsync(projectId, task.id, labelId);
-            const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskLabelRemoved({ taskId: task.id, labelId });
             notify.success('Label eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag eltávolításakor!');
@@ -334,9 +357,7 @@
     async function handleAddAssignee(userId: string) {
         try {
             await addAssigneeAsync(projectId, task.id, userId);
-            const updated = { ...task, assigneeIds: [...task.assigneeIds, userId] };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskAssigneeAdded({ taskId: task.id, userId });
             notify.success('Tag hozzárendelve!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee hozzáadásakor!');
@@ -346,9 +367,7 @@
     async function handleRemoveAssignee(userId: string) {
         try {
             await removeAssigneeAsync(projectId, task.id, userId);
-            const updated = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskAssigneeRemoved({ taskId: task.id, userId });
             notify.success('Tag hozzárendelés eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee eltávolításakor!');
@@ -696,7 +715,10 @@
                             {#each visibleLabels as label}
                                 <div class="label-edit-row">
                                     <LabelCard {label} showDelete={false} />
-                                    {#if currentTask.labelIds.includes(label.id)}
+                                    <!-- A `task` prop, nem a `currentTask`: lásd a hozzárendelési
+                                         kezelők fejkommentjét - a fordító a propra MÉLY
+                                         olvasást generál, a $:-származtatottra felszínest. -->
+                                    {#if task.labelIds.includes(label.id)}
                                         <button class="label-remove-btn"
                                             on:click={() => handleRemoveLabel(label.id)}>
                                             <X size={12} />

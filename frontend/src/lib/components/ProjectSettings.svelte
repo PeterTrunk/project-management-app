@@ -166,14 +166,26 @@
                 <div class="field">
                     <label>Leírás<textarea bind:value={description} placeholder="Max 1000 karakter"></textarea></label>
                 </div>
-                <div class="meta">
-                    <p>Tulajdonos: <span>{project.ownerName}</span></p>
-                    <p>Projekt kulcs: <span>{project.projKey}</span></p>
-                    <p>Létrehozva: <span>{new Date(project.createdAt).toLocaleDateString('hu-HU')}</span></p>
-                    <p>Módosítva: <span>{new Date(project.updatedAt).toLocaleDateString('hu-HU')}</span></p>
+
+                <div class="meta-grid">
+                    <span class="meta-label">Tulajdonos</span>
+                    <span class="meta-value">
+                        {project.ownerName}
+                    </span>
+                    <span class="meta-label">Projekt kulcs</span>
+                    <span class="meta-value">
+                        {project.projKey}
+                    </span>
+                    <span class="meta-label">Létrehozva</span>
+                    <span class="meta-value">
+                        {new Date(project.createdAt).toLocaleDateString('hu-HU')}
+                    </span>
+                    
+                    <span class="meta-label">Módosítva</span>
+                    <span class="meta-value">
+                        {new Date(project.updatedAt).toLocaleDateString('hu-HU')}
+                    </span>                   
                 </div>
-                {#if error}<p class="msg error">{error}</p>{/if}
-                {#if success}<p class="msg success">{success}</p>{/if}
                 <button type="button" class="btn-primary" on:click={() => openConfirm(
                     'Módosítások mentése',
                     'Biztosan menteni szeretnéd a változtatásokat?',
@@ -464,22 +476,16 @@
         border-color: var(--accent-blue);
     }
 
-    .meta {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-        padding: 0.75rem;
-        background: var(--bg-secondary);
-        border-radius: 6px;
-        border: 1px solid var(--border);
+    .meta-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
         font-size: 0.9rem;
-        color: var(--text-secondary);
+        border-radius: 6px;
     }
 
-    .meta span {
-        font-weight: 600;
-        color: var(--text-primary);
-    }
+    .meta-label { color: var(--text-secondary); white-space: nowrap; }
+    .meta-value { color: var(--text-primary); font-weight: 500; }
 
     /* ── Buttons ── */
     .btn-primary {
@@ -593,14 +599,6 @@
     }
 
     /* ── Misc ── */
-    .msg {
-        font-size: 0.9rem;
-        padding: 0.5rem 0;
-    }
-
-    .msg.success { color: var(--accent-green); }
-    .msg.error { color: var(--accent-red); white-space: pre-line; }
-
     .empty {
         font-size: 0.85rem;
         color: var(--text-muted);
