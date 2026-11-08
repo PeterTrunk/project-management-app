@@ -115,12 +115,20 @@ namespace ProjectManager.API.Services.GitService
                     .SendAsync("CommitLinked", new
                     {
                         taskId,
+                        //A task kulcsa és címe a payload része, és NEM a kliens oldali
+                        //feladatlistából származtatjuk: az a lezárt sprintek feladatait nem
+                        //tartalmazza, márpedig a hivatkozások nagy része épp azokhoz tartozik.
+                        taskKey = task.TaskKey,
+                        taskTitle = task.Title,
                         id = commit.Id,
                         commitSha = commit.CommitSha,
                         commitUrl = commit.CommitUrl,
                         message = commit.Message,
                         authorName = commit.AuthorName,
-                        committedAt = commit.CommittedAt
+                        committedAt = commit.CommittedAt,
+                        //Itt mindig igaz - épp most állította be ez a metódus -, de kiírva áll,
+                        //hogy a kliens mindkét forrásból ugyanazt az alakot kapja.
+                        isManuallyLinked = commit.IsManuallyLinked
                     });
             }
             catch (Exception ex)
@@ -182,6 +190,8 @@ namespace ProjectManager.API.Services.GitService
                     .SendAsync("PrLinked", new
                     {
                         taskId,
+                        taskKey = task.TaskKey,
+                        taskTitle = task.Title,
                         id = pr.Id,
                         prNumber = pr.PrNumber,
                         prUrl = pr.PrUrl,
@@ -189,7 +199,8 @@ namespace ProjectManager.API.Services.GitService
                         state = pr.State,
                         authorName = pr.AuthorName,
                         createdAt = pr.CreatedAt,
-                        mergedAt = pr.MergedAt
+                        mergedAt = pr.MergedAt,
+                        isManuallyLinked = pr.IsManuallyLinked
                     });
             }
             catch (Exception ex)

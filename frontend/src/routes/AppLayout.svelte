@@ -21,6 +21,8 @@
     import { setColumns } from '../lib/stores/boardStore';
     import { getSprintsAsync } from '../lib/api/sprintApi';
     import { setSprints } from '../lib/stores/sprintStore';
+    import { getCommitLinksAsync, getPrLinksAsync } from '../lib/api/gitApi';
+    import { setGitLinks } from '../lib/stores/gitLinkStore';
 
     import NotificationContainer from '../lib/components/NotificationContainer.svelte';
     import { notify } from '../lib/stores/notificationStore';
@@ -269,7 +271,14 @@
                 getMembersAsync(projectId)
                     .then(members => setMembers(members)),
                 getIntegrationsAsync(projectId)
-                    .then(integrations => setIntegrations(integrations))
+                    .then(integrations => setIntegrations(integrations)),
+                //A git hivatkozások a projekt betöltésével jönnek, nem a git nézet
+                //megnyitásakor. Az ár két kérés akkor is, ha a felhasználó nem nyitja meg azt a
+                //nézetet - de a hét másikkal PÁRHUZAMOS, és csak hivatkozásokat ad vissza, nem
+                //feladatgráfot. Cserébe a részletnézet is innen olvas, tehát egyetlen
+                //gyorsítótár marad, és a git nézet megnyitása nem tölt.
+                Promise.all([getCommitLinksAsync(projectId), getPrLinksAsync(projectId)])
+                    .then(([commits, prs]) => setGitLinks(commits, prs))
             ]);
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!');

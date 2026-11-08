@@ -1,6 +1,7 @@
 ﻿<script lang="ts">
     import { onMount } from 'svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
+    import { gitLinkStore, linksForTask } from '../stores/gitLinkStore';
     import { requireRowVersion } from '../api/concurrency';
     import { getTaskByIdAsync } from '../api/taskApi';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
@@ -45,6 +46,13 @@
         : null;
     
     $: currentTask = $taskStore.activeTask ?? task;
+
+    //A git hivatkozások a KÖZPONTI tárolóból, `taskId` szerint származtatva - nem a feladat
+    //DTO-jának `commitLinks` / `prLinks` mezőjéből. Ugyanaz az adat korábban két helyen élt
+    //(a feladat sorain és a git nézet lokális listáiban), és a kettő elcsúszhatott egymástól.
+    //A DTO továbbra is hordozza a mezőket, de a felület nem olvassa.
+    $: taskCommits = linksForTask($gitLinkStore.commits, currentTask.id);
+    $: taskPrs = linksForTask($gitLinkStore.prs, currentTask.id);
 
     //A status SZÁRMAZTATOTT érték: az oszlop MapsToStatus-a, amit a feladat DTO-ja
     //denormalizálva tart. Hat különböző esemény tudja megváltoztatni a feladat oszlopát
@@ -455,8 +463,8 @@
                         <button class="tab-btn" class:active={activeDetailTab === 'git'}
                             on:click={() => activeDetailTab = 'git'}>
                             <GitBranch size={14} /> Git
-                            {#if currentTask.commitLinks.length + currentTask.prLinks.length > 0}
-                                <span class="tab-badge">{currentTask.commitLinks.length + currentTask.prLinks.length}</span>
+                            {#if taskCommits.length + taskPrs.length > 0}
+                                <span class="tab-badge">{taskCommits.length + taskPrs.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'comments'}
@@ -588,9 +596,9 @@
                     {#if activeDetailTab === 'git'}
                         <div class="section">
                             <h3>Commitok</h3>
-                            {#if currentTask.commitLinks.length > 0}
+                            {#if taskCommits.length > 0}
                                 <div class="git-list">
-                                    {#each currentTask.commitLinks as commit (commit.id)}
+                                    {#each taskCommits as commit (commit.id)}
                                         <div class="git-item">
                                             <CommitCard {commit}>
                                                 <button
@@ -611,9 +619,9 @@
                         </div>
                         <div class="section">
                             <h3>Pull Requestek</h3>
-                            {#if currentTask.prLinks.length > 0}
+                            {#if taskPrs.length > 0}
                                 <div class="git-list">
-                                    {#each currentTask.prLinks as pr (pr.id)}
+                                    {#each taskPrs as pr (pr.id)}
                                         <div class="git-item">
                                             <PrCard {pr}>
                                                 <button

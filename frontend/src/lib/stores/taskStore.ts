@@ -1,5 +1,5 @@
 ﻿import { writable, get } from 'svelte/store';
-import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
+import type { TaskResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
 import { insertIfAbsentBy } from './collections';
 
@@ -249,24 +249,6 @@ export function handleTaskLabelRemoved(payload: { taskId: string; labelId: strin
 }
 
 /**
- * Beszúrás vagy felülírás azonosító szerint.
- *
- * Azért nem egyszerű hozzáfűzés, mert ugyanaz a hivatkozás többször is megérkezhet: 
- * a pull request állapota megváltozik (megnyitás, szerkesztés, lezárás, merge), 
- * és a backend mindannyiszor elküldi a friss sort. 
- * Vak hozzáfűzéssel ugyanaz a kártya többször jelenne meg,
- * ráadásul azonos kulccsal - amitől a Svelte kulcsolt each blokkja hibát dob.
- */
-function upsertById<T extends { id: string }>(links: T[], incoming: T): T[] {
-    const index = links.findIndex(l => l.id === incoming.id);
-    if (index === -1) return [...links, incoming];
-
-    const next = [...links];
-    next[index] = incoming;
-    return next;
-}
-
-/**
  * A megnyitott részletnézet külön hivatkozáson ül,
  * ezért a frissített listából kell újraolvasni, akkor is ha a hivatkozás épp ELKERÜLT róla.
  */
@@ -275,41 +257,11 @@ function syncActiveTask(state: TaskState, tasks: TaskResponse[]): TaskResponse |
     return tasks.find(t => t.id === state.activeTask!.id) ?? state.activeTask;
 }
 
-/**
- * Egy commit vagy PR hivatkozás EGYETLEN taskhoz tartozik: az adatbázisban egy sor, egy TaskId-vel.
- * Ezért az esemény nem csak hozzáad, hanem áthelyez is, a többi taskról leszedjük ugyanazt az azonosítót.
- *
- * Enélkül egy átrendelt commit a régi task alatt is ott maradna az oldal újratöltéséig,
- * vagyis a javítás úgy nézne ki, mintha duplikálta volna az elemet.
- */
-export function handleCommitLinked(payload: CommitLinkResponse & { taskId: string }) {
-    const { taskId, ...commit } = payload;
-
-    taskStore.update(state => {
-        const tasks = state.tasks.map(t => {
-            if (t.id === taskId) return { ...t, commitLinks: upsertById(t.commitLinks, commit) };
-            if (!t.commitLinks.some(l => l.id === commit.id)) return t;
-            return { ...t, commitLinks: t.commitLinks.filter(l => l.id !== commit.id) };
-        });
-
-        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
-    });
-}
-
-/** @see handleCommitLinked */
-export function handlePrLinked(payload: PrLinkResponse & { taskId: string }) {
-    const { taskId, ...pr } = payload;
-
-    taskStore.update(state => {
-        const tasks = state.tasks.map(t => {
-            if (t.id === taskId) return { ...t, prLinks: upsertById(t.prLinks, pr) };
-            if (!t.prLinks.some(l => l.id === pr.id)) return t;
-            return { ...t, prLinks: t.prLinks.filter(l => l.id !== pr.id) };
-        });
-
-        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
-    });
-}
+//A git hivatkozások kezelői a `gitLinkStore`-ba kerültek át. Ugyanaz az adat korábban KÉT
+//helyen élt - itt, a feladatok sorain, és a `GitView` lokális listáiban -, és minden esemény
+//mindkettőt frissítette. A `TaskResponse` DTO továbbra is hordozza a `commitLinks` és a
+//`prLinks` mezőt, de a felület NEM olvassa: a részletnézet is a `gitLinkStore`-ból
+//származtatja őket a `taskId` szerint.
 
 export function handleAttachmentUploaded(payload: {
     attachmentId: string;

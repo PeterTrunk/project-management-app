@@ -105,6 +105,11 @@ namespace ProjectManager.API.Services.GitWebhookService
 
             if (unmatchedLink != null)
             {
+                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(unmatchedLink, null));
+
+                //A kiküldés a hozzárendeletlen sorra IS megy. Enélkül a git nézet
+                //hozzárendeletlen listája csak oldalfrissítésre jelenítette meg az új PR-t:
+                //nincs taskja, tehát a korábbi kód egyáltalán nem szólt róla a böngészőnek.
                 await LogSystemActivityAsync(
                     projectId, "PullRequest", integrationId, "Unmatched",
                     $"Hozzárendeletlen PR érkezett: #{prEvent.Number} — {prEvent.Title} ({prEvent.AuthorName})");
@@ -112,7 +117,7 @@ namespace ProjectManager.API.Services.GitWebhookService
 
             foreach (var (task, link) in newLinks)
             {
-                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(task.Id, link));
+                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(link, task));
                 await LogPrStateActivityAsync(projectId, provider, task, link);
             }
 
@@ -122,13 +127,23 @@ namespace ProjectManager.API.Services.GitWebhookService
             //és a tevékenységlistába sem kerül semmi.
             if (!stateChanged) return;
 
-            foreach (var link in existingLinks.Where(link => link.TaskId.HasValue))
+            foreach (var link in existingLinks)
             {
-                var task = await _context.ProjectTasks
-                    .FirstOrDefaultAsync(t => t.Id == link.TaskId!.Value);
+                //A task csak a hozzárendelt sorokhoz tartozik; hozzárendeletlennél null.
+                var task = link.TaskId.HasValue
+                    ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == link.TaskId.Value)
+                    : null;
+
+                //A KIKÜLDÉS minden sorra megy, a hozzárendeletlenre is: a korábbi
+                //`Where(link => link.TaskId.HasValue)` szűrő miatt egy hozzárendeletlen PR
+                //mergelése nyomtalan volt, és a git nézet "open" jelöléssel mutatta tovább.
+                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(link, task));
+
+                //Az AKTIVITÁS viszont taskot IGÉNYEL: a szövege a `TaskKey`-re hivatkozik,
+                //tehát hozzárendeletlen sorra nem is lenne mit kiírni. Ezért nem a szűrő
+                //elhagyása volt a javítás, hanem a ciklus kettéválasztása.
                 if (task == null) continue;
 
-                await BroadcastAsync(projectId, "PrLinked", PrLinkedPayload(task.Id, link));
                 await LogPrStateActivityAsync(projectId, provider, task, link);
             }
         }
@@ -137,7 +152,11 @@ namespace ProjectManager.API.Services.GitWebhookService
             Guid projectId, Guid integrationId, string provider, GitPushEvent pushEvent)
         {
             var newLinks = new List<(ProjectTask Task, CommitLink Link)>();
-            var unmatchedMessages = new List<string>();
+
+            //A létrejött sorra is szükség van, nem csak az activity szövegére: a kiküldés a
+            //hivatkozás azonosítóját hordozza. A korábbi kód a `CreateCommitLink` visszatérési
+            //értékét eldobta, ezért a hozzárendeletlen commitról nem is lehetett szólni.
+            var unmatchedLinks = new List<(CommitLink Link, string ActivityText)>();
 
             foreach (var commit in pushEvent.Commits)
             {
@@ -186,23 +205,26 @@ namespace ProjectManager.API.Services.GitWebhookService
 
                 if (existingLinks.Count > 0 || tasks.Count > 0) continue;
 
-                CreateCommitLink(null, integrationId, commit);
-                unmatchedMessages.Add(
-                    $"{ShortSha(commit.Sha)} — {Preview(commit.Message)} ({commit.AuthorName})");
+                unmatchedLinks.Add((
+                    CreateCommitLink(null, integrationId, commit),
+                    $"{ShortSha(commit.Sha)} — {Preview(commit.Message)} ({commit.AuthorName})"));
             }
 
             await _context.SaveChangesAsync();
 
-            foreach (var msg in unmatchedMessages)
+            foreach (var (link, activityText) in unmatchedLinks)
             {
+                //Ugyanaz, mint a pull requesteknél: a hozzárendeletlen sorról is szólunk.
+                await BroadcastAsync(projectId, "CommitLinked", CommitLinkedPayload(link, null));
+
                 await LogSystemActivityAsync(
                     projectId, "Commit", integrationId, "Unmatched",
-                    $"Hozzárendeletlen commit érkezett: {msg}");
+                    $"Hozzárendeletlen commit érkezett: {activityText}");
             }
 
             foreach (var (task, link) in newLinks)
             {
-                await BroadcastAsync(projectId, "CommitLinked", CommitLinkedPayload(task.Id, link));
+                await BroadcastAsync(projectId, "CommitLinked", CommitLinkedPayload(link, task));
 
                 await LogSystemActivityAsync(
                     projectId, "Commit", task.Id, "Linked",
@@ -338,9 +360,21 @@ namespace ProjectManager.API.Services.GitWebhookService
         /// A SignalR payload alakja azonos a válasz DTO-jával, + taskId.
         /// Korábban a két forrás: a webhook és a kézi összekapcsolás esetén különböztek.
         /// </summary>
-        private static object PrLinkedPayload(Guid taskId, PrLink link) => new
+        /// <remarks>
+        /// A <c>taskId</c> a SOR sajátja, és <b>nullable</b>: a hozzárendeletlen hivatkozásnak
+        /// nincs taskja. Korábban külön paraméter volt, ami két hibát is megengedett - a
+        /// soréval nem egyező azonosítót, és azt, hogy a hozzárendeletlen sorról egyáltalán ne
+        /// menjen ki esemény.
+        /// </remarks>
+        private static object PrLinkedPayload(PrLink link, ProjectTask? task) => new
         {
-            taskId,
+            taskId = link.TaskId,
+            //A task kulcsa és címe a payload része, és NEM a kliens oldali feladatlistából
+            //származtatjuk: a lista a lezárt sprintek feladatait nem tartalmazza, márpedig
+            //a legtöbb hivatkozás épp a régebbi munkához tartozik. Enélkül a git nézetben a
+            //kulcs-jelölő üresen maradna azoknál.
+            taskKey = task?.TaskKey,
+            taskTitle = task?.Title,
             id = link.Id,
             prNumber = link.PrNumber,
             prUrl = link.PrUrl,
@@ -348,22 +382,26 @@ namespace ProjectManager.API.Services.GitWebhookService
             state = link.State,
             authorName = link.AuthorName,
             createdAt = link.CreatedAt,
-            mergedAt = link.MergedAt
+            mergedAt = link.MergedAt,
+            //A kézi jelölő is kell: enélkül a felhasználó SAJÁT átrendelése után a jelölő
+            //csak oldalfrissítésre jelent volna meg - pont akkor hiányozva, amikor keletkezik.
+            isManuallyLinked = link.IsManuallyLinked
         };
 
         /// <inheritdoc cref="PrLinkedPayload"/>
         //Az AuthorEmail szándékosan nincs: harmadik személy adata, amire ma nem épül funkció
-        private static object CommitLinkedPayload(Guid taskId, CommitLink link) => new
+        private static object CommitLinkedPayload(CommitLink link, ProjectTask? task) => new
         {
-            taskId,
+            taskId = link.TaskId,
+            taskKey = task?.TaskKey,
+            taskTitle = task?.Title,
             id = link.Id,
             commitSha = link.CommitSha,
             commitUrl = link.CommitUrl,
             message = link.Message,
-            
-            
             authorName = link.AuthorName,
-            committedAt = link.CommittedAt
+            committedAt = link.CommittedAt,
+            isManuallyLinked = link.IsManuallyLinked
         };
 
         /// <summary>

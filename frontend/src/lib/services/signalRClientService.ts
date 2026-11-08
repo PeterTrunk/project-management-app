@@ -2,8 +2,9 @@ import { signalRService } from './signalRService';
 import { handleTaskCreated, handleTaskUpdated, handleTaskMoved, 
          handleTaskDeleted, handleTasksRebalanced, handleTaskAssigneeAdded,
          handleTaskAssigneeRemoved, handleTaskLabelAdded, handleTaskLabelRemoved,
-         handleCommitLinked, handlePrLinked, handleAttachmentUploaded, 
+         handleAttachmentUploaded,
          handleAttachmentDeleted, taskStore } from '../stores/taskStore';
+import { handleCommitLinked, handlePrLinked } from '../stores/gitLinkStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
 import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
          handleColumnCreated, handleColumnUpdated, handleColumnDeleted,
