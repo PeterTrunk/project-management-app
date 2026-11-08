@@ -1,7 +1,9 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { signalRService } from '../services/signalRService';
-    import { getCommentsAsync, createCommentAsync, deleteCommentAsync, type CommentResponse } from '../api/commentApi';
+    import { getCommentsAsync, createCommentAsync, deleteCommentAsync } from '../api/commentApi';
+    import {
+        commentStore, setComments, commentsForTask,
+        handleCommentAdded, handleCommentDeleted
+    } from '../stores/commentStore';
 
     import { notify } from '../stores/notificationStore';
 
@@ -11,40 +13,24 @@
     export let taskId: string;
     export let currentUserId: string;
 
-    let comments: CommentResponse[] = [];
     let newComment = '';
     let error ='';
 
-    onMount(async () => {
-        await loadComments();
+    //A kommentek a KÖZPONTI tárolóból jönnek, a feladat azonosítója szerint. A két esemény
+    //kezelője szintén központi (signalRClientService) - korábban ez a komponens iratkozott fel
+    //rájuk, és minden idegen komment érkezésekor újratöltötte az egész listát.
+    $: comments = commentsForTask($commentStore, taskId) ?? [];
 
-        //A CommentAdded és a CommentDeleted az EGYETLEN két esemény, amit nem a központi
-        //signalRClientService kezel, hanem csak itt - mert csak a megnyitott task alatt
-        //értelmes. A kezelők mégis nevesítve vannak, hogy a leiratkozás pontos legyen:
-        //egy kezelő nélküli off() két egyidejű példány esetén a másikét is levenné.
-        signalRService.on('CommentAdded', onCommentAdded);
-        signalRService.on('CommentDeleted', onCommentDeleted);
-    });
-
-    async function onCommentAdded(data: { taskId: string; commentId: string }) {
-        if (data.taskId !== taskId) return;  // csak az aktuális task kommentjei
-        if (comments.some(c => c.id === data.commentId)) return;
-        await loadComments();
+    //A betöltés a feladat VÁLTOZÁSÁRA fut, és csak ha még nincs betöltve. A tároló
+    //gyorsítótár: egy visszanyitott feladat kommentjei már bent vannak, és közben az
+    //események tartották frissen - akkor is, amíg a részletnézet zárva volt.
+    $: if (taskId && commentsForTask($commentStore, taskId) === undefined) {
+        loadCommentsAsync(taskId);
     }
 
-    async function onCommentDeleted(data: { taskId: string }) {
-        if (data.taskId !== taskId) return;
-        await loadComments();
-    }
-
-    onDestroy(() => {
-        signalRService.off('CommentAdded', onCommentAdded);
-        signalRService.off('CommentDeleted', onCommentDeleted);
-    });
-
-    async function loadComments() {
+    async function loadCommentsAsync(id: string) {
         try {
-            comments = await getCommentsAsync(projectId, taskId);
+            setComments(id, await getCommentsAsync(projectId, id));
         } catch (e: any) {
             const message = e.response?.data ?? e.message ?? 'Hiba a kommentek lekérésekor!';
             error = message;
@@ -52,12 +38,14 @@
         }
     }
 
-
     async function handleAddComment() {
         error = '';
         try {
             const comment = await createCommentAsync(projectId, taskId, { body: newComment });
-            comments = [...comments, comment];
+            //A saját kommentünket a POST válaszából vesszük fel, nem az eseményre várva: egy
+            //szétesett kapcsolat mellett se veszítse el a felhasználó a saját műveletét.
+            //A központi kezelő gárdája miatt a RÁ ÉRKEZŐ esemény nem duplikálja.
+            handleCommentAdded(comment);
             newComment = '';
             notify.success('Komment hozzáadva!');
         } catch (e: any) {
@@ -71,7 +59,7 @@
         error = '';
         try {
             await deleteCommentAsync(projectId, taskId, commentId);
-            comments = comments.filter(c => c.id !== commentId);
+            handleCommentDeleted({ taskId, commentId });
             notify.success('Komment törölve!');
         } catch (e: any) {
             const message = e.response?.data ?? e.message ?? 'Hiba a komment törlésekor!';
