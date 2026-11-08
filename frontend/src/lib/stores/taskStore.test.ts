@@ -14,9 +14,7 @@ import {
     handleTaskAssigneeAdded,
     handleTaskAssigneeRemoved,
     handleTaskLabelAdded,
-    handleTaskLabelRemoved,
-    handleAttachmentUploaded,
-    handleAttachmentDeleted
+    handleTaskLabelRemoved
 } from './taskStore';
 
 function task(id: string, overrides: Partial<TaskResponse> = {}): TaskResponse {
@@ -289,57 +287,7 @@ describe('taskStore', () => {
     //Ott az állítások egyszerűbbek: a lapos, azonosító szerint kulcsolt tárolóban az
     //áthelyezés egyszerű csere, nem kézi fel- és levétel két task sorain.
 
-    describe('csatolmányok', () => {
-        const uploadPayload = {
-            attachmentId: 'a1', projectId: 'p1', taskId: '1',
-            fileName: 'terv.pdf', contentType: 'application/pdf', sizeBytes: 1024,
-            attachmentType: 'task', uploadedByName: 'Teszt Elek', version: 1,
-            createdAt: '2026-01-01T00:00:00Z'
-        };
-
-        it('hozzáadja a csatolmányt', () => {
-            setTasks([task('1')]);
-
-            handleAttachmentUploaded(uploadPayload);
-
-            expect(get(taskStore).tasks[0].attachments).toHaveLength(1);
-        });
-
-        it('nem duplikálja ugyanazt a csatolmányt', () => {
-            setTasks([task('1')]);
-
-            handleAttachmentUploaded(uploadPayload);
-            handleAttachmentUploaded(uploadPayload);
-
-            expect(get(taskStore).tasks[0].attachments).toHaveLength(1);
-        });
-
-        //A projekt szintű feltöltésnek nincs taskId-ja: a handlernek némán ki kell lépnie,
-        //nem pedig minden taskra ráaggatnia a fájlt
-        it('taskId nélküli feltöltésnél nem nyúl semmihez', () => {
-            setTasks([task('1')]);
-
-            handleAttachmentUploaded({ ...uploadPayload, taskId: null });
-
-            expect(get(taskStore).tasks[0].attachments).toHaveLength(0);
-        });
-
-        it('törli a csatolmányt', () => {
-            setTasks([task('1')]);
-            handleAttachmentUploaded(uploadPayload);
-
-            handleAttachmentDeleted({ attachmentId: 'a1', projectId: 'p1', taskId: '1' });
-
-            expect(get(taskStore).tasks[0].attachments).toHaveLength(0);
-        });
-
-        it('a megnyitott taskot is frissíti feltöltéskor', () => {
-            setTasks([task('1')]);
-            setActiveTask(task('1'));
-
-            handleAttachmentUploaded(uploadPayload);
-
-            expect(get(taskStore).activeTask!.attachments).toHaveLength(1);
-        });
-    });
+    //A csatolmányok blokkja az `attachmentStore.test.ts`-be került át, az adattal együtt.
+    //Ott nincs külön ág a projekt-szintű feltöltésre: a `taskId` egyszerű mező a soron,
+    //nem pedig egy feltétel, ami mellett a fájl minden feladatra felkerülhetne.
 });

@@ -2,8 +2,8 @@ import { signalRService } from './signalRService';
 import { handleTaskCreated, handleTaskUpdated, handleTaskMoved, 
          handleTaskDeleted, handleTasksRebalanced, handleTaskAssigneeAdded,
          handleTaskAssigneeRemoved, handleTaskLabelAdded, handleTaskLabelRemoved,
-         handleAttachmentUploaded,
-         handleAttachmentDeleted, taskStore } from '../stores/taskStore';
+         taskStore } from '../stores/taskStore';
+import { handleAttachmentUploaded, handleAttachmentDeleted } from '../stores/attachmentStore';
 import { handleCommitLinked, handlePrLinked } from '../stores/gitLinkStore';
 import { handleCommentAdded, handleCommentDeleted } from '../stores/commentStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
@@ -62,6 +62,7 @@ export function registerSignalREvents() {
     //és eltűnik az a csapda, hogy két egyidejű komponens-példány egymás kezelőjét szedi le.
     signalRService.on('CommentAdded', handleCommentAdded);
     signalRService.on('CommentDeleted', handleCommentDeleted);
+
 
     // Sprint events
     signalRService.on('SprintCreated', handleSprintCreated);

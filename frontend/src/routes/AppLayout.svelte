@@ -23,6 +23,8 @@
     import { setSprints } from '../lib/stores/sprintStore';
     import { getCommitLinksAsync, getPrLinksAsync } from '../lib/api/gitApi';
     import { setGitLinks } from '../lib/stores/gitLinkStore';
+    import { getProjectAttachmentsAsync } from '../lib/api/attachmentApi';
+    import { setAttachments } from '../lib/stores/attachmentStore';
 
     import NotificationContainer from '../lib/components/NotificationContainer.svelte';
     import { notify } from '../lib/stores/notificationStore';
@@ -278,7 +280,13 @@
                 //feladatgráfot. Cserébe a részletnézet is innen olvas, tehát egyetlen
                 //gyorsítótár marad, és a git nézet megnyitása nem tölt.
                 Promise.all([getCommitLinksAsync(projectId), getPrLinksAsync(projectId)])
-                    .then(([commits, prs]) => setGitLinks(commits, prs))
+                    .then(([commits, prs]) => setGitLinks(commits, prs)),
+                //A projekt MINDEN csatolmánya, a feladatokhoz tartozókkal együtt - egy
+                //lekérésben. A korábbi út a projekt-szintűeket külön kérte, a feladatokhoz
+                //tartozókat pedig a teljes feladatgráfból szedte ki, és ezt minden
+                //csatolmány-eseményre újra.
+                getProjectAttachmentsAsync(projectId)
+                    .then(attachments => setAttachments(attachments))
             ]);
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a projekt adatainak betöltésekor!');

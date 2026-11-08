@@ -110,9 +110,18 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<List<AttachmentResponseDto>> GetProjectAttachmentsAsync(Guid projectId)
         {
+            //A projekt ÖSSZES csatolmánya, a feladatokhoz tartozókkal együtt - a korábbi
+            //`a.TaskId == null` szűrő kivezetve. A "projekt-szintű" nézet innentől kliensoldali
+            //szűrés (`taskId === null`), ugyanaz a feltétel, ami az adatbázisban is.
+            //
+            //Indok: a hívó eddig a projekt-szintű csatolmányok MELLETT a teljes feladatgráfot is
+            //letöltötte, csak hogy a feladatokhoz tartozókat megkapja - és ezt minden
+            //csatolmány-eseményre újra. Egy lekérés ugyanazt adja, feladatgráf nélkül.
+            //Ugyanaz a szerkezet, mint a git hivatkozások egyesített lekérésénél.
             var attachments = await _context.Attachments
-                .Where(a => a.ProjectId == projectId && a.TaskId == null)
+                .Where(a => a.ProjectId == projectId)
                 .Include(a => a.UploadedBy)
+                .Include(a => a.ProjectTask)
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync();
 
@@ -453,15 +462,30 @@ namespace ProjectManager.API.Services.AttachmentService
 
             _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
 
+            //A feladat kulcsa és címe a válaszba ÉS az eseménybe is kell. A frissen létrehozott
+            //soron a navigáció nincs bekötve, ezért külön olvassuk - ugyanúgy, ahogy a feltöltő
+            //nevét. Enélkül a két payload eltérő teljességű lenne, és a kliens oldali
+            //"ha már megvan, hagyd ki" gárda épp a SZEGÉNYEBBET tartaná meg.
+            var task = attachment.TaskId.HasValue
+                ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == attachment.TaskId.Value)
+                : null;
+
             try
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
+                    //A payload alakja AZONOS a REST válasz DTO-jával (AttachmentResponseDto),
+                    //mezőnévre is. Korábban az `attachmentId` tért el az `Id`-tól, és a feladat
+                    //kulcsa hiányzott - a kliens ezért nem tudta közvetlenül használni, hanem
+                    //az esemény hatására újratöltötte a projekt csatolmányait ÉS a teljes
+                    //feladatgráfot.
                     .SendAsync("AttachmentUploaded", new
                     {
-                        attachmentId = attachment.Id,
+                        id = attachment.Id,
                         projectId = attachment.ProjectId,
                         taskId = attachment.TaskId,
+                        taskKey = task?.TaskKey,
+                        taskTitle = task?.Title,
                         fileName = attachment.FileName,
                         contentType = attachment.ContentType,
                         sizeBytes = attachment.SizeBytes,
@@ -500,7 +524,7 @@ namespace ProjectManager.API.Services.AttachmentService
 
             //A nevet külön adjuk át: a navigációs tulajdonság ezen az úton szándékosan
             //nincs bekötve - lásd a megerősítés igénylésénél az indoklást.
-            return MapToDto(attachment, uploadedBy?.DisplayName);
+            return MapToDto(attachment, uploadedBy?.DisplayName, task);
         }
 
         public async Task<AttachmentResponseDto?> GetAttachmentMetadataAsync(Guid projectId, Guid attachmentId)
@@ -524,13 +548,21 @@ namespace ProjectManager.API.Services.AttachmentService
         /// A feltöltő neve, ha a hívó külön tudja. Azokon az utakon kell, ahol a navigációs
         /// tulajdonság szándékosan nincs bekötve - lásd a megerősítésnél az indoklást.
         /// </param>
-        private AttachmentResponseDto MapToDto(Attachment attachment, string? uploadedByName = null)
+        /// <param name="task">
+        /// A feladat, ha a hívó külön betöltötte. Ugyanaz a minta, mint az
+        /// <paramref name="uploadedByName"/>-nél: ahol a navigáció nincs bekötve (frissen
+        /// létrehozott sor), ott a hívó adja - különben a kulcs némán üres lenne.
+        /// </param>
+        private AttachmentResponseDto MapToDto(
+            Attachment attachment, string? uploadedByName = null, ProjectTask? task = null)
         {
             return new AttachmentResponseDto
             {
                 Id = attachment.Id,
                 ProjectId = attachment.ProjectId,
                 TaskId = attachment.TaskId,
+                TaskKey = task?.TaskKey ?? attachment.ProjectTask?.TaskKey,
+                TaskTitle = task?.Title ?? attachment.ProjectTask?.Title,
                 FileName = attachment.FileName,
                 ContentType = attachment.ContentType,
                 SizeBytes = attachment.SizeBytes,

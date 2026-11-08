@@ -5,6 +5,9 @@
         public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
         public Guid? TaskId { get; set; }
+        public string? TaskKey { get; set; }
+        
+        public string? TaskTitle { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }

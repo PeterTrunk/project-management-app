@@ -2,6 +2,10 @@
     import { onMount } from 'svelte';
     import { setActiveTask, taskStore } from '../stores/taskStore';
     import { gitLinkStore, linksForTask } from '../stores/gitLinkStore';
+    import {
+        attachmentStore, attachmentsForTask,
+        handleAttachmentUploaded, handleAttachmentDeleted
+    } from '../stores/attachmentStore';
     import { requireRowVersion } from '../api/concurrency';
     import { getTaskByIdAsync } from '../api/taskApi';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
@@ -143,8 +147,10 @@
     //ami a helyi eltolás miatt az előző napra mutathatott.
     let editDueDate = toDateTimeLocalValue(task.dueDate);
 
-    let attachments: AttachmentResponse[] = [];
-    $: attachments = (currentTask.attachments ?? []) as AttachmentResponse[];
+    //A csatolmányok a KÖZPONTI tárolóból, `taskId` szerint - nem a feladat DTO-jának
+    //`attachments` mezőjéből. Ugyanaz az adat korábban két helyen élt (a feladat sorain és a
+    //TeamResources listáiban). A DTO továbbra is hordozza a mezőt, de a felület nem olvassa.
+    $: attachments = attachmentsForTask($attachmentStore.attachments, currentTask.id);
     let isUploading = false;
     let uploadProgress = 0;
     let uploadError = '';
@@ -380,10 +386,11 @@
 
                 // 3. Confirm
                 const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
-                
-                //const updatedTask = { ...currentTask, attachments: [...(currentTask.attachments ?? []), uploaded] };
-                //setActiveTask(updatedTask);
-                //task = updatedTask;
+
+                //A tárolóba a megerősítés válaszából vesszük fel. Korábban ez a blokk
+                //KIKOMMENTEZVE állt, tehát a saját feltöltés csak a SignalR esemény hatására
+                //jelent meg - ha az kimaradt, a felhasználó nem látta a saját fájlját.
+                handleAttachmentUploaded(uploaded);
 
                 notify.success(`Fájl feltöltve: ${file.name}`);
 
@@ -456,8 +463,8 @@
                         <button class="tab-btn" class:active={activeDetailTab === 'attachments'}
                             on:click={() => activeDetailTab = 'attachments'}>
                             <Paperclip size={14} /> Csatolmányok
-                            {#if currentTask.attachments?.length > 0}
-                                <span class="tab-badge">{currentTask.attachments.length}</span>
+                            {#if attachments.length > 0}
+                                <span class="tab-badge">{attachments.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'git'}
@@ -558,14 +565,7 @@
                                             {attachment}
                                             {projectId}
                                             taskId={task.id}
-                                            onDelete={(id) => {
-                                                const updatedTask = {
-                                                    ...currentTask,
-                                                    attachments: currentTask.attachments.filter(a => a.id !== id)
-                                                };
-                                                setActiveTask(updatedTask);
-                                                task = updatedTask;
-                                            }}
+                                            onDelete={(id) => handleAttachmentDeleted({ attachmentId: id })}
                                         />
                                     {/each}
                                 </div>

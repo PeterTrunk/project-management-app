@@ -6,6 +6,11 @@ export interface AttachmentResponse {
     id: string;
     projectId: string;
     taskId: string | null;
+    //A feladat kulcsa és címe a soron, nem a kliens oldali feladatlistából származtatva: az a
+    //lezárt sprintek feladatait nem tartalmazza, tehát a csoportosított nézetben a fejléc
+    //üresen maradna azoknál. Projekt-szintű csatolmánynál null.
+    taskKey: string | null;
+    taskTitle: string | null;
     fileName: string;
     contentType: string;
     sizeBytes: number;
