@@ -1,9 +1,7 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { signalRService } from '../services/signalRService';
     import { integrationStore } from '../stores/integrationStore';
-    import { getCommitLinksAsync, getPrLinksAsync, assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
-    import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
+    import { assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
+    import { gitLinkStore } from '../stores/gitLinkStore';
     import { filterCommitLinks, filterPrLinks } from '../utils/gitLinks';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -15,18 +13,23 @@
 
     export let projectId: string;
 
-    //A projekt ÖSSZES hivatkozása egy listában. A "hozzárendeletlen" nézet ebből szűrés,
-    //nem külön lekérés - ugyanaz a feltétel, ami az adatbázisban is (TaskId == null).
+    //A projekt ÖSSZES hivatkozása a KÖZPONTI tárolóból. A "hozzárendeletlen" nézet ebből
+    //szűrés, nem külön lekérés - ugyanaz a feltétel, ami az adatbázisban is (TaskId == null).
     //
-    //Szándékosan NEM a taskStore-ból: az csak a backlog és a nyitott sprintek taskjait
-    //tartalmazza, tehát egy lezárt sprintben lévő task hivatkozása némán kimaradna.
-    let commitLinks: LinkedCommitResponse[] = [];
-    let prLinks: LinkedPrResponse[] = [];
+    //Korábban ez a komponens saját listát tartott, és minden git eseményre újratöltötte MINDKÉT
+    //listát (két kérés eseményenként). A tároló ugyanazt az adatot a projekt betöltésekor
+    //egyszer kéri le, utána az események tartják frissen - beleértve a hozzárendeletlen sorokat
+    //is, amelyekről a webhook azelőtt egyáltalán nem szólt.
+    //
+    //Szándékosan NEM a taskStore-ból származtatjuk a task kulcsát: az csak a backlog és a
+    //nyitott sprintek taskjait tartalmazza, tehát egy lezárt sprintben lévő task hivatkozásánál
+    //a jelölő üresen maradna. A kulcsot és a címet ezért a szerver adja, a soron.
+    $: commitLinks = $gitLinkStore.commits;
+    $: prLinks = $gitLinkStore.prs;
 
     let activeTab: 'unmatched' | 'linked' = 'unmatched';
     let searchQuery = '';
 
-    let loading = true;
     let error = '';
 
     let isTaskPickerOpen = false;
@@ -41,38 +44,6 @@
 
     $: linkedTotal = commitLinks.filter(c => c.taskId !== null).length
         + prLinks.filter(p => p.taskId !== null).length;
-
-    onMount(async () => {
-        await loadAll();
-
-        //A kezelő a KÖZPONTI mellé kerül, nem helyette: a taskStore-nak is tudnia kell
-        //az új hivatkozásról. Korábban itt egy off() hívás állt, ami a központi kezelőt
-        //levette - és a kilépéskori off() a sajátunkat is, tehát nem maradt semmi.
-        signalRService.on('CommitLinked', refresh);
-        signalRService.on('PrLinked', refresh);
-    });
-
-    async function loadAll() {
-        loading = true;
-        try {
-            await refresh();
-        } finally {
-            loading = false;
-        }
-    }
-
-    //Betöltésjelző nélkül: a SignalR eseményre és a hozzárendelés után is ez fut,
-    //és ott a lista villanása zavaróbb lenne, mint hasznos
-    async function refresh() {
-        try {
-            [commitLinks, prLinks] = await Promise.all([
-                getCommitLinksAsync(projectId),
-                getPrLinksAsync(projectId)
-            ]);
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a git adatok lekérésekor!');
-        }
-    }
 
     function openTaskPicker(kind: 'commit' | 'pr', linkId: string) {
         pendingCommitId = kind === 'commit' ? linkId : '';
@@ -96,21 +67,16 @@
                 notify.success('Pull request hozzárendelve!');
             }
 
-            //A SignalR esemény is újratölt, de arra nem támaszkodunk: egy szétesett
-            //kapcsolat mellett a felhasználó a saját műveletének eredményét ne veszítse el
-            await refresh();
+            //A tárolót a művelet SignalR eseménye frissíti, ezért itt nincs újratöltés.
+            //A szerver a `CommitLinked` / `PrLinked` eseményt a kézi hozzárendelés után is
+            //kiküldi, és a payload a kézi jelölőt is hordozza - tehát a jelölő azonnal
+            //megjelenik, nem csak oldalfrissítésre.
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba a hozzárendeléskor!');
         } finally {
             closeTaskPicker();
         }
     }
-
-    onDestroy(() => {
-        //Kezelővel: csak a sajátunkat vesszük le, a központi marad
-        signalRService.off('CommitLinked', refresh);
-        signalRService.off('PrLinked', refresh);
-    });
 </script>
 
 <div class="git-container">
@@ -120,9 +86,7 @@
     </div>
 
     <div class="git-content">
-        {#if loading}
-            <p class="loading">Betöltés...</p>
-        {:else if error}
+        {#if error}
             <p class="error">{error}</p>
         {:else}
             <!-- Integrációk: a füleken kívül, mert mindkét nézetre vonatkozik -->
@@ -514,7 +478,7 @@
     .assign-btn:hover { background: var(--accent-green-bg); }
     .assign-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .loading, .empty {
+    .empty {
         text-align: center;
         padding: 1rem;
         color: var(--text-muted);

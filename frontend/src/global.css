@@ -473,3 +473,15 @@ a:hover {
         flex-wrap: wrap !important;
     }
 }
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  cursor: pointer;
+}
+
+select:hover {
+    outline: 1px solid var(--accent-blue);
+}

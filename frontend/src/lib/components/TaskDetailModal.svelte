@@ -1,6 +1,15 @@
 ﻿<script lang="ts">
     import { onMount } from 'svelte';
-    import { setActiveTask, taskStore } from '../stores/taskStore';
+    import {
+        setActiveTask, taskStore,
+        handleTaskLabelAdded, handleTaskLabelRemoved,
+        handleTaskAssigneeAdded, handleTaskAssigneeRemoved
+    } from '../stores/taskStore';
+    import { gitLinkStore, linksForTask } from '../stores/gitLinkStore';
+    import {
+        attachmentStore, attachmentsForTask,
+        handleAttachmentUploaded, handleAttachmentDeleted
+    } from '../stores/attachmentStore';
     import { requireRowVersion } from '../api/concurrency';
     import { getTaskByIdAsync } from '../api/taskApi';
     import { updateTaskAsync, deleteTaskAsync, type TaskResponse, addAssigneeAsync, removeAssigneeAsync  } from '../api/taskApi';
@@ -17,7 +26,7 @@
     import type { SprintResponse } from '../api/sprintApi';
     import { teamStore } from '../stores/teamStore';
     import type { MemberResponse } from '../api/teamApi';
-    import { type AttachmentResponse, getTaskPresignedUrlAsync, uploadToStorageAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
+    import { getTaskPresignedUrlAsync, uploadToStorageAsync, confirmTaskUploadAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
@@ -45,6 +54,13 @@
         : null;
     
     $: currentTask = $taskStore.activeTask ?? task;
+
+    //A git hivatkozások a KÖZPONTI tárolóból, `taskId` szerint származtatva - nem a feladat
+    //DTO-jának `commitLinks` / `prLinks` mezőjéből. Ugyanaz az adat korábban két helyen élt
+    //(a feladat sorain és a git nézet lokális listáiban), és a kettő elcsúszhatott egymástól.
+    //A DTO továbbra is hordozza a mezőket, de a felület nem olvassa.
+    $: taskCommits = linksForTask($gitLinkStore.commits, currentTask.id);
+    $: taskPrs = linksForTask($gitLinkStore.prs, currentTask.id);
 
     //A status SZÁRMAZTATOTT érték: az oszlop MapsToStatus-a, amit a feladat DTO-ja
     //denormalizálva tart. Hat különböző esemény tudja megváltoztatni a feladat oszlopát
@@ -81,7 +97,6 @@
     //SignalR-esemény nem jutott el hozzánk (megszakadt kapcsolat, kimaradt üzenet). Enélkül
     //az ütközés-üzenet olyat kért a felhasználótól, amihez nem volt kapcsoló a felületen.
     let conflictDetected = false;
-    let isReloading = false;
 
     //Igaz, ha a szerkesztés kezdete óta valaki más módosította ezt a feladatot - akár a
     //store-ból látjuk, akár a mentés bukásából tudjuk.
@@ -101,28 +116,21 @@
         isEditing = true;
     }
 
-    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a MÁR
-    //BEÍRT értékeit megtartja. Enélkül az ütközés zsákutca volt: az "újra próbálom" ugyanazt
-    //a tokent küldte, tehát másodszor is elbukott.
-    async function acceptRemoteChanges() {
-        if (isReloading) return;
-        isReloading = true;
+    function acknowledgeRemoteChange() {
+        baselineRowVersion = currentTask.rowVersion;
+        conflictDetected = false;
+        error = '';
+    }
+    
+    //A gyakori eset (az esemény megjött) ezt az utat NEM járja be: ott a tároló már friss.
+    async function refreshAfterConflictAsync() {
         try {
-            //Szándékosan a szervertől, nem a store-ból: ha az ütközést a mentés bukásából
-            //tudtuk meg, akkor a store is állott - a SignalR-esemény nem jött meg.
             const fresh = await getTaskByIdAsync(projectId, task.id);
             setActiveTask(fresh);
             task = fresh;
-            baselineRowVersion = fresh.rowVersion;
-            conflictDetected = false;
-            error = '';
-            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
-        } catch (e: any) {
-            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
-            error = message;
-            notify.error(message);
-        } finally {
-            isReloading = false;
+        } catch {
+            //A nyugtázás ettől függetlenül működik; a felhasználó a sávon át továbbléphet.
+            //Egy hibaüzenet itt csak elterelné attól, amit a sáv mond.
         }
     }
     let editTitle = task.title;
@@ -135,8 +143,10 @@
     //ami a helyi eltolás miatt az előző napra mutathatott.
     let editDueDate = toDateTimeLocalValue(task.dueDate);
 
-    let attachments: AttachmentResponse[] = [];
-    $: attachments = (currentTask.attachments ?? []) as AttachmentResponse[];
+    //A csatolmányok a KÖZPONTI tárolóból, `taskId` szerint - nem a feladat DTO-jának
+    //`attachments` mezőjéből. Ugyanaz az adat korábban két helyen élt (a feladat sorain és a
+    //TeamResources listáiban). A DTO továbbra is hordozza a mezőt, de a felület nem olvassa.
+    $: attachments = attachmentsForTask($attachmentStore.attachments, currentTask.id);
     let isUploading = false;
     let uploadProgress = 0;
     let uploadError = '';
@@ -234,8 +244,11 @@
                 //Az ütközés nem technikai hiba, hanem döntési helyzet: a beírt értékek
                 //megmaradnak, és a felhasználó a sávon át veszi át a friss állapotot.
                 conflictDetected = true;
+                //A tároló itt állott lehet (nem jött meg az esemény), ezért egyszer
+                //megkérdezzük a szervert - lásd a függvény kommentjét.
+                await refreshAfterConflictAsync();
                 error = 'Valaki módosította ezt a feladatot, amíg szerkesztetted. '
-                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                      + 'A módosításaid megmaradtak - az „Értettem" után mentheted újra.';
                 notify.warning(error);
                 return;
             }
@@ -298,12 +311,33 @@
         }
     }
 
+    //A NÉGY HOZZÁRENDELÉSI MŰVELET UGYANAZT A TÁROLÓ-KEZELŐT hívja, amit a szerver eseménye
+    //is - nem építi újra a feladat objektumát.
+    //
+    //MIÉRT: a korábbi alak `{ ...task, labelIds: [...task.labelIds, labelId] }` volt, DEDUP
+    //NÉLKÜL. A `SCHEDULE.md` szerint a deduplikáció a *Added kezelőkbe került (TaskStore
+    //reaktivitás javítás - Label és Assignee), de a komponens optimista írása soha nem kapta
+    //meg. Márpedig az `await` ALATT megérkezhet a szerver eseménye: a kezelő akkor már
+    //felvette a címkét, és a rá következő fűzés MÁSODSZOR is felveszi.
+    //
+    //A duplikátum két, látszólag független tünetet adott, és mindkettőt a renderelés alakja
+    //magyarázza:
+    //
+    //  - a board kártyája KULCSOLT each blokkot használ (`as labelId (labelId)`), és egy
+    //    duplikált kulcs ott futásidejű hibát dob - a kártya frissítése megszakad, ezért
+    //    CSAK AZ ELSŐ címke jelent meg;
+    //  - a részletnézet chips-listája kulcs nélküli, tehát hibátlanul kirendereli a
+    //    duplikátumot - ott DUPLÁN látszott.
+    //
+    //A hozzárendelt személyeknél ugyanez a hiba megvolt, de nem omlott össze: ott minden
+    //megjelenítés kulcs nélküli, tehát egy duplikátum csak némán kétszer látszott volna.
+    //
+    //A kezelő hívásával az optimista út és az esemény útja AZONOS lett, tehát nem tud
+    //elválni: a dedup, az `activeTask` szinkronja és a lista frissítése egy helyen van.
     async function handleAddLabel(labelId: string) {
         try {
             await addLabelToTaskAsync(projectId, task.id, labelId);
-            const updated = { ...task, labelIds: [...task.labelIds, labelId] };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskLabelAdded({ taskId: task.id, labelId });
             notify.success('Label hozzáadva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag hozzáadásakor!');
@@ -313,9 +347,7 @@
     async function handleRemoveLabel(labelId: string) {
         try {
             await removeLabelFromTaskAsync(projectId, task.id, labelId);
-            const updated = { ...task, labelIds: task.labelIds.filter(id => id !== labelId) };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskLabelRemoved({ taskId: task.id, labelId });
             notify.success('Label eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt a tag eltávolításakor!');
@@ -325,9 +357,7 @@
     async function handleAddAssignee(userId: string) {
         try {
             await addAssigneeAsync(projectId, task.id, userId);
-            const updated = { ...task, assigneeIds: [...task.assigneeIds, userId] };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskAssigneeAdded({ taskId: task.id, userId });
             notify.success('Tag hozzárendelve!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee hozzáadásakor!');
@@ -337,9 +367,7 @@
     async function handleRemoveAssignee(userId: string) {
         try {
             await removeAssigneeAsync(projectId, task.id, userId);
-            const updated = { ...task, assigneeIds: task.assigneeIds.filter(id => id !== userId) };
-            setActiveTask(updated);
-            task = updated;
+            handleTaskAssigneeRemoved({ taskId: task.id, userId });
             notify.success('Tag hozzárendelés eltávolítva!');
         } catch (e: any) {
             notify.error(e.response?.data ?? e.message ?? 'Hiba történt az assignee eltávolításakor!');
@@ -372,10 +400,11 @@
 
                 // 3. Confirm
                 const uploaded = await confirmTaskUploadAsync(projectId, task.id, { storageKey });
-                
-                //const updatedTask = { ...currentTask, attachments: [...(currentTask.attachments ?? []), uploaded] };
-                //setActiveTask(updatedTask);
-                //task = updatedTask;
+
+                //A tárolóba a megerősítés válaszából vesszük fel. Korábban ez a blokk
+                //KIKOMMENTEZVE állt, tehát a saját feltöltés csak a SignalR esemény hatására
+                //jelent meg - ha az kimaradt, a felhasználó nem látta a saját fájlját.
+                handleAttachmentUploaded(uploaded);
 
                 notify.success(`Fájl feltöltve: ${file.name}`);
 
@@ -448,15 +477,15 @@
                         <button class="tab-btn" class:active={activeDetailTab === 'attachments'}
                             on:click={() => activeDetailTab = 'attachments'}>
                             <Paperclip size={14} /> Csatolmányok
-                            {#if currentTask.attachments?.length > 0}
-                                <span class="tab-badge">{currentTask.attachments.length}</span>
+                            {#if attachments.length > 0}
+                                <span class="tab-badge">{attachments.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'git'}
                             on:click={() => activeDetailTab = 'git'}>
                             <GitBranch size={14} /> Git
-                            {#if currentTask.commitLinks.length + currentTask.prLinks.length > 0}
-                                <span class="tab-badge">{currentTask.commitLinks.length + currentTask.prLinks.length}</span>
+                            {#if taskCommits.length + taskPrs.length > 0}
+                                <span class="tab-badge">{taskCommits.length + taskPrs.length}</span>
                             {/if}
                         </button>
                         <button class="tab-btn" class:active={activeDetailTab === 'comments'}
@@ -550,14 +579,7 @@
                                             {attachment}
                                             {projectId}
                                             taskId={task.id}
-                                            onDelete={(id) => {
-                                                const updatedTask = {
-                                                    ...currentTask,
-                                                    attachments: currentTask.attachments.filter(a => a.id !== id)
-                                                };
-                                                setActiveTask(updatedTask);
-                                                task = updatedTask;
-                                            }}
+                                            onDelete={(id) => handleAttachmentDeleted({ attachmentId: id })}
                                         />
                                     {/each}
                                 </div>
@@ -588,9 +610,9 @@
                     {#if activeDetailTab === 'git'}
                         <div class="section">
                             <h3>Commitok</h3>
-                            {#if currentTask.commitLinks.length > 0}
+                            {#if taskCommits.length > 0}
                                 <div class="git-list">
-                                    {#each currentTask.commitLinks as commit (commit.id)}
+                                    {#each taskCommits as commit (commit.id)}
                                         <div class="git-item">
                                             <CommitCard {commit}>
                                                 <button
@@ -611,9 +633,9 @@
                         </div>
                         <div class="section">
                             <h3>Pull Requestek</h3>
-                            {#if currentTask.prLinks.length > 0}
+                            {#if taskPrs.length > 0}
                                 <div class="git-list">
-                                    {#each currentTask.prLinks as pr (pr.id)}
+                                    {#each taskPrs as pr (pr.id)}
                                         <div class="git-item">
                                             <PrCard {pr}>
                                                 <button
@@ -693,7 +715,10 @@
                             {#each visibleLabels as label}
                                 <div class="label-edit-row">
                                     <LabelCard {label} showDelete={false} />
-                                    {#if currentTask.labelIds.includes(label.id)}
+                                    <!-- A `task` prop, nem a `currentTask`: lásd a hozzárendelési
+                                         kezelők fejkommentjét - a fordító a propra MÉLY
+                                         olvasást generál, a $:-származtatottra felszínest. -->
+                                    {#if task.labelIds.includes(label.id)}
                                         <button class="label-remove-btn"
                                             on:click={() => handleRemoveLabel(label.id)}>
                                             <X size={12} />
@@ -714,7 +739,42 @@
                         {/if}
                     </div>
 
+                    <div class="section">
+                        <div class="section-header">
+                            <h3>Jelenlegi adatok</h3>
+                        </div>
+                        <div class="meta-grid">
+                            <span class="meta-label">Feladat címe</span>
+                            <span class="meta-value">
+                                {task.title}
+                            </span>
+
+                            <span class="meta-label">Leírás</span>
+                            <span class="meta-value">
+                                {task.description?.trim() ? task.description : 'Nincs leírás'}
+                            </span>
+
+                            <span class="meta-label">Prioritás</span>
+                            <span class="meta-value">
+                                {#if task.priority && task.priority !== 'none' && task.priority !== 'normal'}
+                                    <span class="priority priority-{task.priority}">{task.priority}</span>
+                                {:else}
+                                    <span>Nincs</span>
+                                {/if}
+                            </span>
+                            
+                            <span class="meta-label">Becsült idő</span>
+                            <span class="meta-value">{task.estimateInMinutes ? `${task.estimateInMinutes} perc` : 'Nincs becslés'}</span>
+
+                            <span class="meta-label">Határidő</span>
+                            <span class="meta-value">{task.dueDate ? new Date(task.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</span>
+                        </div>
+                    </div>
+
                     <form id="edit-form">
+                        <div class="section-header">
+                            <h3>Szerkesztő űrlap</h3>
+                        </div>
                         <div class="field">
                             <label>Task címe 
                                 <input bind:value={editTitle} placeholder="Maximum 200 karakter">
@@ -747,21 +807,17 @@
                             </label>
                         </div>
                         {#if hasRemoteChange}
-                            <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
-                                 hogy ütközés lesz, nem a hibaüzenetből utólag. -->
                             <div class="remote-change">
                                 <span class="remote-change-text">
-                                    Ezt a feladatot időközben módosította valaki.
+                                    Ezt a feladatot időközben módosította vagy áthelyezte valaki. A fenti <strong>Jelenlegi adatok</strong> szekció már a friss állapotot mutatja. Nézd át hogy mi változott, majd nyomj az <strong>Értettem</strong> gombra hogy menthess.
                                 </span>
-                                <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
-                                        disabled={isReloading}>
-                                    {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                                <button type="button" class="btn-reload" on:click={acknowledgeRemoteChange}>
+                                    Értettem
                                 </button>
                             </div>
                         {/if}
-                        <!--{#if error}<p class="msg error">{error}</p>{/if} -->
-                        {#if success}<p class="msg success">{success}</p>{/if}
-                        <button type="button" class="btn-primary" on:click={() => openConfirm(
+                        <button type="button" class="btn-primary" disabled={hasRemoteChange}
+                                on:click={() => openConfirm(
                             'Módosítások mentése',
                             'Biztosan menteni szeretnéd a változtatásokat?',
                             handleEdit
@@ -1128,7 +1184,14 @@
         transition: background 0.15s;
     }
 
-    .btn-primary:hover { background: var(--accent-blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-blue); color: #fff; }
+
+    .btn-primary:disabled {
+        background: var(--bg-hover);
+        border-color: var(--border-hover);
+        color: var(--text-muted);
+        cursor: not-allowed;
+    }
 
     .btn-add {
         display: flex;
@@ -1307,7 +1370,7 @@
         color: var(--text-muted);
         padding: 0.5rem 0;
     }
-    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló. */
+
     .remote-change {
         display: flex;
         align-items: center;
@@ -1322,12 +1385,10 @@
     }
 
     .remote-change-text {
-        /* A szöveg kitölti a maradék helyet, így a gomb a jobb szélre kerül. */
         flex: 1 1 auto;
         min-width: 0;
     }
 
-    /* A projekt btn-warning mintáját követi: ez figyelmeztetés, nem elsődleges művelet. */
     .btn-reload {
         flex: 0 0 auto;
         background: var(--accent-yellow-bg);

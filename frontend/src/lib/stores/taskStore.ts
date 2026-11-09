@@ -1,6 +1,7 @@
 ﻿import { writable, get } from 'svelte/store';
-import type { TaskResponse, CommitLinkResponse, PrLinkResponse } from '../api/taskApi';
+import type { TaskResponse } from '../api/taskApi';
 import { projectStore } from './projectStore';
+import { insertIfAbsentBy } from './collections';
 
 interface TaskState {
     tasks: TaskResponse[];
@@ -76,7 +77,12 @@ export function handleTaskCreated(payload: {
     const projectId = get(projectStore).activeProject?.id ?? '';
     taskStore.update(state => ({
         ...state,
-        tasks: [...state.tasks, {
+        //A gárda KIHAGY, és nem felülír. Ez itt nem stílus kérdése: az alábbi objektum a
+        //payloadból csak azt tudja, amit az esemény hordoz, a többit HELYKITÖLTŐVEL pótolja
+        //(leírás, státusz, felelősök, címkék). Ha a feladat már a tárolóban van - mert egy
+        //teljes újratöltés pillanatképe tartalmazta -, a felülírás ezekre a helykitöltőkre
+        //cserélné a valódi értékeket.
+        tasks: insertIfAbsentBy(state.tasks, {
             ...payload,
             projectId,
             description: null,
@@ -89,7 +95,7 @@ export function handleTaskCreated(payload: {
             createdByName: '',
             closedAt: null,
             updatedAt: null
-        } as unknown as TaskResponse]
+        } as unknown as TaskResponse, t => t.id)
     }));
 }
 
@@ -182,82 +188,83 @@ export function handleTasksRebalanced(payload: {
     });
 }
 
+/**
+ * A hozzárendelési kezelők a változást MINDKÉT helyre KÜLÖN alkalmazzák: a listára és az aktív
+ * elemre is.
+ *
+ * Korábban az aktív elem a frissített LISTÁBÓL származott újra - és ez egy néma hézagot
+ * hordozott: ha a feladat nincs a listában, a `find` semmit nem ad, a visszaesés pedig a
+ * MÓDOSÍTÁS NÉLKÜLI aktív elemet tartja meg. A változás tehát elvész.
+ *
+ * Ez nem elméleti eset: a lista `scope: "initial"`-lal töltődik, ami a lezárt sprintek
+ * feladatait kiszűri. Egy ilyen feladat részletnézetében a címke- vagy
+ * személy-hozzárendelés nem jelent meg.
+ *
+ * Eddig azért nem látszott, mert a részletnézet a saját írásával (`setActiveTask`) elfedte -
+ * az ugyanis a listától függetlenül állítja az aktív elemet. Amikor a komponens átállt arra,
+ * hogy ugyanezt a kezelőt hívja, a hézag előjött.
+ *
+ * Ugyanaz a tanulság, mint a `setTasks` / `setActiveTask` párnál: az egyiket a másikból
+ * származtatni rejtett függőséget csinál. Mindkettőre külön alkalmazzuk.
+ */
 export function handleTaskAssigneeAdded(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, assigneeIds: t.assigneeIds.includes(payload.userId) 
-                    ? t.assigneeIds 
-                    : [...t.assigneeIds, payload.userId] }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
+    //A deduplikáció azért kell, mert ugyanez a kezelő fut a részletnézet saját műveletére ÉS
+    //a szerver eseményére is - a kettő ugyanazt a hozzárendelést hozhatja.
+    const apply = (t: TaskResponse): TaskResponse => ({
+        ...t,
+        assigneeIds: t.assigneeIds.includes(payload.userId)
+            ? t.assigneeIds
+            : [...t.assigneeIds, payload.userId]
     });
+    applyToTaskAndActive(payload.taskId, apply);
 }
 
+/** @see handleTaskAssigneeAdded */
 export function handleTaskAssigneeRemoved(payload: { taskId: string; userId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, assigneeIds: t.assigneeIds.filter(id => id !== payload.userId) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
-}
-
-export function handleTaskLabelAdded(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, labelIds: t.labelIds.includes(payload.labelId)
-                    ? t.labelIds
-                    : [...t.labelIds, payload.labelId] }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
-}
-
-export function handleTaskLabelRemoved(payload: { taskId: string; labelId: string }) {
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(t =>
-            t.id === payload.taskId
-                ? { ...t, labelIds: t.labelIds.filter(id => id !== payload.labelId) }
-                : t
-        );
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        return { ...state, tasks: updatedTasks, activeTask: updatedActiveTask };
-    });
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        assigneeIds: t.assigneeIds.filter(id => id !== payload.userId)
+    }));
 }
 
 /**
- * Beszúrás vagy felülírás azonosító szerint.
+ * @see handleTaskAssigneeAdded
  *
- * Azért nem egyszerű hozzáfűzés, mert ugyanaz a hivatkozás többször is megérkezhet: 
- * a pull request állapota megváltozik (megnyitás, szerkesztés, lezárás, merge), 
- * és a backend mindannyiszor elküldi a friss sort. 
- * Vak hozzáfűzéssel ugyanaz a kártya többször jelenne meg,
- * ráadásul azonos kulccsal - amitől a Svelte kulcsolt each blokkja hibát dob.
+ * A deduplikáció itt a legélesebb: a board kártyája KULCSOLT each blokkban rendereli a
+ * címkéket, és egy duplikált azonosító ott futásidejű hibát dob - a kártya frissítése
+ * megszakad, tehát csak az első címke jelenik meg. A részletnézet kulcs nélküli listája
+ * ugyanazt a duplikátumot hibátlanul, kétszer kirendereli.
  */
-function upsertById<T extends { id: string }>(links: T[], incoming: T): T[] {
-    const index = links.findIndex(l => l.id === incoming.id);
-    if (index === -1) return [...links, incoming];
+export function handleTaskLabelAdded(payload: { taskId: string; labelId: string }) {
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        labelIds: t.labelIds.includes(payload.labelId)
+            ? t.labelIds
+            : [...t.labelIds, payload.labelId]
+    }));
+}
 
-    const next = [...links];
-    next[index] = incoming;
-    return next;
+/** @see handleTaskAssigneeAdded */
+export function handleTaskLabelRemoved(payload: { taskId: string; labelId: string }) {
+    applyToTaskAndActive(payload.taskId, t => ({
+        ...t,
+        labelIds: t.labelIds.filter(id => id !== payload.labelId)
+    }));
+}
+
+/**
+ * Egy változás alkalmazása a LISTÁRA és az AKTÍV ELEMRE is, egymástól függetlenül.
+ *
+ * A függetlenség a lényeg: az aktív elemet nem a frissített listából származtatjuk, mert a
+ * feladat nem feltétlenül van benne (lezárt sprint, szűkebb hatókör) - lásd
+ * `handleTaskAssigneeAdded`.
+ */
+function applyToTaskAndActive(taskId: string, apply: (t: TaskResponse) => TaskResponse) {
+    taskStore.update(state => ({
+        ...state,
+        tasks: state.tasks.map(t => (t.id === taskId ? apply(t) : t)),
+        activeTask: state.activeTask?.id === taskId ? apply(state.activeTask) : state.activeTask
+    }));
 }
 
 /**
@@ -269,124 +276,14 @@ function syncActiveTask(state: TaskState, tasks: TaskResponse[]): TaskResponse |
     return tasks.find(t => t.id === state.activeTask!.id) ?? state.activeTask;
 }
 
-/**
- * Egy commit vagy PR hivatkozás EGYETLEN taskhoz tartozik: az adatbázisban egy sor, egy TaskId-vel.
- * Ezért az esemény nem csak hozzáad, hanem áthelyez is, a többi taskról leszedjük ugyanazt az azonosítót.
- *
- * Enélkül egy átrendelt commit a régi task alatt is ott maradna az oldal újratöltéséig,
- * vagyis a javítás úgy nézne ki, mintha duplikálta volna az elemet.
- */
-export function handleCommitLinked(payload: CommitLinkResponse & { taskId: string }) {
-    const { taskId, ...commit } = payload;
+//A git hivatkozások kezelői a `gitLinkStore`-ba kerültek át. Ugyanaz az adat korábban KÉT
+//helyen élt - itt, a feladatok sorain, és a `GitView` lokális listáiban -, és minden esemény
+//mindkettőt frissítette. A `TaskResponse` DTO továbbra is hordozza a `commitLinks` és a
+//`prLinks` mezőt, de a felület NEM olvassa: a részletnézet is a `gitLinkStore`-ból
+//származtatja őket a `taskId` szerint.
 
-    taskStore.update(state => {
-        const tasks = state.tasks.map(t => {
-            if (t.id === taskId) return { ...t, commitLinks: upsertById(t.commitLinks, commit) };
-            if (!t.commitLinks.some(l => l.id === commit.id)) return t;
-            return { ...t, commitLinks: t.commitLinks.filter(l => l.id !== commit.id) };
-        });
-
-        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
-    });
-}
-
-/** @see handleCommitLinked */
-export function handlePrLinked(payload: PrLinkResponse & { taskId: string }) {
-    const { taskId, ...pr } = payload;
-
-    taskStore.update(state => {
-        const tasks = state.tasks.map(t => {
-            if (t.id === taskId) return { ...t, prLinks: upsertById(t.prLinks, pr) };
-            if (!t.prLinks.some(l => l.id === pr.id)) return t;
-            return { ...t, prLinks: t.prLinks.filter(l => l.id !== pr.id) };
-        });
-
-        return { ...state, tasks, activeTask: syncActiveTask(state, tasks) };
-    });
-}
-
-export function handleAttachmentUploaded(payload: {
-    attachmentId: string;
-    projectId: string;
-    taskId: string | null;
-    fileName: string;
-    contentType: string;
-    sizeBytes: number;
-    attachmentType: string;
-    uploadedByName: string;
-    version: number;
-    createdAt: string;
-}) {
-    if (!payload.taskId) return;
-    
-    taskStore.update(state => {
-        const newAttachment = {
-            id: payload.attachmentId,
-            projectId: payload.projectId,
-            taskId: payload.taskId,
-            fileName: payload.fileName,
-            contentType: payload.contentType,
-            sizeBytes: payload.sizeBytes,
-            attachmentType: payload.attachmentType,
-            uploadedByName: payload.uploadedByName,
-            version: payload.version,
-            createdAt: payload.createdAt
-        };
-        
-        const updatedTasks = state.tasks.map(task =>
-            task.id === payload.taskId
-                ? {
-                    ...task,
-                    attachments: task.attachments.some(a => a.id === payload.attachmentId)
-                        ? task.attachments  // már megvan → skip
-                        : [...(task.attachments ?? []), newAttachment]
-                }
-                : task
-        );
-
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? {
-                ...state.activeTask,
-                attachments: state.activeTask.attachments.some(a => a.id === payload.attachmentId)
-                    ? state.activeTask.attachments  // már megvan → skip
-                    : [...(state.activeTask.attachments ?? []), newAttachment]
-            }
-            : state.activeTask;
-
-        return {
-            ...state,
-            tasks: updatedTasks,
-            activeTask: updatedActiveTask
-        };
-    });
-}
-
-export function handleAttachmentDeleted(payload: {
-    attachmentId: string;
-    projectId: string;
-    taskId: string | null;
-}) {
-    if (!payload.taskId) return;
-    
-    taskStore.update(state => {
-        const updatedTasks = state.tasks.map(task =>
-            task.id === payload.taskId
-                ? {
-                    ...task,
-                    attachments: task.attachments.filter(a => a.id !== payload.attachmentId)
-                }
-                : task
-        );
-
-        //Active Taskot külön.
-        const updatedActiveTask = state.activeTask?.id === payload.taskId
-            ? updatedTasks.find(t => t.id === payload.taskId) ?? state.activeTask
-            : state.activeTask;
-        
-        return {
-            ...state,
-            tasks: updatedTasks,
-            activeTask: updatedActiveTask
-        };
-    });
-}
+//A csatolmányok kezelői az `attachmentStore`-ba kerültek át, a git hivatkozásokkal együtt.
+//Ugyanaz az adat korábban KÉT helyen élt: itt, a feladatok sorain, és a `TeamResources`
+//lokális listáiban - és a komponens minden eseményre újratöltötte a teljes feladatgráfot.
+//A `TaskResponse` DTO továbbra is hordozza az `attachments` mezőt, de a felület NEM
+//olvassa: a részletnézet is az `attachmentStore`-ból származtatja, `taskId` szerint.

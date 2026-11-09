@@ -45,19 +45,36 @@ namespace ProjectManager.API.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        /// <summary>A PostgreSQL `max_connections` beállítása. Lásd a docker-compose.prod.yml postgres `command`-ját.</summary>
-        private const int PostgresMaxConnections = 100;
-
         /// <summary>
         /// Tartalék kapcsolatok, amelyeket az alkalmazás nem foglalhat le: a Dokploy mentés
         /// `pg_dump`-ja, egy üzemeltetői `psql` munkamenet, és az induláskor futó migráció.
         /// </summary>
         private const int ReservedConnections = 20;
 
+        /// <summary>
+        /// Az adatbázis regisztrálása a példányszámhoz méretezett kapcsolatkészlettel.
+        /// </summary>
+        /// <param name="services">A szolgáltatásgyűjtemény, amelybe a kontextus bekerül.</param>
+        /// <param name="connectionString">
+        /// A kapcsolati sztring. Ha explicit pool méretet tartalmaz, a származtatás kimarad.
+        /// </param>
+        /// <param name="apiReplicas">
+        /// A futó API példányok deklarált száma - a kapcsolatkészlet ennyi felé oszlik.
+        /// </param>
+        /// <param name="postgresMaxConnections">
+        /// A kiszolgáló `max_connections` értéke, a <c>POSTGRES_MAX_CONNECTIONS</c> környezeti
+        /// változóból. Azért paraméter és nem állandó, mert ez a telepítés tulajdonsága, nem a
+        /// kódé: ha az adatbázis saját gépre kerül, a nagyobb kapacitás az egyetlen változó
+        /// átírásával használható ki. Amíg állandó volt, ugyanazt az értéket két helyen - a
+        /// compose `command`-jában és itt - kellett egyszerre átírni, és a kettő elcsúszása
+        /// csendben vagy pool-kimerüléshez, vagy kihasználatlan kapacitáshoz vezetett.
+        /// A hívó felel azért, hogy az érték legalább 1 legyen (lásd a <c>Program.cs</c>-t).
+        /// </param>
         public static IServiceCollection AddDatabase(
             this IServiceCollection services,
             string connectionString,
-            int apiReplicas)
+            int apiReplicas,
+            int postgresMaxConnections)
         {
             //A kapcsolatkészletet a példányszámból származtatjuk, mert a korlát a példányokra
             //NÉZVE összegződik: az Npgsql alapértelmezett 100-as pool FOLYAMATONKÉNT értendő,
@@ -79,8 +96,10 @@ namespace ProjectManager.API.Extensions
             //ismert kulcsot alapértékkel tartalmaz, ezért mindig igazat ad (mérve). Arra
             //épülve a származtatás soha nem futott volna le, és a pool korlátlan maradt volna.
             //
-            //Egyetlen vakfolt: ha az üzemeltető épp az alapértéket (100) írja ki explicit módon.
-            //Ezt felülírjuk - ami helyes is, hiszen pont ez a korlátlan érték, amit kötni akarunk.
+            //Egyetlen vakfolt: ha az üzemeltető épp az Npgsql alapértékét (100) írja ki explicit
+            //módon. Ezt felülírjuk - ami helyes is, hiszen pont ez a korlátlan érték, amit kötni
+            //akarunk. Figyelem: ez az Npgsql POOL alapértéke, és nem azonos a
+            //POSTGRES_MAX_CONNECTIONS alapértékével, még ha a két szám véletlenül egyezik is.
             var defaultMaxPoolSize = new NpgsqlConnectionStringBuilder().MaxPoolSize;
 
             if (builder.MaxPoolSize == defaultMaxPoolSize)
@@ -88,7 +107,7 @@ namespace ProjectManager.API.Extensions
                 //A 10-es alsó korlát azért kell, hogy sok replika mellett se maradjon
                 //használhatatlanul kicsi a készlet.
                 const int minimumPoolSize = 10;
-                var derived = (PostgresMaxConnections - ReservedConnections) / Math.Max(1, apiReplicas);
+                var derived = (postgresMaxConnections - ReservedConnections) / Math.Max(1, apiReplicas);
                 builder.MaxPoolSize = Math.Max(minimumPoolSize, derived);
 
                 //Ha az alsó korlát lép életbe, a `replikaszám × pool + tartalék <= max_connections`
@@ -96,6 +115,10 @@ namespace ProjectManager.API.Extensions
                 //mert különben csendben visszakapnánk a hibát, amit megszüntetni akartunk.
                 //Ilyen példányszámnál a helyes válasz a max_connections emelése, nem a pool
                 //további szűkítése: 10 alatt a készlet már a normál működést akadályozná.
+                //
+                //Ugyanez az ág fogja azt az esetet is, amikor a megadott max_connections eleve
+                //kisebb a tartaléknál: a `derived` ilyenkor nulla vagy negatív, tehát a padló
+                //lép életbe, és a figyelmeztetés megadja a szükséges értéket.
                 if (derived < minimumPoolSize)
                 {
                     var required = (apiReplicas * minimumPoolSize) + ReservedConnections;
@@ -103,10 +126,10 @@ namespace ProjectManager.API.Extensions
                         "A DB kapcsolatkeszlet alsó korlátja ({MinimumPoolSize}) lépett életbe "
                         + "{ApiReplicas} példánynál, ezért a példányok együtt több kapcsolatot "
                         + "kérhetnek, mint a max_connections ({PostgresMaxConnections}). "
-                        + "Emeld a postgres max_connections értékét legalább {Required}-ra "
-                        + "(docker-compose: `postgres -c max_connections=...`), és írd át a "
-                        + "PostgresMaxConnections állandót. {EventType}",
-                        minimumPoolSize, apiReplicas, PostgresMaxConnections, required,
+                        + "Emeld a POSTGRES_MAX_CONNECTIONS értékét legalább {Required}-ra - "
+                        + "ugyanaz a változó állítja a kiszolgáló `max_connections`-át és ezt a "
+                        + "számítást, tehát egy helyen kell átírni. {EventType}",
+                        minimumPoolSize, apiReplicas, postgresMaxConnections, required,
                         "DbPoolFloorReached");
                 }
             }

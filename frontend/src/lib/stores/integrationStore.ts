@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { IntegrationResponse } from '../api/integrationApi';
+import { insertIfAbsentBy } from './collections';
 
 interface IntegrationState {
     integrations: IntegrationResponse[];
@@ -55,12 +56,15 @@ export function handleIntegrationCreated(payload: {
 }) {
     integrationStore.update(state => ({
         ...state,
-        integrations: [...state.integrations, {
+        //A gárda KIHAGY, és nem felülír: a `webhookToken` itt szándékosan üres, mert az
+        //esemény nem hordozza. Ha az integráció már a tárolóban van, a felülírás egy valódi
+        //tokent cserélne üres sztringre.
+        integrations: insertIfAbsentBy(state.integrations, {
             ...payload,
             id: payload.integrationId,
             webhookToken: '',
             updatedAt: payload.createdAt
-        } as unknown as IntegrationResponse]
+        } as unknown as IntegrationResponse, i => i.id)
     }));
 }
 

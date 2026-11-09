@@ -1,6 +1,8 @@
 import * as signalR from '@microsoft/signalr';
 import { tokenStore } from '../stores/tokenStore';
 import { notify } from '../stores/notificationStore';
+import { SignalREventBuffer } from './signalREventBuffer';
+import { SignalRHandlerRegistry } from './signalRHandlerRegistry';
 
 const HUB_URL = import.meta.env.VITE_API_URL 
     ? `${import.meta.env.VITE_API_URL}/hubs/project`
@@ -70,6 +72,24 @@ const reconnectPolicy: signalR.IRetryPolicy = {
 
 class SignalRService {
     private connection: signalR.HubConnection | null = null;
+
+    //A teljes újratöltés alatt érkező események pufferelése. Lásd a signalREventBuffer.ts
+    //fejkommentjét: az újratöltés és az értesítés két külön csatorna, és a később beérkező,
+    //de RÉGEBBI pillanatkép felülírhatná a közben alkalmazott friss módosítást.
+    private readonly eventBuffer = new SignalREventBuffer({
+        onForceFlush: (reason, queued) => {
+            console.warn(
+                `SignalR esemény-puffer kényszerű kiürítése (${reason}), ${queued} esemény. `
+                + 'A betöltés nem fejeződött be időben - az események mostantól azonnal '
+                + 'alkalmazódnak, tehát egy késve beérkező válasz felülírhatja őket.'
+            );
+        }
+    });
+
+    //A kezelő és a pufferelő burkolója közti leképezés - lásd a signalRHandlerRegistry.ts
+    //fejkommentjét. Külön modulban, mert ez a leképezés az, aminek a hibája NÉMA: egy
+    //hatástalan leválasztás nem hibázik, csak a kezelő életben marad.
+    private readonly handlers = new SignalRHandlerRegistry();
 
     //Az újracsatlakozás új connectionId-t ad, amivel a szerveroldali csoport-tagság elveszne.
     //A hívó (AppLayout) ezeken a hookokon keresztül tud visszalépni a projekt csoportjába és újraszinkronizálni az állapotot.
@@ -215,8 +235,41 @@ class SignalRService {
         await this.connection?.invoke('LeaveProject', projectId);
     }
     
+    /**
+     * Feliratkozás egy eseményre.
+     *
+     * A kezelő NEM közvetlenül kerül regisztrálásra: egy burkoló megy be, amely a teljes
+     * újratöltés idejére sorba teszi a hívást (lásd `withEventBuffer`). Pufferelés nélkül a
+     * burkoló azonnal továbbhív, tehát a nem betöltési időszakban a viselkedés változatlan.
+     */
     on(event: string, callback: (...args: any[]) => void) {
-        this.connection?.on(event, callback);
+        const wrapper = (...args: any[]) => {
+            if (!this.eventBuffer.capture(event, () => callback(...args))) {
+                callback(...args);
+            }
+        };
+
+        this.handlers.remember(event, callback, wrapper);
+        this.connection?.on(event, wrapper);
+    }
+
+    /**
+     * A teljes állapot újratöltése, az alatta érkező események pufferelésével.
+     *
+     * A hatókörös alak szándékos, kézi be/ki helyett: a `finally` akkor is kiürít, ha a
+     * betöltés KIVÉTELLEL áll le. Egy elfelejtett kiürítés azt jelentené, hogy a kliens élő
+     * kapcsolattal, de egyetlen frissítés nélkül működik tovább - jelzés nélkül.
+     *
+     * Beágyazható: a külső hatókör befejezéséig nem ürít (a puffer mélységet számol), tehát a
+     * teljes újraszinkronizálás a benne hívott betöltésekkel együtt egy egységet alkot.
+     */
+    async withEventBuffer<T>(load: () => Promise<T>): Promise<T> {
+        this.eventBuffer.begin();
+        try {
+            return await load();
+        } finally {
+            this.eventBuffer.end();
+        }
     }
 
     /**
@@ -233,9 +286,13 @@ class SignalRService {
      */
     off(event: string, callback?: (...args: any[]) => void) {
         if (callback) {
-            this.connection?.off(event, callback);
+            //A SignalR-ben a BURKOLÓ van regisztrálva, nem a kapott kezelő - a leképezés
+            //nélkül ez a hívás némán nem csinálna semmit.
+            this.connection?.off(event, this.handlers.unsubscribeTarget(event, callback));
+            this.handlers.forget(event, callback);
         } else {
             this.connection?.off(event);
+            this.handlers.forgetEvent(event);
         }
     }
 
@@ -243,6 +300,11 @@ class SignalRService {
         this.intentionalDisconnect = true;
         await this.connection?.stop();
         this.connection = null;
+
+        //A regisztrációk a kapcsolattal együtt elvesznek, tehát a burkoló-leképezés is
+        //érvénytelen. Enélkül egy újracsatlakozás után a Map a régi kapcsolat burkolóit
+        //tartaná, és egy `off()` a mostani helyett azokat keresné.
+        this.handlers.clear();
     }
 }
 

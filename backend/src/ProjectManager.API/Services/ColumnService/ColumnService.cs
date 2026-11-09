@@ -120,21 +120,55 @@ namespace ProjectManager.API.Services.ColumnService
             if (column.Position == 0)
                 throw new ValidationException("A Backlog oszlop nem törölhető!");
 
-            var hasTask = await _context.ProjectTasks.AnyAsync(t => t.ColumnId == columnId);
-            if (hasTask)
-                throw new ValidationException("Az oszlop nem törölhető, mert taskok találhatóak benne!");
-
-            //Soft delete
-            column.IsDeleted = true;
-            column.DeletedAt = DateTime.UtcNow;
-
+            //AZ ÜRESSÉG ELLENŐRZÉSE ÉS A TÖRLÉS EGY SOROSÍTOTT TRANZAKCIÓBAN.
+            //
+            //Az invariáns itt nem egy soron van, hanem a sorok KÖZÖTT: "törölt oszlopban nincs
+            //feladat". Az oszlop konkurencia-tokenje ezt nem védi, mert az ütköző írás nem az
+            //oszlopon, hanem a ProjectTasks-on történik - az oszlop sora érintetlen marad,
+            //tehát a token egyezik, és a mentés simán lefut.
+            //
+            //Enélkül a következő sorrend lehetséges: megállapítjuk, hogy az oszlop üres, egy
+            //másik felhasználó behúz bele egy feladatot, mi pedig törölt oszlopot hagyunk egy
+            //feladattal. Az eredmény egy feladat, ami SEHOL nem látszik: a tábla csak a nem
+            //törölt oszlopokat kérdezi le, a backlogban pedig nincs benne, mert van ColumnId-je.
+            //
+            //A Serializable izolációs szint pont erre való: a PostgreSQL észleli, hogy a mi
+            //olvasásunk (üres-e az oszlop) és a másik tranzakció írása egymást kizáró
+            //sorrendet feltételez, és az egyiket megszakítja. Ugyanaz az eszköz, mint a
+            //sprint aktiválásánál - ott is egy több sorra vonatkozó szabályt védünk.
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             try
             {
+                var hasTask = await _context.ProjectTasks.AnyAsync(t => t.ColumnId == columnId);
+                if (hasTask)
+                    throw new ValidationException("Az oszlop nem törölhető, mert taskok találhatóak benne!");
+
+                //Soft delete
+                column.IsDeleted = true;
+                column.DeletedAt = DateTime.UtcNow;
+
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
+                await transaction.RollbackAsync();
                 throw new ConflictException("Az oszlop időközben módosult, kérjük próbáld újra!");
+            }
+            //A szerializációs ütközés a felhasználó szempontjából ugyanaz a helyzet, amit a
+            //fenti ellenőrzés elkap: valaki épp ugyanezen az oszlopon dolgozott. A generikus
+            //ág alatt viszont 500 lenne, mert a middleware minden nem AppException-t belső
+            //hibaként képez le.
+            catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new ConflictException(
+                    "Az oszlop időközben módosult, kérjük próbáld újra!");
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
 
             try
@@ -350,7 +384,8 @@ namespace ProjectManager.API.Services.ColumnService
             if (column == null)
                 throw new NotFoundException("Oszlop nem található");
 
-            _context.Entry(column).OriginalValues["xmin"] = dto.RowVersion;
+            _context.RequireRowVersion(column, dto.RowVersion,
+                "Az oszlop időközben módosult, kérjük próbáld újra!");
 
             if (dto.Name != null) column.Name = dto.Name;
             if(dto.MapsToStatus != null) column.MapsToStatus = dto.MapsToStatus;

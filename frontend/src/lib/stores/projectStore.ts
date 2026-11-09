@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 
 import type { ProjectResponse } from '../api/projectApi';
 import type { LabelResponse } from '../api/labelApi';
+import { insertIfAbsentBy } from './collections';
 
 interface ProjectState {
     projects: ProjectResponse[];
@@ -94,7 +95,8 @@ export function handleLabelCreated(payload: {
 }) {
     projectStore.update(state => ({
         ...state,
-        labels: [...state.labels, payload as unknown as LabelResponse]
+        labels: insertIfAbsentBy(
+            state.labels, payload as unknown as LabelResponse, l => l.id)
     }));
 }
 

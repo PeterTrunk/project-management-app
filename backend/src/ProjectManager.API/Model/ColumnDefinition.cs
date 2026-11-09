@@ -12,6 +12,8 @@ namespace ProjectManager.API.Model
         public int Position {  get; set; }
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
         public uint xmin { get; set; }
 
         public Board Board { get; set; } = null!;

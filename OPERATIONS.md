@@ -249,8 +249,20 @@ nem csak egy szám átírása.
 | 2 (jelenlegi) | **Redis kötelező** | Redis backplane | 40 |
 | 3 | **Redis kötelező** | Redis backplane | 26 |
 
-A pool képlete: `(max_connections - 20) / API_REPLICAS`. A 20 tartalék a mentés `pg_dump`-ja,
-egy üzemeltetői `psql` munkamenet és az induláskor futó migráció számára van.
+A pool képlete: `(POSTGRES_MAX_CONNECTIONS - 20) / API_REPLICAS`. A 20 tartalék a mentés
+`pg_dump`-ja, egy üzemeltetői `psql` munkamenet és az induláskor futó migráció számára van.
+A fenti táblázat a `POSTGRES_MAX_CONNECTIONS` alapértékére (100) szól.
+
+**A `max_connections` egyetlen helyen állítható.** A `POSTGRES_MAX_CONNECTIONS` egyszerre adja
+a postgres konténer indítási paraméterét és a fenti származtatást, tehát a kettő nem tud
+elcsúszni egymástól. Beállítás nélkül mindkettő 100, ami a PostgreSQL alapértelmezése.
+
+Ez akkor válik érdekessé, ha az adatbázis **saját gépre** kerül. Ma a 100 nem a rendszer
+tulajdonsága, hanem azé a gépé, amelyen az adatbázis az alkalmazással együtt fut — és amíg ez a
+szám adott, az `API_REPLICAS` emelése nem ad kapacitást, csak **felosztja ugyanazt a 100
+kapcsolatot** (lásd a táblázat harmadik sorát: három példánynál már csak 26 jut egyre). Külön
+adatbázis-kiszolgálón a `POSTGRES_MAX_CONNECTIONS` emelése az, ami a példányszám növelését
+tényleges kapacitássá fordítja.
 
 ### Mire kell figyelni
 
@@ -265,9 +277,13 @@ egy üzemeltetői `psql` munkamenet és az induláskor futó migráció számár
   példányonként számolnak. Mindig az `API_REPLICAS`-t állítsd át.
 - **Nyolc példány felett** a 10-es alsó pool-korlát miatt a példányok együtt több kapcsolatot
   kérhetnének, mint a `max_connections`. Ilyenkor az indulási napló egy `WRN` sorban
-  (`DbPoolFloorReached`) megadja a szükséges értéket. A `max_connections` a compose fájlokban
-  **kiírva** áll (`postgres -c max_connections=100`), és a kódban egy állandó párja van
-  (`ServiceCollectionExtensions.PostgresMaxConnections`) — **a kettőt együtt kell átírni.**
+  (`DbPoolFloorReached`) megadja a szükséges értéket, amit a `POSTGRES_MAX_CONNECTIONS`-ba kell
+  beírni. Ugyanez a `WRN` sor szól akkor is, ha a megadott érték eleve kisebb a 20-as
+  tartaléknál.
+- **A `POSTGRES_MAX_CONNECTIONS` emelése után a postgres konténert újra kell indítani**, nem
+  csak az API-t: a `max_connections` indítási paraméter, menet közben nem vehető fel. Ha csak az
+  API indul újra, a pool a nagyobb értékből származtat, a kiszolgáló viszont még a régi korláttal
+  fut — és ez pont az a `53300: too many clients already` hiba, amit a méretezés megszüntet.
 
 ### A napló ellenőrzése deploy után
 

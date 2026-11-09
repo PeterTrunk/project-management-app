@@ -212,6 +212,9 @@ namespace ProjectManager.API.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("WipLimit")
                         .HasColumnType("integer");
 

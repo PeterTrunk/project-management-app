@@ -11,7 +11,6 @@
 
     import { notify } from '../stores/notificationStore';
     import { requireRowVersion } from '../api/concurrency';
-    import LabelCard from './LabelCard.svelte';
 
     export let isUpdateBoardOpen = false;
     export let projectId: string;
@@ -60,7 +59,6 @@
     let baselineRowVersion: number | null = null;
     //A 409 maga is bizonyíték a távoli módosításra, akkor is, ha az esemény nem jutott el.
     let conflictDetected = false;
-    let isReloading = false;
 
     //Az alapvonal a megnyitáskor fixálódik - a modal csak nyitott állapotban létezik.
     $: if (activeBoard && baselineRowVersion === null) {
@@ -69,33 +67,26 @@
 
     $: hasRemoteChange = !!activeBoard
         && (conflictDetected || (baselineRowVersion !== null && activeBoard.rowVersion !== baselineRowVersion));
+    
+    function acknowledgeRemoteChange() {
+        if (!activeBoard) return;
+        baselineRowVersion = activeBoard.rowVersion;
+        conflictDetected = false;
+        error = '';
+    }
 
-    //A felhasználó kifejezett döntése: átveszi a friss állapotot alapvonalként, de a már
-    //beírt értékeit megtartja. Szándékosan a szervertől kérdez, nem a store-ból: ha az
-    //ütközést a mentés bukásából tudtuk meg, akkor a store is állott.
-    async function acceptRemoteChanges() {
-        if (isReloading || !activeBoard) return;
-        isReloading = true;
+    //Csak akkor fordulunk szerverhez, ha az ütközést a MENTÉS BUKÁSÁBÓL tudtuk meg: ilyenkor
+    //az esemény nem jutott el hozzánk, tehát a tároló is állott, és a nyugtázás ugyanazt az
+    //elavult tokent léptetné alapvonalra. A gyakori eset (az esemény megjött) ezt kihagyja.
+    async function refreshAfterConflictAsync() {
+        if (!activeBoard) return;
         try {
             const boards = await getBoardsAsync(projectId);
             setBoards(boards);
             const fresh = boards.find(b => b.id === activeBoard!.id);
-            if (!fresh) {
-                error = 'Ezt a boardot időközben törölték.';
-                notify.error(error);
-                return;
-            }
-            setActiveBoard(fresh);
-            baselineRowVersion = fresh.rowVersion;
-            conflictDetected = false;
-            error = '';
-            notify.info('A friss állapot betöltve. A módosításaid megmaradtak - mentheted.');
-        } catch (e: any) {
-            const message = e.response?.data ?? e.message ?? 'Nem sikerült betölteni a változásokat!';
-            error = message;
-            notify.error(message);
-        } finally {
-            isReloading = false;
+            if (fresh) setActiveBoard(fresh);
+        } catch {
+            //A nyugtázás ettől függetlenül működik.
         }
     }
 
@@ -119,8 +110,9 @@
         } catch (e: any) {
             if (e.response?.status === 409) {
                 conflictDetected = true;
+                await refreshAfterConflictAsync();
                 error = 'Valaki módosította ezt a boardot, amíg szerkesztetted. '
-                      + 'A módosításaid megmaradtak - a „Változások betöltése" után mentheted újra.';
+                      + 'A módosításaid megmaradtak - az „Értettem" után mentheted újra.';
                 notify.warning(error);
                 return;
             }
@@ -167,9 +159,34 @@
         <button class="close-btn" type="button" on:click={closeModal}>
             <X size={16} />
         </button>
+        <h1>{activeBoard?.name}</h1>
+        <h2 class="edit-title">Szerkesztés</h2>
+        <div class="section">
+            <div class="section-header">
+                <h3>Jelenlegi adatok</h3>
+            </div>
+            <div class="meta-grid">
+                <span class="meta-label">Board neve</span>
+                <span class="meta-value">
+                    {activeBoard?.name}
+                </span>
+
+                <span class="meta-label">Leírás</span>
+                <span class="meta-value">
+                    {activeBoard?.description ? activeBoard?.description : 'Nincs' }
+                </span>
+
+                <span class="meta-label">Alapvető board?</span>
+                <span class="meta-value">
+                    {activeBoard?.isDefault ? 'Igen' : 'Nem'}
+                </span>
+            </div>
+        </div>
 
         <form on:submit|preventDefault={handleUpdateBoard}>
-            <h1>Board módosítása</h1>
+            <div class="section-header">
+                <h3>Szerkesztő űrlap</h3>
+            </div>
             <label>Board neve:
                 <input type="text" bind:value={name} placeholder="Board neve">
             </label>
@@ -185,15 +202,12 @@
                 <button style="visibility: hidden;" >Dummy</button>
             </label>
             {#if hasRemoteChange}
-                <!-- Nem blokkoló jelzés: a felhasználó a MENTÉS ELŐTT tudja meg,
-                     hogy ütközés lesz, nem a hibaüzenetből utólag. -->
                 <div class="remote-change">
                     <span class="remote-change-text">
-                        Ezt a boardot időközben módosította valaki.
+                        Ezt a boardot időközben módosította valaki. A fenti <strong>Jelenlegi adatok</strong> szekció már a friss állapotot mutatja. Nézd át hogy mi változott, majd nyomj az <strong>Értettem</strong> gombra hogy menthess.
                     </span>
-                    <button type="button" class="btn-reload" on:click={acceptRemoteChanges}
-                            disabled={isReloading}>
-                        {isReloading ? 'Betöltés…' : 'Változások betöltése'}
+                    <button type="button" class="btn-reload" on:click={acknowledgeRemoteChange}>
+                        Értettem
                     </button>
                 </div>
             {/if}
@@ -203,7 +217,7 @@
             {#if success}
                 <p id="success">{success}</p>
             {/if}
-            <button type="submit">Módosítások mentése</button>
+            <button type="submit" disabled={hasRemoteChange}>Módosítások mentése</button>
         </form>
     </div>
 </div>
@@ -245,16 +259,60 @@
         position: relative;
     }
 
+    .modal-content h1 {
+        margin-top: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+        word-break: break-word;
+    }
+
     @media (max-width: 480px) {
         .modal-content {
             padding: var(--card-padding);
         }
     }
 
+    .section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .meta-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.35rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+    }
+
+    .meta-label { color: var(--text-muted); white-space: nowrap; }
+    .meta-value { color: var(--text-primary); font-weight: 500; }
+
+    h3 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-muted);
+    }
+
     .header-actions {
         position: absolute;
         top: 0.75rem;
         left: 0.75rem;
+    }
+
+    .edit-title {
+        font-size: 1.1rem;
+        color: var(--text-primary);
+        margin: 0;
     }
 
     .delete-btn {
@@ -294,11 +352,7 @@
         color: var(--text-primary);
         background: var(--bg-hover);
     }
-
-    form h1 {
-        margin-top: 2rem;
-    }
-
+    
     form {
         display: flex;
         flex-direction: column;
@@ -342,9 +396,16 @@
         transition: background 0.15s;
     }
 
-    button[type="submit"]:hover {
+    button[type="submit"]:hover:not(:disabled) {
         background: var(--accent-blue);
         color: #fff;
+    }
+
+    button[type="submit"]:disabled {
+        background: var(--bg-hover);
+        border-color: var(--border-hover);
+        color: var(--text-muted);
+        cursor: not-allowed;
     }
 
     button {
@@ -358,8 +419,6 @@
     #success { color: var(--accent-green); }
     #failed  { color: var(--accent-red); white-space: pre-line; word-break: break-word; }
 
-    /* Az egyidejű szerkesztés jelzése: figyelemfelhívó, de nem blokkoló.
-       Ugyanaz a minta, mint a feladat részletnézeténél. */
     .remote-change {
         display: flex;
         align-items: center;

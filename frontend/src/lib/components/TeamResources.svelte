@@ -1,33 +1,33 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-    import { getProjectAttachmentsAsync, getProjectPresignedUrlAsync, uploadToStorageAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
-    import { getTasksAsync, type TaskResponse } from '../api/taskApi';
-    import type { AttachmentResponse } from '../api/attachmentApi';
+    import { getProjectPresignedUrlAsync, uploadToStorageAsync, confirmProjectUploadAsync } from '../api/attachmentApi';
     import AttachmentCard from './AttachmentCard.svelte';
-    import { signalRService } from '../services/signalRService';
+    import {
+        attachmentStore, handleAttachmentUploaded, handleAttachmentDeleted,
+        projectAttachments, attachmentsByTask
+    } from '../stores/attachmentStore';
 
     import { notify } from '../stores/notificationStore';
 
     export let projectId: string;
 
-    let taskAttachments: { task: TaskResponse, attachments: AttachmentResponse[] }[] = [];
-
-    let attachments: AttachmentResponse[] = [];
-    let loading = true;
     let isUploading = false;
     let uploadProgress = 0;
-    
-    onMount(async () => {
-        await loadAttachments();
 
-        signalRService.on('AttachmentUploaded', onAttachmentChanged);
-        signalRService.on('AttachmentDeleted', onAttachmentChanged);
-    });
+    //A csatolmányok a KÖZPONTI tárolóból jönnek, a projekt betöltésével együtt - a két
+    //feliratkozás és a lokális lista megszűnt. A komponens korábban minden
+    //csatolmány-eseményre újratöltötte a projekt csatolmányait ÉS a teljes feladatgráfot
+    //(hatókör nélkül, tehát a lezárt sprintek minden feladatával); ez volt a réteg legdrágább
+    //ismétlődő kérése.
+    //
+    //A feladat kulcsa a CSATOLMÁNY soráról jön, nem a feladatlistából: az a lezárt sprintek
+    //feladatait nem tartalmazza, tehát a csoportok fejléce üresen maradna azoknál.
+    $: attachments = projectAttachments($attachmentStore.attachments);
+    $: taskAttachments = attachmentsByTask($attachmentStore.attachments);
 
-    //Nevesítve, mert a leiratkozásnak hivatkoznia kell rá: kezelő nélküli off() az
-    //esemény központi kezelőjét is levenné, és kilépés után nem maradna semmi.
-    function onAttachmentChanged(data: { projectId: string }) {
-        if (data.projectId === projectId) loadAttachments();
+    //A kártya a sikeres törlés után hívja. A tárolóból vesszük ki, nem lokális listából:
+    //a SAJÁT törlésünk így azonnal látszik, a rá érkező esemény pedig idempotens.
+    function handleAttachmentDeletedLocally(attachmentId: string) {
+        handleAttachmentDeleted({ attachmentId });
     }
 
     let searchQuery = '';
@@ -42,26 +42,6 @@
             a.fileName.toLowerCase().includes(searchQuery.toLowerCase())
         )
     })).filter(ta => ta.attachments.length > 0);
-
-    async function loadAttachments() {
-        loading = true;
-        try {
-            // Projekt szintű attachmentek
-            attachments = await getProjectAttachmentsAsync(projectId);
-            
-            // Task szintű attachmentek
-            const tasks = await getTasksAsync(projectId);
-            const tasksWithAttachments = tasks.filter(t => t.attachments && t.attachments.length > 0);
-            taskAttachments = tasksWithAttachments.map(t => ({
-                task: t,
-                attachments: t.attachments
-            }));
-        } catch (e: any) {
-            notify.error(e.response?.data ?? e.message ?? 'Hiba történt a fájlok lekérésekor!');
-        } finally {
-            loading = false;
-        }
-    }
 
     async function handleFileUpload(e: Event) {
         const input = e.target as HTMLInputElement;
@@ -88,7 +68,10 @@
 
                 // 3. Confirm
                 const uploaded = await confirmProjectUploadAsync(projectId, { storageKey });
-                attachments = [uploaded, ...attachments];
+                //A tárolóba a megerősítés VÁLASZÁBÓL vesszük fel, nem az eseményre várva:
+                //egy szétesett kapcsolat mellett se veszítse el a felhasználó a saját
+                //feltöltését. A rá érkező eseményt a tároló gárdája nem duplikálja.
+                handleAttachmentUploaded(uploaded);
                 notify.success(`Fájl feltöltve: ${file.name}`);
 
             } catch (e: any) {
@@ -101,10 +84,6 @@
         input.value = '';
     }
 
-    onDestroy(() => {
-        signalRService.off('AttachmentUploaded', onAttachmentChanged);
-        signalRService.off('AttachmentDeleted', onAttachmentChanged);
-    });
 </script>
 
 <div class="team-resources-container">
@@ -150,7 +129,7 @@
                             {attachment}
                             {projectId}
                             taskId={null}
-                            onDelete={(id) => attachments = attachments.filter(a => a.id !== id)}
+                            onDelete={handleAttachmentDeletedLocally}
                         />
                     {/each}
                 </div>
@@ -164,21 +143,16 @@
                 {#if filteredTaskAttachments.length === 0}
                     <p class="empty">Nincs találat a keresési feltételekre</p>
                 {:else}
-                    {#each filteredTaskAttachments as { task, attachments: taskFiles }}
+                    {#each filteredTaskAttachments as group (group.taskId)}
                         <div class="task-group">
-                            <h4 class="task-key">{task.taskKey} {task.title}</h4>
+                            <h4 class="task-key">{group.taskKey} {group.taskTitle}</h4>
                             <div class="attachments-list">
-                                {#each taskFiles as attachment (attachment.id)}
+                                {#each group.attachments as attachment (attachment.id)}
                                     <AttachmentCard
                                         {attachment}
                                         {projectId}
-                                        taskId={task.id}
-                                        onDelete={(id) => {
-                                            taskAttachments = taskAttachments.map(ta => ({
-                                                ...ta,
-                                                attachments: ta.attachments.filter(a => a.id !== id)
-                                            })).filter(ta => ta.attachments.length > 0);
-                                        }}
+                                        taskId={group.taskId}
+                                        onDelete={handleAttachmentDeletedLocally}
                                     />
                                 {/each}
                             </div>

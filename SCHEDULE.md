@@ -5193,11 +5193,29 @@ lusta, csak annyit nyit, amennyi kell -, hanem a **hibamód cseréje**: pool-tim
 replikán (lokális, újrapróbálható) a globális kiesés helyett. Ha az üzemeltető explicit
 `Maximum Pool Size`-t ad a `DATABASE_URL`-ben, az nyer.
 
-A `max_connections` ezért **kiírva** áll a compose fájlokban (`postgres -c max_connections=100`),
-pedig a 100 az alapértelmezés: a kód ebből az értékből származtat, és egy implicit alapértékre
-hivatkozó feltevést nem lehet átnézni. Pontosan ez a hibaosztály okozta a korábbi csendes
-hibákat - a konfiguráció két helyen élt. Nyolc replika felett a 10-es alsó pool-korlát miatt az
-összefüggés már nem állna; ilyenkor egy `WRN` sor megadja a szükséges `max_connections` értéket.
+**A `max_connections` is deklarált érték.** Az első változat a compose fájlokban **kiírta** a
+`max_connections=100`-at, a kód pedig ugyanezt a számot állandóként tartotta - azért kiírva,
+hogy ne egy implicit alapértékre hivatkozó feltevés legyen. Ez a felét oldotta meg a
+problémának: az érték **átnézhető** lett, de továbbra is **két helyen élt**, és a két hely
+együtt-átírása emberi fegyelem kérdése maradt. Pontosan az a hibaosztály, amit a példányszámnál
+épp megszüntettünk.
+
+A `POSTGRES_MAX_CONNECTIONS` ezért ugyanazt a mintát követi, mint az `API_REPLICAS`: egyetlen
+változó adja a postgres konténer indítási paraméterét **és** a fenti származtatást. Beállítás
+nélkül mindkettő 100, tehát egy változtatás nélküli telepítés viselkedése azonos a korábbival.
+
+Az érdemi haszon nem a mai üzemben van, hanem abban, amit lehetővé tesz: ma a 100 nem a rendszer
+tulajdonsága, hanem azé a gépé, amelyen az adatbázis az alkalmazással együtt fut. Amíg ez a szám
+be volt égetve, az `API_REPLICAS` emelése nem adott kapacitást, csak **felosztotta ugyanazt a
+100 kapcsolatot** - három példánynál már csak 26 jutott egyre. Külön adatbázis-kiszolgálón
+viszont ez a korlát jóval magasabb, és onnantól ez a változó az, ami a példányszám növelését
+tényleges kapacitássá fordítja. A vízszintes skálázás így nem egy kódbeli állandón akad el.
+
+Nyolc replika felett a 10-es alsó pool-korlát miatt az összefüggés már nem állna; ilyenkor egy
+`WRN` sor (`DbPoolFloorReached`) megadja a szükséges értéket. Ugyanez a sor szól akkor is, ha a
+megadott `max_connections` eleve kisebb a 20-as tartaléknál - a `derived` ilyenkor nulla vagy
+negatív lenne, és egy 0-as pool az Npgsql-ben **korlátlant** jelent, vagyis pont az ellenkezőjét
+annak, amit a méretezés ad. Ezt a padló fogja el.
 
 **Hidegindítás.** A `ConnectionMultiplexer.Connect()` szinkron és eager, `abortConnect=false`
 nélkül. Mérve: ha a Redis még nem fogad kapcsolatot, az API `RedisConnectionException`-nel el

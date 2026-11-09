@@ -128,6 +128,21 @@ try
     if (apiReplicas < 1)
         throw new InvalidOperationException(
             $"Az API_REPLICAS legalább 1 legyen (most {apiReplicas})!");
+    
+    var maxConnectionsRaw = Environment.GetEnvironmentVariable("POSTGRES_MAX_CONNECTIONS");
+    var postgresMaxConnections = 100;
+
+    if (!string.IsNullOrWhiteSpace(maxConnectionsRaw)
+        && !int.TryParse(maxConnectionsRaw, out postgresMaxConnections))
+    {
+        throw new InvalidOperationException(
+            $"A POSTGRES_MAX_CONNECTIONS nem értelmezhető számként: '{maxConnectionsRaw}'. "
+            + "Hagyd üresen az alapértelmezett 100-hoz, vagy adj meg egy egész számot!");
+    }
+
+    if (postgresMaxConnections < 1)
+        throw new InvalidOperationException(
+            $"A POSTGRES_MAX_CONNECTIONS legalább 1 legyen (most {postgresMaxConnections})!");
     var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:5173";
     var apiBaseUrl = Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5178";
 
@@ -239,7 +254,7 @@ try
     builder.Host.UseSerilog();
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddDatabase(connectionString, apiReplicas);
+    builder.Services.AddDatabase(connectionString, apiReplicas, postgresMaxConnections);
     builder.Services.AddJwtAuthentication(new JwtOptions
     {
         Secret = jwtSecret,

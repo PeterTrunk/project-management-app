@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
     import { getActivitiesAsync, type ActivityResponse } from '../api/activityApi';
-    import { activityStore, setPagedActivities } from '../stores/activityStore';
+    import { activityStore } from '../stores/activityStore';
     import { toUtcIsoString, toLocalDateKey } from '../utils/dates';
 
     import { 

@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ProjectManager.API.Common.Constants;
+using ProjectManager.API.Common.Data;
 using ProjectManager.API.Common.Options;
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
@@ -109,13 +110,22 @@ namespace ProjectManager.API.Services.AttachmentService
 
         public async Task<List<AttachmentResponseDto>> GetProjectAttachmentsAsync(Guid projectId)
         {
+            //A projekt ÖSSZES csatolmánya, a feladatokhoz tartozókkal együtt - a korábbi
+            //`a.TaskId == null` szűrő kivezetve. A "projekt-szintű" nézet innentől kliensoldali
+            //szűrés (`taskId === null`), ugyanaz a feltétel, ami az adatbázisban is.
+            //
+            //Indok: a hívó eddig a projekt-szintű csatolmányok MELLETT a teljes feladatgráfot is
+            //letöltötte, csak hogy a feladatokhoz tartozókat megkapja - és ezt minden
+            //csatolmány-eseményre újra. Egy lekérés ugyanazt adja, feladatgráf nélkül.
+            //Ugyanaz a szerkezet, mint a git hivatkozások egyesített lekérésénél.
             var attachments = await _context.Attachments
-                .Where(a => a.ProjectId == projectId && a.TaskId == null)
+                .Where(a => a.ProjectId == projectId)
                 .Include(a => a.UploadedBy)
+                .Include(a => a.ProjectTask)
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync();
 
-            return attachments.Select(MapToDto).ToList();
+            return attachments.Select(a => MapToDto(a)).ToList();
         }
 
         public async Task<List<AttachmentResponseDto>> GetTaskAttachmentsAsync(Guid projectId, Guid taskId)
@@ -126,7 +136,7 @@ namespace ProjectManager.API.Services.AttachmentService
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync();
 
-            return attachments.Select(MapToDto).ToList();
+            return attachments.Select(a => MapToDto(a)).ToList();
         }
 
         public async Task<AttachmentResponseDto> UploadProjectAttachmentAsync(Guid projectId, Stream fileStream, string fileName, string contentType, long sizeBytes)
@@ -342,33 +352,61 @@ namespace ProjectManager.API.Services.AttachmentService
                     dto.StorageKey, log.CreatedById, _currentUserService.UserId);
                 throw new ForbiddenException("Ezt a feltöltést nem te kezdeményezted!");
             }
-
-            //Attachment betöltése UploadedBy-jal
+            
             var uploadedBy = await _context.Users
                 .FirstOrDefaultAsync(u => u.Id == _currentUserService.UserId);
 
-            //Log megjelölése confirmált-ként
-            log.Confirmed = true;
+            //A MEGERŐSÍTÉS IGÉNYLÉSE, feltételes UPDATE-tel.
+            //
+            //Két dolgot ad a korábbi `log.Confirmed = true` értékadás helyett.
+            //
+            //Egyrészt ATOMI: a fenti `if (log.Confirmed)` ellenőrzés önmagában olvasás és
+            //írás között állt, tehát két egyidejű megerősítés mindkettő szabadnak látta a
+            //naplósort. Az invariánst eddig csak az `Attachments.StorageKey` egyedi indexe
+            //tartotta, félrevezető hibaüzenettel. Ez a feltételes UPDATE ugyanaz a minta,
+            //mint a refresh token rotációja: a döntés az érintett sorok SZÁMÁBÓL születik.
+            //
+            //Másrészt AZONNAL KIÍRÓDIK, és ez a lényegesebb. Korábban a jelölés a
+            //`SaveChanges`-re várt, a hibaágon pedig a `ChangeTracker.Clear()` UTÁN kapott
+            //értéket - vagyis egy leválasztott entitáson, tehát sosem jutott el az
+            //adatbázisba. A takarító feladat a meg nem erősített naplósorokat a hozzájuk
+            //tartozó FÁJLLAL együtt viszi el: egy élő csatolmány fájlja tűnt volna el a
+            //tárolóból 15 perccel később, miközben az adatbázis szerint minden rendben van.
+            var claimed = await _context.PresignedUrlLogs
+                .Where(p => p.Id == log.Id && !p.Confirmed)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Confirmed, true));
+
+            if (claimed == 0)
+            {
+                _logger.LogWarning(
+                    "Egyidejű megerősítési kísérlet | StorageKey: {StorageKey} | UserId: {UserId}",
+                    dto.StorageKey, _currentUserService.UserId);
+                throw new ConflictException("Ez a fájl már meg lett erősítve!");
+            }
 
             //Verzió meghatározás + mentés retry logikával
-            var maxRetries = 3;
-            Attachment? attachment = null;
+            const int maxRetries = 3;
 
-            for (int attempt = 0; attempt < maxRetries; attempt++)
+            //A MENTETT csatolmány. Szándékosan külön a ciklusban épített példánytól: ha a
+            //`SaveChanges` dob, a példány létezik, de nincs az adatbázisban - egy közös
+            //változó tehát "sikernek" látszana. A siker egyetlen jele az, hogy a mentés visszatért.
+            Attachment? saved = null;
+            Exception? lastConflict = null;
+
+            try
             {
-                try
+                for (int attempt = 0; attempt < maxRetries; attempt++)
                 {
                     var existingCount = await _context.Attachments
                         .Where(a => a.ProjectId == projectId && a.FileName == log.FileName)
                         .CountAsync();
 
-                    attachment = new Attachment
+                    var candidate = new Attachment
                     {
                         Id = Guid.NewGuid(),
                         ProjectId = projectId,
                         TaskId = effectiveTaskId,
                         UploadedById = _currentUserService.UserId,
-                        UploadedBy = uploadedBy!,
                         FileName = log.FileName,
                         ContentType = log.ContentType,
                         SizeBytes = objectInfo.Size,
@@ -378,35 +416,83 @@ namespace ProjectManager.API.Services.AttachmentService
                         CreatedAt = DateTime.UtcNow
                     };
 
-                    await _context.Attachments.AddAsync(attachment);
-                    await _context.SaveChangesAsync();
-                    break;
+                    try
+                    {
+                        await _context.Attachments.AddAsync(candidate);
+                        await _context.SaveChangesAsync();
+                        saved = candidate;
+                        break;
+                    }
+                    catch (Exception ex) when (ConcurrencyErrors.IsConflict(ex))
+                    {
+                        //A verziószám ütközött: egy másik feltöltés ugyanazzal a fájlnévvel
+                        //kapta meg ugyanazt a sorszámot. Új kísérlet friss darabszámmal.
+                        _context.ChangeTracker.Clear();
+                        lastConflict = ex;
+                    }
                 }
-                catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("unique") == true)
+
+                if (saved == null)
                 {
-                    _context.ChangeTracker.Clear();
-                    log.Confirmed = true; //reset after clear
-                    if (attempt == maxRetries - 1)
-                        throw new ValidationException("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
+                    _logger.LogWarning(lastConflict,
+                        "A csatolmány mentése {Attempts} kísérlet után sem sikerült | StorageKey: {StorageKey}",
+                        maxRetries, dto.StorageKey);
+
+                    throw new ValidationException("Nem sikerült menteni a fájlt, kérjük próbálja újra!");
                 }
             }
+            catch
+            {
+                //AZ IGÉNYLÉS VISSZAVONÁSA. Enélkül a megerősítés ténye megmaradna egy
+                //csatolmány nélküli naplósoron: a takarító feladat ezért nem vinné el a
+                //fájlt (megerősítettnek látja), a felhasználó viszont újra sem tudná
+                //megerősíteni (az igénylés nem szabad) - a fájl örökre a tárolóban ragadna.
+                //A visszavonással a helyzet ugyanaz, mint egy meg nem erősített feltöltésnél:
+                //a takarító elviszi, és az újrapróbálkozás járható.
+                await _context.PresignedUrlLogs
+                    .Where(p => p.Id == log.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.Confirmed, false));
 
-            _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment!.StorageKey, attachment.FileName);
+                throw;
+            }
+
+            //Innentől biztos, hogy a sor az adatbázisban van: a `saved` csak a visszatért
+            //mentés után kap értéket, és a null esetet a fenti ág már kizárta.
+            var attachment = saved;
+
+            _logger.LogInformation("Fájl feltöltés megerősítve | StorageKey: {StorageKey} | FileName: {FileName}", attachment.StorageKey, attachment.FileName);
+
+            //A feladat kulcsa és címe a válaszba ÉS az eseménybe is kell. A frissen létrehozott
+            //soron a navigáció nincs bekötve, ezért külön olvassuk - ugyanúgy, ahogy a feltöltő
+            //nevét. Enélkül a két payload eltérő teljességű lenne, és a kliens oldali
+            //"ha már megvan, hagyd ki" gárda épp a SZEGÉNYEBBET tartaná meg.
+            var task = attachment.TaskId.HasValue
+                ? await _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == attachment.TaskId.Value)
+                : null;
 
             try
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
+                    //A payload alakja AZONOS a REST válasz DTO-jával (AttachmentResponseDto),
+                    //mezőnévre is. Korábban az `attachmentId` tért el az `Id`-tól, és a feladat
+                    //kulcsa hiányzott - a kliens ezért nem tudta közvetlenül használni, hanem
+                    //az esemény hatására újratöltötte a projekt csatolmányait ÉS a teljes
+                    //feladatgráfot.
                     .SendAsync("AttachmentUploaded", new
                     {
-                        attachmentId = attachment.Id,
+                        id = attachment.Id,
                         projectId = attachment.ProjectId,
                         taskId = attachment.TaskId,
+                        taskKey = task?.TaskKey,
+                        taskTitle = task?.Title,
                         fileName = attachment.FileName,
                         contentType = attachment.ContentType,
                         sizeBytes = attachment.SizeBytes,
                         attachmentType = attachment.AttachmentType,
-                        uploadedByName = attachment.UploadedBy?.DisplayName ?? "",
+                        //A navigáció szándékosan nincs bekötve - a nevet a külön betöltött
+                        //példányból adjuk, különben az esemény üres nevet hordozna.
+                        uploadedByName = uploadedBy?.DisplayName ?? "",
                         version = attachment.Version,
                         createdAt = attachment.CreatedAt
                     });
@@ -436,7 +522,9 @@ namespace ProjectManager.API.Services.AttachmentService
                 _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
             }
 
-            return MapToDto(attachment);
+            //A nevet külön adjuk át: a navigációs tulajdonság ezen az úton szándékosan
+            //nincs bekötve - lásd a megerősítés igénylésénél az indoklást.
+            return MapToDto(attachment, uploadedBy?.DisplayName, task);
         }
 
         public async Task<AttachmentResponseDto?> GetAttachmentMetadataAsync(Guid projectId, Guid attachmentId)
@@ -455,18 +543,31 @@ namespace ProjectManager.API.Services.AttachmentService
             return MapToDto(attachment);
         }
 
-        private AttachmentResponseDto MapToDto(Attachment attachment)
+        /// <param name="attachment">A leképezendő csatolmány.</param>
+        /// <param name="uploadedByName">
+        /// A feltöltő neve, ha a hívó külön tudja. Azokon az utakon kell, ahol a navigációs
+        /// tulajdonság szándékosan nincs bekötve - lásd a megerősítésnél az indoklást.
+        /// </param>
+        /// <param name="task">
+        /// A feladat, ha a hívó külön betöltötte. Ugyanaz a minta, mint az
+        /// <paramref name="uploadedByName"/>-nél: ahol a navigáció nincs bekötve (frissen
+        /// létrehozott sor), ott a hívó adja - különben a kulcs némán üres lenne.
+        /// </param>
+        private AttachmentResponseDto MapToDto(
+            Attachment attachment, string? uploadedByName = null, ProjectTask? task = null)
         {
             return new AttachmentResponseDto
             {
                 Id = attachment.Id,
                 ProjectId = attachment.ProjectId,
                 TaskId = attachment.TaskId,
+                TaskKey = task?.TaskKey ?? attachment.ProjectTask?.TaskKey,
+                TaskTitle = task?.Title ?? attachment.ProjectTask?.Title,
                 FileName = attachment.FileName,
                 ContentType = attachment.ContentType,
                 SizeBytes = attachment.SizeBytes,
                 AttachmentType = attachment.AttachmentType,
-                UploadedByName = attachment.UploadedBy?.DisplayName ?? "Ismeretlen",
+                UploadedByName = uploadedByName ?? attachment.UploadedBy?.DisplayName ?? "Ismeretlen",
                 Version = attachment.Version,
                 CreatedAt = attachment.CreatedAt
             };

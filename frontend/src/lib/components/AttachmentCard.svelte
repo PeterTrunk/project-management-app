@@ -10,7 +10,7 @@
     export let projectId: string;
     export let taskId: string | null = null;
     export let onDelete: (attachmentId: string) => void = () => {};
-    
+
     function getAttachmentIcon(attachmentType: string): any {
         switch (attachmentType) {
             case 'image':       return Image;

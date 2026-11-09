@@ -2,8 +2,10 @@ import { signalRService } from './signalRService';
 import { handleTaskCreated, handleTaskUpdated, handleTaskMoved, 
          handleTaskDeleted, handleTasksRebalanced, handleTaskAssigneeAdded,
          handleTaskAssigneeRemoved, handleTaskLabelAdded, handleTaskLabelRemoved,
-         handleCommitLinked, handlePrLinked, handleAttachmentUploaded, 
-         handleAttachmentDeleted, taskStore } from '../stores/taskStore';
+         taskStore } from '../stores/taskStore';
+import { handleAttachmentUploaded, handleAttachmentDeleted } from '../stores/attachmentStore';
+import { handleCommitLinked, handlePrLinked } from '../stores/gitLinkStore';
+import { handleCommentAdded, handleCommentDeleted } from '../stores/commentStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
 import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
          handleColumnCreated, handleColumnUpdated, handleColumnDeleted,
@@ -53,6 +55,14 @@ export function registerSignalREvents() {
     signalRService.on('TaskLabelRemoved', handleTaskLabelRemoved);
     signalRService.on('CommitLinked', handleCommitLinked);
     signalRService.on('PrLinked', handlePrLinked);
+
+    // Comment events
+    //Korábban ezt a kettőt a CommentSection kezelte, lokálisan. A központi regisztráció
+    //azért jobb, mert a kommentek tárolója a részletnézet bezárása után is friss marad -
+    //és eltűnik az a csapda, hogy két egyidejű komponens-példány egymás kezelőjét szedi le.
+    signalRService.on('CommentAdded', handleCommentAdded);
+    signalRService.on('CommentDeleted', handleCommentDeleted);
+
 
     // Sprint events
     signalRService.on('SprintCreated', handleSprintCreated);
@@ -120,6 +130,8 @@ export function unregisterSignalREvents() {
     signalRService.off('TaskLabelRemoved');
     signalRService.off('CommitLinked');
     signalRService.off('PrLinked');
+    signalRService.off('CommentAdded');
+    signalRService.off('CommentDeleted');
     signalRService.off('SprintCreated');
     signalRService.off('SprintUpdated');
     signalRService.off('SprintDeleted');

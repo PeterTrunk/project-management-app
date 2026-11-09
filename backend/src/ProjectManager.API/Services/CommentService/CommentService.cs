@@ -63,14 +63,22 @@ namespace ProjectManager.API.Services.CommentService
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
+                    //A payload alakja AZONOS a REST válasz DTO-jával (CommentResponseDto),
+                    //mezőnévre is. Korábban eltért (`commentId`, `createdById`,
+                    //`createdByName`), és az `UpdatedAt` is kimaradt - a kliens ezért nem
+                    //tudta közvetlenül használni, hanem az esemény hatására ÚJRATÖLTÖTTE az
+                    //egész kommentlistát. Egy néma feltevés is járt vele: az `UpdatedAt`-ot a
+                    //`CreatedAt`-ból lehetett volna származtatni, mert komment-szerkesztés ma
+                    //nem létezik - de ez a rövidítés az első szerkesztési funkcióval elromlik.
                     .SendAsync("CommentAdded", new
                     {
+                        id = comment.Id,
                         taskId,
-                        commentId = comment.Id,
+                        userId = comment.UserId,
+                        userName = user.DisplayName,
                         body = comment.Body,
-                        createdById = comment.UserId,
-                        createdByName = user.DisplayName,
                         createdAt = comment.CreatedAt,
+                        updatedAt = comment.UpdatedAt
                     });
             }
             catch (Exception ex)
