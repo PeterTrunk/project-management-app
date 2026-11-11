@@ -38,6 +38,11 @@ namespace ProjectManager.API.Services.Auth
         //A Verify a hash-ből olvassa ki a faktort, ezért a korábban mentett jelszavak továbbra is érvényesek maradnak.
         private const int BcryptWorkFactor = 12;
 
+        //A rotációs lánc követésének korlátja - lásd ResolveRotationRaceAsync.
+        //A lánc csak akkor nyúlik, ha a türelmi ablakon belül többször is rotáltak,
+        //a korlát azért van, hogy sérült adat se okozhasson végtelen ciklust.
+        private const int MaxRotationRaceHops = 5;
+
         //A bejelentkezés gyakori művelet, ezért magasabb, mint a jelszó-visszaállítás 15-ös IP-korlátja.
         //Egy közös kijárat mögötti csapatnak bőven elég, egy címlista végigpróbálásához viszont kevés.
         private const int LoginIpAttemptsPerWindow = 50;
@@ -246,12 +251,13 @@ namespace ProjectManager.API.Services.Auth
                 _logger.LogWarning("Regisztrációs kísérlet foglalt email-lel | EmailRef: {EmailRef}", EmailRef(dto.Email));
                 throw new ValidationException("Ez az email már foglalt!");
             }
-
-
-            User user = new User();
-            user.Email = dto.Email;
-            user.DisplayName = dto.DisplayName;
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password, BcryptWorkFactor);
+            
+            User user = new()
+            {
+                Email = dto.Email,
+                DisplayName = dto.DisplayName,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password, BcryptWorkFactor)
+            };
 
             //Az elfogadás a felhasználóval EGY mentésben, tehát egy tranzakcióban keletkezik:
             //elfogadás nélküli fiók még részleges hiba esetén sem jöhet létre.
@@ -300,16 +306,60 @@ namespace ProjectManager.API.Services.Auth
 
         public async Task<AuthResponseDto> RefreshTokenAsync(string refreshToken)
         {
+            //A rotáció EGYETLEN tranzakcióban fut, és ez nem a félbeszakadás ellen véd.
+            //Enélkül a versenyben vesztes fél beleláthatna a félkész állapotba - a régi sor
+            //már visszavonva, az utód sora még nincs meg, és egy ártatlan versenyhelyzetet
+            //visszajátszásnak minősítene. Tranzakcióval a vesztes vagy a módosítás ELŐTTI
+            //állapotot látja (és akkor a saját UPDATE-je vár a sorzárolásra), vagy a teljes,
+            //utódostul kiírt utániat.
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var revokedAt = DateTime.UtcNow;
+
+            //A token értékét ELŐRE előállítjuk, hogy a visszavonás és az utódra mutató
+            //hivatkozás ugyanabban az UPDATE-ben íródjon ki: így nincs olyan pillanat,
+            //amikor a sor visszavont, de a lánc nem követhető.
+            var newTokenValue = SecureTokenGenerator.Generate();
+
             //Feltételes UPDATE, csak akkor állítja is_revoked = true-ra
             //ha is_revoked még false, ettől atomikus: nem lehet race condition!
             var rowsAffected = await _context.RefreshTokens
                 .Where(rf => rf.Token == refreshToken && !rf.IsRevoked)
-                .ExecuteUpdateAsync(s => s.SetProperty(rf => rf.IsRevoked, true));
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(rf => rf.IsRevoked, true)
+                    .SetProperty(rf => rf.RevokedAt, revokedAt)
+                    .SetProperty(rf => rf.ReplacedByToken, newTokenValue));
 
             if (rowsAffected == 0)
             {
-                await HandleFailedRotationAsync(refreshToken);
-                throw new ValidationException("Token nem található vagy már felhasználva!");
+                //Nem minden sikertelen rotáció visszajátszás - lásd ResolveRotationRaceAsync.
+                var successor = await ResolveRotationRaceAsync(refreshToken);
+
+                if (successor == null)
+                {
+                    await HandleFailedRotationAsync(refreshToken);
+                    //A riasztás írásait meg kell tartani, ezért a dobás ELŐTT commitolunk:
+                    //a using rollbackje különben visszacsinálná a visszavonásokat.
+                    await transaction.CommitAsync();
+                    throw new ValidationException("Token nem található vagy már felhasználva!");
+                }
+
+                var raceUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == successor.UserId);
+
+                if (raceUser == null)
+                    throw new NotFoundException("Felhasználó nem található!");
+
+                if (!raceUser.IsActive)
+                    throw new ValidationException("Token nem található vagy már felhasználva!");
+
+                _logger.LogWarning(
+                    "Rotációs versenyhelyzet feloldva, az élő utód munkamenetét adjuk vissza " +
+                    "| UserId: {UserId}", raceUser.Id);
+
+                //A tranzakció itt commit nélkül, visszagörgetéssel zárul - és ez helyes:
+                //ezen az ágon a feltételes UPDATE nulla sort érintett, tehát nincs mit menteni.
+                return BuildAuthResponse(raceUser, successor);
             }
 
             //Token adatainak lekérése
@@ -318,6 +368,8 @@ namespace ProjectManager.API.Services.Auth
 
             if (refreshTokenEntry!.ExpiresAt < DateTime.UtcNow)
             {
+                //A visszavonás maradjon érvényben: a lejárt tokent ne lehessen újra bemutatni
+                await transaction.CommitAsync();
                 _logger.LogWarning("Lejárt refresh token használata | UserId: {UserId}", refreshTokenEntry.UserId);
                 throw new ValidationException("Token lejárt!");
             }
@@ -331,35 +383,92 @@ namespace ProjectManager.API.Services.Auth
             //Letiltott fiók a meglévő refresh tokenjével sem újíthat meg munkamenetet
             if (!user.IsActive)
             {
+                //Itt is: a visszavonás a védelem része, nem szabad visszagörgetni
+                await transaction.CommitAsync();
                 _logger.LogWarning("Token megújítási kísérlet letiltott fiókkal | UserId: {UserId}", user.Id);
                 throw new ValidationException("Token nem található vagy már felhasználva!");
             }
 
-            var accessToken = CreateToken(user);
-
             var newRefreshTokenEntry = new RefreshToken
             {
                 ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.RefreshTokenLifetimeMinutes),
-                Token = SecureTokenGenerator.Generate(),
+                Token = newTokenValue,
                 UserId = user.Id,
                 RememberMe = refreshTokenEntry.RememberMe
             };
 
             await _context.RefreshTokens.AddAsync(newRefreshTokenEntry);
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             _logger.LogInformation("Token megújítva | UserId: {UserId}", user.Id);
 
-            return new AuthResponseDto
-            {
-                DisplayName = user.DisplayName,
-                Token = accessToken,
-                Email = user.Email,
-                UserId = user.Id,
-                RefreshToken = newRefreshTokenEntry.Token,
-                RememberMe = refreshTokenEntry.RememberMe
-            };
+            return BuildAuthResponse(user, newRefreshTokenEntry);
         }
+
+        /// <summary>
+        /// Egy sikertelen rotáció nem feltétlenül visszajátszás.
+        ///
+        /// A kliens több ablaka UGYANAZT a sütit küldi, a megújítás-összevonás
+        /// (<c>refreshTokenOnce</c>) viszont ablakonként. Ha két fül egyszerre újít meg -
+        /// jellemzően alvásból ébredéskor, amikor minden lemaradt időzítő egyszerre sül el -,
+        /// akkor az egyik nyer, a másik ugyanazzal a MÁR visszavont tokennel érkezik. Ez
+        /// ártatlan verseny, nem támadás; riasztásként kezelve a felhasználót minden
+        /// eszközéről kiléptetné. Ugyanez az indoklás áll a <c>LogoutAsync</c> törlése mögött.
+        ///
+        /// A megkülönböztetés az IDŐ: a verseny ezredmásodperceken belül zajlik, 
+        /// a lopott token visszajátszása jellemzően órákkal később. 
+        /// A türelmi ablakon belül visszavont token ezért versenynek számít, az azon kívüli visszajátszásnak.
+        ///
+        /// Ára van, és ezt ki kell mondani: az a támadó, aki az ablakon BELÜL játszik vissza, riasztás nélkül kap munkamenetet. 
+        /// Ezért rövid az ablak, és ezért nem környezeti változó.
+        ///
+        /// A vesztes fél az utódot kapja vissza, ÚJABB rotáció nélkül: 
+        /// így a fülek ugyanarra a tokenre futnak ki, és nem indul azonnal újabb verseny.
+        /// </summary>
+        /// <returns>Az élő utód, ha versenyhelyzet volt; <c>null</c>, ha visszajátszás-gyanú.</returns>
+        private async Task<RefreshToken?> ResolveRotationRaceAsync(string presentedToken)
+        {
+            var graceCutoff = DateTime.UtcNow.AddSeconds(-_jwtOptions.RefreshRotationGraceSeconds);
+
+            var current = await _context.RefreshTokens
+                .AsNoTracking()
+                .FirstOrDefaultAsync(rf => rf.Token == presentedToken);
+
+            for (var hop = 0; hop < MaxRotationRaceHops; hop++)
+            {
+                //A RevokedAt hiánya a mező bevezetése előtti sorokat jelenti: azokról nem
+                //tudjuk, mikor lettek visszavonva, tehát a szigorúbb ágra kerülnek.
+                if (current == null
+                    || !current.IsRevoked
+                    || current.RevokedAt == null
+                    || current.RevokedAt < graceCutoff
+                    || current.ReplacedByToken == null)
+                    return null;
+
+                var successor = await _context.RefreshTokens
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(rf => rf.Token == current.ReplacedByToken);
+
+                if (successor != null && !successor.IsRevoked)
+                    return successor.ExpiresAt < DateTime.UtcNow ? null : successor;
+
+                //Az utódot időközben SZINTÉN rotálták: a láncot tovább követjük
+                current = successor;
+            }
+
+            return null;
+        }
+
+        private AuthResponseDto BuildAuthResponse(User user, RefreshToken refreshTokenEntry) => new()
+        {
+            DisplayName = user.DisplayName,
+            Token = CreateToken(user),
+            Email = user.Email,
+            UserId = user.Id,
+            RefreshToken = refreshTokenEntry.Token,
+            RememberMe = refreshTokenEntry.RememberMe
+        };
 
         public async Task LogoutAsync(string refreshToken)
         {
@@ -599,9 +708,13 @@ namespace ProjectManager.API.Services.Auth
         //Jelszóváltás, jelszó-visszaállítás és 2FA módosítás után kinyirja a munkameneteket.
         private async Task<int> RevokeAllRefreshTokensAsync(Guid userId)
         {
+            var revokedAt = DateTime.UtcNow;
+
             return await _context.RefreshTokens
                 .Where(rt => rt.UserId == userId && !rt.IsRevoked)
-                .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.IsRevoked, true));
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(rt => rt.IsRevoked, true)
+                    .SetProperty(rt => rt.RevokedAt, revokedAt));
         }
 
         public async Task<UserProfileDto> ChangeUserProfileAsync(Guid userId, UpdateProfileDto dto)

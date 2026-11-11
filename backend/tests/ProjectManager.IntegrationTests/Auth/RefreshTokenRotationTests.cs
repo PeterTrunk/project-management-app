@@ -47,6 +47,20 @@ namespace ProjectManager.IntegrationTests.Auth
             return await verify.RefreshTokens.Where(rt => rt.UserId == userId).ToListAsync();
         }
 
+        /// <summary>
+        /// A visszavonás időpontját a türelmi ablakon KÍVÜLRE tolja. Időben ez a különbség a
+        /// két eset között: a rotációs versenyhelyzet ezredmásodperceken belül zajlik, a
+        /// lopott token visszajátszása jellemzően jóval később.
+        /// </summary>
+        private async Task BackdateRevocationAsync(string token)
+        {
+            await using var ctx = CreateContext();
+            await ctx.RefreshTokens
+                .Where(rt => rt.Token == token)
+                .ExecuteUpdateAsync(s => s.SetProperty(
+                    rt => rt.RevokedAt, DateTime.UtcNow.AddMinutes(-5)));
+        }
+
         //A normál út
 
         [Fact]
@@ -62,8 +76,15 @@ namespace ProjectManager.IntegrationTests.Auth
             Assert.NotEqual(login.RefreshToken, rotated.RefreshToken);
 
             var tokens = await TokensAsync(user.Id);
-            Assert.True(tokens.Single(t => t.Token == login.RefreshToken).IsRevoked);
+            var old = tokens.Single(t => t.Token == login.RefreshToken);
+
+            Assert.True(old.IsRevoked);
             Assert.False(tokens.Single(t => t.Token == rotated.RefreshToken).IsRevoked);
+
+            //A visszavonás ideje és az utódra mutató hivatkozás együtt íródik ki: enélkül a
+            //versenyhelyzet nem lenne megkülönböztethető a visszajátszástól.
+            Assert.NotNull(old.RevokedAt);
+            Assert.Equal(rotated.RefreshToken, old.ReplacedByToken);
         }
 
         [Fact]
@@ -100,6 +121,10 @@ namespace ProjectManager.IntegrationTests.Auth
             var login = await LoginAsync(sut, user);
             var rotated = await sut.RefreshTokenAsync(login.RefreshToken);
 
+            //A bemutatás a türelmi ablakon KÍVÜLRŐL érkezik: ez a valódi visszajátszás
+            //alakja, nem a két fül ezredmásodperces versenye - lásd lentebb.
+            await BackdateRevocationAsync(login.RefreshToken);
+
             //A jogos felhasználó a RÉGI tokenjével próbálkozik, mert a támadó megelőzte
             await Assert.ThrowsAsync<ValidationException>(
                 () => sut.RefreshTokenAsync(login.RefreshToken));
@@ -121,6 +146,7 @@ namespace ProjectManager.IntegrationTests.Auth
             var login = await LoginAsync(sut, user);
             var rotated = await sut.RefreshTokenAsync(login.RefreshToken);
 
+            await BackdateRevocationAsync(login.RefreshToken);
             await Assert.ThrowsAsync<ValidationException>(() => sut.RefreshTokenAsync(login.RefreshToken));
 
             //A támadó tokenje sem működik többé
@@ -163,6 +189,106 @@ namespace ProjectManager.IntegrationTests.Auth
             await sut.LogoutAsync(login.RefreshToken);
 
             Assert.Empty(await TokensAsync(user.Id));
+        }
+
+        //A rotációs versenyhelyzet
+
+        /// <summary>
+        /// A visszajátszás ellenpárja. A felhasználó KÉT füle ugyanazt a sütit küldi, és a
+        /// megújítás-összevonás fülenkénti, tehát egyszerre is megújíthatnak - jellemzően
+        /// alvásból ébredéskor, amikor minden lemaradt időzítő egyszerre sül el. Az egyik
+        /// nyer, a másik a már visszavont tokennel érkezik. Riasztásként kezelve a felhasználó
+        /// MINDEN eszközéről kiesne, pedig nem történt támadás.
+        /// </summary>
+        [Fact]
+        public async Task RotatingTwiceWithinTheGraceWindow_ReturnsTheLiveSuccessor()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context);
+
+            var login = await LoginAsync(sut, user);
+            var winner = await sut.RefreshTokenAsync(login.RefreshToken);
+
+            //A vesztes fül: ugyanaz a token, ezredmásodpercekkel később
+            var loser = await sut.RefreshTokenAsync(login.RefreshToken);
+
+            //Nem újabb rotáció: a két fül UGYANARRA a tokenre fut ki, tehát nem indul
+            //azonnal újabb verseny a következő megújításkor.
+            Assert.Equal(winner.RefreshToken, loser.RefreshToken);
+            Assert.False(string.IsNullOrEmpty(loser.Token));
+
+            //A vesztes ág nem hozott létre új sort, és nem vont vissza semmit
+            var tokens = await TokensAsync(user.Id);
+            Assert.Equal(2, tokens.Count);
+            Assert.False(tokens.Single(t => t.Token == winner.RefreshToken).IsRevoked);
+        }
+
+        /// <summary>
+        /// A lényegi különbség a riasztáshoz képest: a versenyhelyzet NEM érinti a többi
+        /// eszközt. Ez az a regresszió, ami miatt a türelmi ablak egyáltalán kell.
+        /// </summary>
+        [Fact]
+        public async Task TheRotationRace_LeavesOtherSessionsAlone()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context);
+
+            var phone = await LoginAsync(sut, user);
+            var desktop = await LoginAsync(sut, user);
+
+            await sut.RefreshTokenAsync(phone.RefreshToken);
+            await sut.RefreshTokenAsync(phone.RefreshToken);
+
+            var stillValid = await sut.RefreshTokenAsync(desktop.RefreshToken);
+            Assert.False(string.IsNullOrEmpty(stillValid.Token));
+        }
+
+        /// <summary>
+        /// Ha a lánc tovább nőtt - az utódot is rotálták az ablakon belül -, a lemaradt fül a
+        /// lánc VÉGÉT kapja, nem egy időközben érvénytelenné vált közbülső tokent.
+        /// </summary>
+        [Fact]
+        public async Task TheRace_FollowsTheRotationChainToTheLiveToken()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context);
+
+            var login = await LoginAsync(sut, user);
+            var first = await sut.RefreshTokenAsync(login.RefreshToken);
+            var second = await sut.RefreshTokenAsync(first.RefreshToken);
+
+            //A legelső tokennel érkező, kétszeresen lemaradt fül
+            var late = await sut.RefreshTokenAsync(login.RefreshToken);
+
+            Assert.Equal(second.RefreshToken, late.RefreshToken);
+        }
+
+        /// <summary>
+        /// A türelmi ablak nem élesztheti újra egy már visszavont munkamenetet: ha a lánc nem
+        /// vezet ÉLŐ tokenhez, marad a szigorú ág.
+        /// </summary>
+        [Fact]
+        public async Task TheRace_DoesNotResurrectARevokedSuccessor()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context, user.Id);
+
+            var login = await LoginAsync(sut, user);
+            await sut.RefreshTokenAsync(login.RefreshToken);
+
+            //A jelszóváltás minden munkamenetet visszavon - az utódot is
+            await sut.ChangePasswordAsync(user.Id, new ChangePasswordDto
+            {
+                CurrentPassword = Password,
+                NewPassword = "Masik-Jelszo-456"
+            });
+
+            await Assert.ThrowsAsync<ValidationException>(
+                () => sut.RefreshTokenAsync(login.RefreshToken));
         }
 
         //Rate limit kulcsok
