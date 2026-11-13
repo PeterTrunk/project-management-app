@@ -825,6 +825,29 @@ namespace ProjectManager.API.Services.Auth
                 throw new ForbiddenException("Hibás jelszó!");
             }
 
+            //A jelszó egymagában nem elég: ez a művelet SZÜNTETI MEG a második faktort,
+            //tehát utána a fiókot már csak a jelszó védi, és a támadó saját titkot
+            //állíthatna be. Egy ellopott munkamenet + kiszivárgott jelszó párosnak ezért
+            //itt is el kell buknia a kódon - ugyanaz az érvelés, mint a fióktörlésnél.
+            //Nem rontja a visszanyerhetőséget: a kikapcsolás végpontja csak bejelentkezve
+            //érhető el, a bejelentkezés pedig aktív második faktor mellett amúgy is kódot kér.
+            if (user.IsTotpEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(dto.TotpToken))
+                    throw new ValidationException("A kikapcsoláshoz add meg a kétfaktoros kódot is!");
+
+                if (string.IsNullOrEmpty(user.TotpSecret))
+                    throw new ValidationException("TOTP nincs beállítva!");
+
+                var totp = new Totp(Base32Encoding.ToBytes(ReadTotpSecret(user.TotpSecret)));
+
+                if (!totp.VerifyTotp(dto.TotpToken, out _, VerificationWindow.RfcSpecifiedNetworkDelay))
+                {
+                    _logger.LogWarning("Sikertelen 2FA kikapcsolás - érvénytelen TOTP | UserId: {UserId}", userId);
+                    throw new ForbiddenException("Érvénytelen kétfaktoros kód!");
+                }
+            }
+
             user.TotpSecret = null;
             user.IsTotpEnabled = false;
             await _context.SaveChangesAsync();

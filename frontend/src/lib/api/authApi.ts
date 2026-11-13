@@ -110,10 +110,13 @@ export async function verifyTotpAsync(token: string): Promise<void> {
     await apiClient.post('/auth/totp/verify', { token });
 }
 
-export async function disableTotpAsync(currentPassword: string): Promise<void> {
+export async function disableTotpAsync(currentPassword: string, totpToken?: string): Promise<void> {
     if (!currentPassword) throw new Error('A jelenlegi jelszó megadása kötelező!');
 
-    await apiClient.post('/auth/totp/disable', { currentPassword });
+    await apiClient.post('/auth/totp/disable', {
+        currentPassword,
+        totpToken: totpToken || null
+    });
 }
 
 export async function deleteAccountAsync(currentPassword: string, totpToken?: string): Promise<void> {

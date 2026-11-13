@@ -21,6 +21,10 @@
     const dispatch = createEventDispatcher<{ sessionInvalidated: { reason: string } }>();
 
     let disableTotpPassword = '';
+    let disableTotpToken = '';
+
+    //A kikapcsolás a jelszót ÉS a kódot is kéri - lásd AuthService.DisableTotpAsync
+    $: canDisableTotp = disableTotpPassword.length > 0 && disableTotpToken.length === 6;
 
     let resendSent = false;
 
@@ -157,20 +161,23 @@
         error = '';
         success = '';
         disableTotpPassword = '';
+        disableTotpToken = '';
         totpStep = 'disable';
     }
 
     function cancelDisableTotp() {
         error = '';
         disableTotpPassword = '';
+        disableTotpToken = '';
         totpStep = 'idle';
     }
 
     async function handleDisableTotp() {
         error = '';
         try {
-            await disableTotpAsync(disableTotpPassword);
+            await disableTotpAsync(disableTotpPassword, disableTotpToken);
             disableTotpPassword = '';
+            disableTotpToken = '';
             isTotpEnabled = false;
             totpStep = 'idle';
             success = '2FA kikapcsolva!';
@@ -339,8 +346,9 @@
                         {#if isTotpEnabled && totpStep === 'disable'}
                             <p class="totp-status enabled"><ShieldCheck size={15} /> 2FA aktív</p>
                             <p class="hint">
-                                A kikapcsoláshoz add meg a jelenlegi jelszavad. A művelet után
-                                minden munkameneted lezárul, és újra be kell jelentkezned.
+                                A kikapcsoláshoz add meg a jelenlegi jelszavad és egy érvényes
+                                kétfaktoros kódot. A művelet után minden munkameneted lezárul,
+                                és újra be kell jelentkezned.
                             </p>
                             <form on:submit|preventDefault={handleDisableTotp}>
                                 <input
@@ -349,7 +357,15 @@
                                     bind:value={disableTotpPassword}
                                     autocomplete="current-password"
                                 />
-                                <button type="submit" class="danger-btn" disabled={!disableTotpPassword}>
+                                <input
+                                    type="text"
+                                    inputmode="numeric"
+                                    maxlength="6"
+                                    autocomplete="one-time-code"
+                                    placeholder="6 jegyű kód"
+                                    bind:value={disableTotpToken}
+                                />
+                                <button type="submit" class="danger-btn" disabled={!canDisableTotp}>
                                     2FA kikapcsolása
                                 </button>
                             </form>
