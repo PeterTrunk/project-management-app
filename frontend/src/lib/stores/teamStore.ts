@@ -44,6 +44,25 @@ export function handleMemberAdded(payload: {
     }));
 }
 
+//Mi történjen, ha valakit kivettek egy projektből.
+export type MemberRemovedAction =
+    | { kind: 'other' }
+    | { kind: 'self'; leaveProjectId: string; exitView: boolean };
+
+export function decideMemberRemoved(
+    payload: { userId: string; projectId: string },
+    currentUserId: string | undefined,
+    activeProjectId: string | undefined
+): MemberRemovedAction {
+    if (payload.userId !== currentUserId) return { kind: 'other' };
+
+    return {
+        kind: 'self',
+        leaveProjectId: payload.projectId,
+        exitView: activeProjectId === payload.projectId
+    };
+}
+
 export function handleMemberRemoved(payload: { userId: string }) {
     teamStore.update(state => ({
         ...state,
