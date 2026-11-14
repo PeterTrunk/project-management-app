@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OtpNet;
+using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Auth;
 using ProjectManager.API.Model;
@@ -137,6 +138,87 @@ namespace ProjectManager.IntegrationTests.Auth
             });
 
             Assert.False(string.IsNullOrEmpty(response.Token));
+        }
+
+        //A második faktor kikapcsolása
+
+        /// <summary>
+        /// A kikapcsolás az ötödik olvasási hely, és védelmi szempontból a legfontosabb: ez az
+        /// a művelet, amely a második faktort MEGSZÜNTETI. Utána a fiókot már csak a jelszó
+        /// védi, és a támadó saját titkot állíthatna be - ezért nem elég hozzá a jelszó.
+        /// </summary>
+        [Fact]
+        public async Task DisableTotp_ChecksTheEncryptedSecret()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context, user.Id);
+
+            var setup = await sut.SetupTotpAsync();
+            var totp = new Totp(Base32Encoding.ToBytes(setup.SecretKey));
+            await sut.VerifyAndEnableTotpAsync(totp.ComputeTotp());
+
+            await sut.DisableTotpAsync(new DisableTotpDto
+            {
+                CurrentPassword = Password,
+                TotpToken = totp.ComputeTotp()
+            });
+
+            await using var verify = CreateContext();
+            var updated = await verify.Users.SingleAsync(u => u.Id == user.Id);
+
+            Assert.False(updated.IsTotpEnabled);
+            Assert.Null(updated.TotpSecret);
+        }
+
+        /// <summary>
+        /// A védendő forgatókönyv: a támadónak megvan a munkamenet és a jelszó is, a kód
+        /// viszont nincs. A kikapcsolás ilyenkor nem mehet át.
+        /// </summary>
+        [Fact]
+        public async Task DisableTotp_WithoutTheCode_LeavesTheSecondFactorOn()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context, user.Id);
+
+            var setup = await sut.SetupTotpAsync();
+            var totp = new Totp(Base32Encoding.ToBytes(setup.SecretKey));
+            await sut.VerifyAndEnableTotpAsync(totp.ComputeTotp());
+
+            await Assert.ThrowsAsync<ValidationException>(
+                () => sut.DisableTotpAsync(new DisableTotpDto { CurrentPassword = Password }));
+
+            await using var verify = CreateContext();
+            var untouched = await verify.Users.SingleAsync(u => u.Id == user.Id);
+
+            Assert.True(untouched.IsTotpEnabled);
+            Assert.NotNull(untouched.TotpSecret);
+        }
+
+        [Fact]
+        public async Task DisableTotp_WithAStaleCode_LeavesTheSecondFactorOn()
+        {
+            await using var context = CreateContext();
+            var user = await SeedUserAsync(context);
+            var (sut, _) = ServiceFactory.CreateAuthService(context, user.Id);
+
+            var setup = await sut.SetupTotpAsync();
+            var totp = new Totp(Base32Encoding.ToBytes(setup.SecretKey));
+            await sut.VerifyAndEnableTotpAsync(totp.ComputeTotp());
+
+            //Tíz perccel korábbi kód: determinisztikusan kívül van az elfogadott
+            //időablakon, szemben egy találomra választott hatjegyű számmal.
+            var stale = totp.ComputeTotp(DateTime.UtcNow.AddMinutes(-10));
+
+            await Assert.ThrowsAsync<ForbiddenException>(() => sut.DisableTotpAsync(
+                new DisableTotpDto { CurrentPassword = Password, TotpToken = stale }));
+
+            await using var verify = CreateContext();
+            var untouched = await verify.Users.SingleAsync(u => u.Id == user.Id);
+
+            Assert.True(untouched.IsTotpEnabled);
+            Assert.NotNull(untouched.TotpSecret);
         }
 
         /// <summary>

@@ -249,7 +249,7 @@ namespace ProjectManager.API.Services.TeamService
             {
                 await _hubContext.Clients
                     .Group($"project-{projectId}")
-                    .SendAsync("MemberRemoved", new { userId });
+                    .SendAsync("MemberRemoved", new { userId, projectId });
             }
             catch (Exception ex)
             {

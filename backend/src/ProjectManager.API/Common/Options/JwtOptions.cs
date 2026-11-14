@@ -5,7 +5,8 @@
         public string Secret { get; set; } = string.Empty;
         public string Issuer { get; set; } = string.Empty;
         public string Audience { get; set; } = string.Empty;
-        public int ExpiryMinutes { get; set; } = 15;
-        public int RefreshTokenLifetimeMinutes { get; set; } = 10080;
+        public int ExpiryMinutes { get; set; } = 15; // 15 perc
+        public int RefreshTokenLifetimeMinutes { get; set; } = 10080; // 7 nap (percben)
+        public int RefreshRotationGraceSeconds { get; set; } = 30;
     }
 }

@@ -12,10 +12,12 @@ import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
          handleColumnsReordered } from '../stores/boardStore';
 import { handleIntegrationCreated, handleIntegrationUpdated, 
          handleIntegrationVerified, handleIntegrationDeleted } from '../stores/integrationStore';
-import { handleMemberAdded, handleMemberRemoved, handleMemberRoleUpdated } from '../stores/teamStore';
+import { handleMemberAdded, handleMemberRemoved, handleMemberRoleUpdated,
+         decideMemberRemoved } from '../stores/teamStore';
 import { handleProjectUpdated, handleProjectArchived, 
          handleProjectUnarchived, handleProjectDeleted,
-         handleLabelCreated, handleLabelDeleted, setProjects, setActiveProject } from '../stores/projectStore';
+         handleLabelCreated, handleLabelDeleted, setProjects, setActiveProject,
+         projectStore } from '../stores/projectStore';
 import { get } from 'svelte/store';
 import { authStore } from '../stores/authStore';
 import { push } from 'svelte-spa-router';
@@ -87,15 +89,34 @@ export function registerSignalREvents() {
     // Team events
     signalRService.on('MemberAdded', handleMemberAdded);
     signalRService.on('MemberRemoved', async (data) => {
-        const currentUserId = get(authStore).user?.userId;
-        if (data.userId === currentUserId) {
-            const projects = await getProjectsAsync();
-            setProjects(projects);
+        const action = decideMemberRemoved(
+            data,
+            get(authStore).user?.userId,
+            get(projectStore).activeProject?.id
+        );
+
+        if (action.kind === 'other') {
+            handleMemberRemoved(data);
+            return;
+        }
+
+        //A feliratkozás lemondása: enélkül a kapcsolat a projekt csoportjában maradna, és az
+        //események a kiléptetés UTÁN is megérkeznének, amíg a kapcsolat él. A jogosultság a
+        //csoportba lépéskor dől el egyszer, a szerver utólag nem veszi ki a kapcsolatot.
+        try {
+            await signalRService.leaveProject(action.leaveProjectId);
+        } catch {
+            //A kapcsolat épp nincs meg. Nem baj: az újracsatlakozás új kapcsolatot nyit,
+            //és az csak az aktív projekt csoportjába lép be.
+        }
+
+        const projects = await getProjectsAsync();
+        setProjects(projects);
+
+        if (action.exitView) {
             setActiveProject(null);
             await new Promise(resolve => setTimeout(resolve, 100));
             push('/app');
-        } else {
-            handleMemberRemoved(data);
         }
     });
     signalRService.on('MemberRoleUpdated', handleMemberRoleUpdated);
