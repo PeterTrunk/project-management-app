@@ -197,7 +197,7 @@
                 <input type="checkbox" bind:checked={isDefault}>
             </label>
             <label>
-                Jelenlegi alapvető board: <span>{currentDefaultBoard?.name ?? 'Nincs'}</span>
+                Jelenlegi alapvető board: <strong>{currentDefaultBoard?.name ?? 'Nincs'}</strong>
                 <!-- Ne adjon warningot a label -->
                 <button style="visibility: hidden;" >Dummy</button>
             </label>
@@ -381,7 +381,6 @@
 
     span {
         font-weight: bold;
-        color: var(--accent-blue);
         word-break: break-word;
     }
 
@@ -433,6 +432,7 @@
     }
 
     .remote-change-text {
+        color: var(--text-primary);
         flex: 1 1 auto;
         min-width: 0;
     }
