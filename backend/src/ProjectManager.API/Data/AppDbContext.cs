@@ -58,6 +58,7 @@ public class AppDbContext : DbContext
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Integration> Integrations => Set<Integration>();
     public DbSet<CommitLink> CommitLinks => Set<CommitLink>();
+    public DbSet<CommitBackfill> CommitBackfills => Set<CommitBackfill>();
     public DbSet<PrLink> PrLinks => Set<PrLink>();
     public DbSet<ProjectCounter> ProjectCounters => Set<ProjectCounter>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -683,6 +684,53 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
         });
         
+        modelBuilder.Entity<CommitBackfill>(entity =>
+        {
+            entity.Property(b => b.Ref)
+                  .HasMaxLength(255);
+
+            entity.Property(b => b.BeforeSha)
+                  .HasMaxLength(40);
+
+            entity.Property(b => b.AfterSha)
+                  .HasMaxLength(40);
+
+            entity.Property(b => b.State)
+                  .HasMaxLength(16)
+                  .IsRequired()
+                  .HasDefaultValue(BackfillStates.Pending);
+
+            //A szolgáltató hibaszövege NEM kerül ide, csak egy rövid, saját megfogalmazású ok:
+            //a nyers válasz tárházneveket és egyéb, naplóba nem való részleteket hordozhat.
+            entity.Property(b => b.LastError)
+                  .HasMaxLength(500);
+
+            entity.Property(b => b.CreatedAt)
+                  .IsRequired();
+
+            //Újraküldés: a szolgáltatók ugyanazt a pusht többször is kézbesíthetik, és abból
+            //nem lehet két pótlandó sor. Az AfterSha azonosítja a pusht; ahol hiányzik, ott a
+            //PostgreSQL alapértelmezése szerint minden NULL külön érték, tehát a korlát nem fog -
+            //ez itt a HELYES viselkedés, mert két azonosító nélküli push nem feltétlenül ugyanaz.
+            entity.HasIndex(b => new { b.IntegrationId, b.AfterSha })
+                  .IsUnique();
+
+            //A felület és az üzemeltetési ellenőrzés is állapot szerint szűr
+            entity.HasIndex(b => new { b.IntegrationId, b.State });
+
+            entity.HasOne(b => b.Integration)
+                  .WithMany()
+                  .HasForeignKey(b => b.IntegrationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            //A foglaló felhasználó törlésekor a sor megmarad, csak gazdátlanná válik:
+            //a pótlás ténye üzemeltetési nyom, nem a felhasználó adata.
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(b => b.ClaimedById)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<CommitLink>(entity =>
         {
             entity.Property(cl => cl.CommitSha)

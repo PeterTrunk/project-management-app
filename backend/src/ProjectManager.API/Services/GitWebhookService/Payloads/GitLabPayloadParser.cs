@@ -40,7 +40,22 @@ namespace ProjectManager.API.Services.GitWebhookService.Payloads
             if (payload.ReadOptionalString("object_kind") != "push") return false;
             if (!payload.TryReadArray("commits", out var commits)) return false;
 
-            result = CommitArrayReader.Read(commits);
+            var parsed = CommitArrayReader.Read(commits);
+
+            //A GitLab a commits tömbbe legfeljebb 20 commitot tesz, DE a push valódi darabszámát
+            //külön megmondja. Itt tehát a csonkolás nem sejtés, hanem kiolvasható tény.
+            int? reported = payload.TryReadInt("total_commits_count", out var total) ? total : null;
+
+            result = parsed with
+            {
+                ProviderReportedCommitCount = reported,
+                CommitsPossiblyTruncated = reported > parsed.ReceivedCommitCount,
+
+                //A GitLab ugyanazokat a mezőneveket használja, mint a GitHub.
+                BeforeSha = payload.ReadOptionalString("before"),
+                AfterSha = payload.ReadOptionalString("after"),
+                Ref = payload.ReadOptionalString("ref")
+            };
             return true;
         }
 

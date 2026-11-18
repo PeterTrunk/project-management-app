@@ -10,6 +10,13 @@ namespace ProjectManager.API.Services.GitWebhookService.Payloads
     /// </summary>
     public sealed class GitHubPayloadParser : IGitPayloadParser
     {
+        /// <summary>
+        /// A GitHub legfeljebb ennyi commitot tesz a push payload commits tömbjébe; felette a
+        /// dokumentáció a Commits API-t ajánlja. Darabszámot NEM küld, ezért a csonkolás itt
+        /// csak sejthető: ha a tömb pontosan ekkora, valószínűleg maradt ki belőle commit.
+        /// </summary>
+        private const int MaxCommitsInPayload = 2048;
+
         public string Provider => GitProviders.GitHub;
 
         public string EventHeaderName => "X-GitHub-Event";
@@ -28,7 +35,17 @@ namespace ProjectManager.API.Services.GitWebhookService.Payloads
 
             if (!payload.TryReadArray("commits", out var commits)) return false;
 
-            result = CommitArrayReader.Read(commits);
+            result = CommitArrayReader.Read(commits) with
+            {
+                //A GitHub nem közöl darabszámot, tehát csak a tömb hossza marad jelzésnek.
+                CommitsPossiblyTruncated = commits.GetArrayLength() >= MaxCommitsInPayload,
+
+                //A compare API pont ezzel a két azonosítóval dolgozik, ezért kell eltárolni:
+                //a pótlás később, egy másik kérésben indul, amikor a payload már nincs meg.
+                BeforeSha = payload.ReadOptionalString("before"),
+                AfterSha = payload.ReadOptionalString("after"),
+                Ref = payload.ReadOptionalString("ref")
+            };
             return true;
         }
 

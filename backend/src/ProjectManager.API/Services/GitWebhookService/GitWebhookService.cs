@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProjectManager.API.Common.Constants;
 using ProjectManager.API.Data;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
@@ -230,6 +231,70 @@ namespace ProjectManager.API.Services.GitWebhookService
                     projectId, "Commit", task.Id, "Linked",
                     $"{provider} kapcsolta a {ShortSha(link.CommitSha)} commitot a {task.TaskKey} taskhoz: {Preview(link.Message)}");
                     //A szolgáltató neve a payloadból jön: korábban itt "GitHub" volt beégetve
+            }
+
+            //A végén, és külön mentéssel: a hiány nyilvántartásba vétele nem ronthatja el
+            //a kapcsolatok mentését, amely addigra már megtörtént.
+            await RecordTruncatedPushAsync(integrationId, pushEvent);
+        }
+
+        /// <summary>
+        /// Ha a payload feltehetően nem a teljes pusht hozta, erről nyilvántartási sor készül.
+        ///
+        /// Enélkül a csonkolás NÉMA: a push feldolgozottnak látszik, miközben commitok maradtak
+        /// ki belőle, és ha épp egy kimaradt commit üzenetében volt a task kulcsa, a kapcsolat
+        /// soha nem jön létre. Ez rosszabb egy elvesztett valós idejű értesítésnél: azt a
+        /// következő betöltés pótolja, ezt semmi.
+        ///
+        /// Itt még CSAK a feljegyzés történik meg. A pótlás külön kérésben indul, mert a
+        /// szolgáltató API-jának megkérdezése a webhook válaszidejét kötné a szolgáltatóéhoz,
+        /// a lassú webhookot pedig a GitHub és a GitLab is hibásnak jelöli, végül kikapcsolja.
+        /// </summary>
+        private async Task RecordTruncatedPushAsync(Guid integrationId, GitPushEvent pushEvent)
+        {
+            if (!pushEvent.CommitsPossiblyTruncated) return;
+
+            var backfill = new CommitBackfill
+            {
+                Id = Guid.NewGuid(),
+                IntegrationId = integrationId,
+                Ref = pushEvent.Ref,
+                BeforeSha = pushEvent.BeforeSha,
+                AfterSha = pushEvent.AfterSha,
+                ReportedCommitCount = pushEvent.ProviderReportedCommitCount,
+                ReceivedCommitCount = pushEvent.ReceivedCommitCount,
+                State = BackfillStates.Pending
+            };
+
+            try
+            {
+                //Újraküldés: ugyanarról a pushról ne keletkezzen második sor. A versenyhelyzetet
+                //az egyedi index zárja ki, ez a kérdés csak a gyakori, nem versenyző esetre való.
+                if (pushEvent.AfterSha != null)
+                {
+                    var alreadyRecorded = await _context.CommitBackfills.AnyAsync(b =>
+                        b.IntegrationId == integrationId && b.AfterSha == pushEvent.AfterSha);
+
+                    if (alreadyRecorded) return;
+                }
+
+                _context.CommitBackfills.Add(backfill);
+                await _context.SaveChangesAsync();
+
+                _logger.LogWarning(
+                    "Hiányos push payload | Ígért: {Reported} | Érkezett: {Received} | Ref: {Ref} | IntegrationId: {IntegrationId} | BackfillId: {BackfillId}",
+                    pushEvent.ProviderReportedCommitCount?.ToString() ?? "ismeretlen (a szolgáltató nem közli)",
+                    pushEvent.ReceivedCommitCount, pushEvent.Ref, integrationId, backfill.Id);
+            }
+            catch (DbUpdateException ex)
+            {
+                //A webhook ettől még sikeres: a kapcsolatok mentve vannak. A sor hiánya azt
+                //jelenti, hogy a pótlás nem lesz felkínálva - ezért Error, nem Warning.
+                _context.Entry(backfill).State = EntityState.Detached;
+
+                _logger.LogError(ex,
+                    "A hiányos push nyilvántartásba vétele nem sikerült | IntegrationId: {IntegrationId}",
+                    integrationId);
             }
         }
 

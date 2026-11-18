@@ -267,6 +267,71 @@ namespace ProjectManager.API.Migrations
                     b.ToTable("Comments");
                 });
 
+            modelBuilder.Entity("ProjectManager.API.Model.CommitBackfill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AfterSha")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BeforeSha")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClaimedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ReceivedCommitCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Ref")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int?>("ReportedCommitCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Pending");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimedById");
+
+                    b.HasIndex("IntegrationId", "AfterSha")
+                        .IsUnique();
+
+                    b.HasIndex("IntegrationId", "State");
+
+                    b.ToTable("CommitBackfills");
+                });
+
             modelBuilder.Entity("ProjectManager.API.Model.CommitLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1124,6 +1189,22 @@ namespace ProjectManager.API.Migrations
                     b.Navigation("ProjectTask");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ProjectManager.API.Model.CommitBackfill", b =>
+                {
+                    b.HasOne("ProjectManager.API.Model.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProjectManager.API.Model.Integration", "Integration")
+                        .WithMany()
+                        .HasForeignKey("IntegrationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Integration");
                 });
 
             modelBuilder.Entity("ProjectManager.API.Model.CommitLink", b =>
