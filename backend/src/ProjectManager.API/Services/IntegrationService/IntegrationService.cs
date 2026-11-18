@@ -65,6 +65,14 @@ namespace ProjectManager.API.Services.IntegrationService
                 RepoFullName = dto.RepoFullName,
                 WebhookSecret = _encryptionService.Encrypt(dto.WebhookSecret),
                 WebhookToken = Guid.NewGuid().ToString("N"),
+
+                //A tárolt alak titkosított, a hiány pedig null, nem üres szöveg: így az
+                //"van-e token" kérdés egyetlen összehasonlítás, és nem lehet üres titkosított
+                //értéket visszafejteni a pótlásnál.
+                AccessToken = Normalize(dto.AccessToken) is { } token
+                    ? _encryptionService.Encrypt(token)
+                    : null,
+                AutoBackfillEnabled = dto.AutoBackfillEnabled,
                 IsEnabled = true,
                 AuthorityConfirmedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
@@ -85,6 +93,11 @@ namespace ProjectManager.API.Services.IntegrationService
                         repoFullName = integration.RepoFullName,
                         isEnabled = integration.IsEnabled,
                         isVerified = integration.IsVerified,
+
+                        //A token maga nem megy ki, csak a léte - ugyanaz a szabály, mint a
+                        //webhook titoknál.
+                        hasAccessToken = integration.AccessToken != null,
+                        autoBackfillEnabled = integration.AutoBackfillEnabled,
                         webhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                         createdAt = integration.CreatedAt
                     });
@@ -302,6 +315,104 @@ namespace ProjectManager.API.Services.IntegrationService
             }
         }
 
+        public async Task SetAccessTokenAsync(Guid projectId, Guid integrationId, string? accessToken)
+        {
+            var integration = await _context.Integrations
+                .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
+            if (integration == null)
+                throw new NotFoundException("Integráció nem található!");
+
+            var token = Normalize(accessToken);
+
+            integration.AccessToken = token is null ? null : _encryptionService.Encrypt(token);
+            integration.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        hasAccessToken = integration.AccessToken != null
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
+
+            try
+            {
+                //A tevékenységnapló a TÉNYT rögzíti, az értéket soha: egy hitelesítő adat
+                //ugyanúgy nem kerülhet a naplóba, mint a webhook titok.
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    token is null ? "AccessTokenRemoved" : "AccessTokenSet",
+                    token is null
+                        ? $"{{actor}} törölte a hozzáférési tokent: {integration.RepoFullName}"
+                        : $"{{actor}} beállította a hozzáférési tokent: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
+        }
+
+        public async Task SetAutoBackfillAsync(Guid projectId, Guid integrationId, bool isEnabled)
+        {
+            var integration = await _context.Integrations
+                .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
+            if (integration == null)
+                throw new NotFoundException("Integráció nem található!");
+
+            integration.AutoBackfillEnabled = isEnabled;
+            integration.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        autoBackfillEnabled = integration.AutoBackfillEnabled
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    isEnabled ? "AutoBackfillEnabled" : "AutoBackfillDisabled",
+                    $"{{actor}} {(isEnabled ? "bekapcsolta" : "kikapcsolta")} az automatikus commit-pótlást: {integration.RepoFullName}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
+        }
+
         public async Task VerifyIntegrationAsync(Guid integrationId)
         {
             var integration = await _context.Integrations
@@ -354,6 +465,14 @@ namespace ProjectManager.API.Services.IntegrationService
             }
         }
 
+        /// <summary>
+        /// A kapott hitelesítő adat egységes alakja: körülvágva, és az üres érték null.
+        /// A kettő összemosása itt nem kozmetika - egy üres szöveg titkosított alakja
+        /// érvényes ciphertext lenne, tehát a rendszer azt hinné, hogy VAN tokenje.
+        /// </summary>
+        private static string? Normalize(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
         private IntegrationResponseDto MapToDto(Integration integration)
         {
             return new IntegrationResponseDto
@@ -365,6 +484,10 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
                 IsVerified = integration.IsVerified,
+
+                //A token értéke SOSEM kerül ki, csak a léte
+                HasAccessToken = integration.AccessToken != null,
+                AutoBackfillEnabled = integration.AutoBackfillEnabled,
                 CreatedAt = integration.CreatedAt,
                 UpdatedAt = integration.UpdatedAt
             };

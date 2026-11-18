@@ -664,6 +664,16 @@ public class AppDbContext : DbContext
                   .IsRequired()
                   .HasDefaultValue(false);
 
+            //Hossz-korlát nélkül: a titkosított érték base64, tehát hosszabb a nyers tokennél,
+            //és a szolgáltatók tokenformátuma a mi döntésünk nélkül változik (a GitHub
+            //finomhangolt tokenjei jóval hosszabbak a klasszikusnál). Ugyanez a megfontolás
+            //érvényes a WebhookSecret oszlopra is.
+            entity.Property(i => i.AccessToken);
+
+            entity.Property(i => i.AutoBackfillEnabled)
+                  .IsRequired()
+                  .HasDefaultValue(false);
+
             entity.Property(i => i.CreatedAt)
                   .IsRequired();
 

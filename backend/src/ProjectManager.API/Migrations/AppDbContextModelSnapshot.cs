@@ -392,8 +392,16 @@ namespace ProjectManager.API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AccessToken")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("AuthorityConfirmedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("AutoBackfillEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

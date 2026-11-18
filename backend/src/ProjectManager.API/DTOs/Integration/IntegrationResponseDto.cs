@@ -9,6 +9,15 @@
         public string WebhookUrl { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
         public bool IsVerified { get; set; }
+
+        /// <summary>
+        /// Van-e beállított hozzáférési token. Maga a token NEM kerül ki, ahogy a webhook titok
+        /// sem: a felületnek csak azt kell tudnia, hogy beállított állapotot írjon ki, és hogy
+        /// a pótlás egyáltalán megkísérelhető-e privát tárháznál.
+        /// </summary>
+        public bool HasAccessToken { get; set; }
+
+        public bool AutoBackfillEnabled { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

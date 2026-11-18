@@ -12,6 +12,32 @@
         public bool IsVerified { get; set; } = false;
 
         /// <summary>
+        /// A szolgáltató API-jának hívásához használt hozzáférési token, <b>titkosítva</b>
+        /// tárolva (AES-GCM, ugyanúgy, mint a WebhookSecret).
+        ///
+        /// Ez az oszlop korábban LÉTEZETT, és tudatosan töröltük (RemoveUnusedIntegrationAccessToken),
+        /// mert semmi nem használta: egy sosem használt hitelesítő adat törlése jobb, mint a
+        /// titkosítása. A döntés feltétele változott meg, nem a döntés volt hibás: a szolgáltatók
+        /// levágják a webhook payload commit tömbjét, és a kimaradt commitok CSAK az API-n
+        /// kérhetők le. Mostantól van mire használni.
+        ///
+        /// Nullozható, és az is marad: publikus tárházból a commitok hitelesítés nélkül is
+        /// olvashatók (a GitHub ilyenkor IP-nként 60 kérést enged óránként, tokennel 5000-et),
+        /// privát tárháznál viszont token nélkül nincs pótlás.
+        /// </summary>
+        public string? AccessToken { get; set; }
+
+        /// <summary>
+        /// Igaz, ha hiányos push észlelésekor a rendszer magától megpróbálja pótolni a kimaradt
+        /// commitokat - EGYSZER. Alapértelmezésben hamis.
+        ///
+        /// Azért integrációnkénti beállítás, mert a pótlás a szolgáltató kvótáját fogyasztja,
+        /// token nélkül pedig IP-nkénti, tehát KÖZÖS korlátot: egy beszédes integráció a
+        /// többiét is elhasználná. A bekapcsolás így tudatos vállalás.
+        /// </summary>
+        public bool AutoBackfillEnabled { get; set; } = false;
+
+        /// <summary>
         /// Mikor nyilatkozott a felvevő arról, hogy jogosult a repository csatlakoztatására,
         /// és tudomásul vette a commit szerzők adatainak tárolását.
         ///

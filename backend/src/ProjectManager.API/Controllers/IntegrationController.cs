@@ -64,6 +64,32 @@ namespace ProjectManager.API.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// A szolgáltató API-jához tartozó hozzáférési token beállítása vagy törlése.
+        /// Üres törzzsel a tárolt token törlődik.
+        ///
+        /// A válasz szándékosan 204: a token értéke semmilyen válaszban nem jelenik meg,
+        /// tehát nincs mit visszaadni. A felület a "van-e token" jelzést a lista
+        /// újratöltésénél vagy a valós idejű eseményből kapja meg.
+        /// </summary>
+        [HttpPut("{integrationId}/access-token")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> SetAccessTokenAsync(Guid projectId, Guid integrationId, [FromBody] SetAccessTokenDto dto)
+        {
+            await _integrationService.SetAccessTokenAsync(projectId, integrationId, dto.AccessToken);
+            return NoContent();
+        }
+
+        [HttpPatch("{integrationId}/auto-backfill")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> SetAutoBackfillAsync(Guid projectId, Guid integrationId, [FromQuery] bool isEnabled)
+        {
+            await _integrationService.SetAutoBackfillAsync(projectId, integrationId, isEnabled);
+            return NoContent();
+        }
+
         [HttpPost("{integrationId}/reset-secret")]
         [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]

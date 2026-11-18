@@ -198,6 +198,30 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.AuthorityConfirmed);
         }
 
+        //AccessToken: opcionális, mert publikus tárházból token nélkül is olvasható a commitlista
+
+        [Fact]
+        public void AccessToken_Missing_ShouldNotHaveError()
+        {
+            _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.AccessToken);
+        }
+
+        [Fact]
+        public void AccessToken_Typical_ShouldNotHaveError()
+        {
+            var dto = Valid();
+            dto.AccessToken = "ghp_" + new string('a', 36);
+            _validator.TestValidate(dto).ShouldNotHaveAnyValidationErrors();
+        }
+
+        [Fact]
+        public void AccessToken_TooLong_ShouldHaveError()
+        {
+            var dto = Valid();
+            dto.AccessToken = new string('a', 501);
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.AccessToken);
+        }
+
         [Fact]
         public void ValidDto_ShouldNotHaveAnyErrors()
         {
