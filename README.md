@@ -22,7 +22,7 @@ Az alkalmazás **önhosztolható**: minden konfiguráció környezeti változób
 - **HttpOnly refresh token süti** – `SameSite=Strict`, az access token kizárólag memóriában
 - **TOTP kétfaktoros hitelesítés** – választható, a titok AES-GCM-mel titkosítva tárolva
 - **RBAC jogosultságkezelés** – 4 projektszerep: `Owner`, `Admin`, `Member`, `Viewer`
-- **Rate limiting** – bejelentkezés, regisztráció, jelszó-visszaállítás és -beváltás, e-mail megerősítés, megerősítő levél újraküldése, presigned feltöltés, webhook végpont
+- **Rate limiting** – bejelentkezés, regisztráció, jelszó-visszaállítás és -beváltás, e-mail megerősítés, megerősítő levél újraküldése, presigned feltöltés, webhook végpont, commit pótlás
 - **Fiókkezelés** – e-mail megerősítés, jelszó-visszaállítás, fióktörlés anonimizálással
 
 ### Projekt és feladatkezelés
@@ -44,6 +44,8 @@ Az alkalmazás **önhosztolható**: minden konfiguráció környezeti változób
 - **Git Webhook integráció** – GitHub és GitLab commit/PR automatikus task-összerendelés regex alapján (`PM-123`), a commit üzenetéből és a PR leírásából is
 - **Provider-független payload feldolgozás** – a két szolgáltató eltérő payload-alakját normalizáló réteg fordítja közös formára
 - **Hozzárendeletlen és kapcsolt elemek** – mindkettő böngészhető; a kapcsoltak kereshetők (sha, üzenet, szerző, task kulcs) és áthelyezhetők másik taskra
+- **Csonkolt push észlelése és pótlása** – a szolgáltatók nem küldik el minden push minden commitját (GitLab 20, GitHub 2048 commitnál vágja a payloadot); a rendszer ezt észleli, és a szolgáltató API-jából pótolja a kimaradt commitokat – kézzel, vagy integrációnként bekapcsolható egyszeri automatikus kísérlettel
+- **Saját telepítésű szolgáltató** – a pótlás self-managed GitLab és GitHub Enterprise Server példánnyal is működik (kiszolgálócím + titkosítva tárolt hozzáférési token)
 - **Objektumtárolás** – task és projekt szintű csatolmányok S3-kompatibilis tárolóban (SeaweedFS), presigned URL-es feltöltés, streaming letöltés
 - **Statisztika Dashboard** – ECharts alapú grafikonok: burndown, sprint velocity, team workload, task státusz eloszlás, Cumulative Flow Diagram
 
@@ -133,7 +135,7 @@ A séma tervrajza [dbdiagram.io](https://dbdiagram.io)-val készült.
 | Projekt struktúra | `Projects`, `ProjectCounters`, `Boards`, `ColumnDefinitions`, `ProjectTasks`, `TaskAssignments` |
 | Sprint | `Sprints`, `TaskStatusHistories` |
 | Kommunikáció | `Comments`, `Labels`, `LabelTasks` |
-| Git integráció | `Integrations`, `CommitLinks`, `PrLinks` |
+| Git integráció | `Integrations`, `CommitLinks`, `PrLinks`, `CommitBackfills` |
 | Fájlok | `Attachments`, `PresignedUrlLogs` |
 | Jogi megfelelés | `TermsVersions`, `UserTermsAcceptances` |
 | Napló | `Activities` |
@@ -181,7 +183,7 @@ A backend minden jelentős változásra broadcastol a megfelelő projekt-szobáb
 | Projekt és label | `ProjectUpdated`, `ProjectDeleted`, `ProjectArchived`, `ProjectUnarchived`, `LabelCreated`, `LabelDeleted` |
 | Csapat | `MemberAdded`, `MemberRemoved`, `MemberRoleUpdated` |
 | Komment | `CommentAdded`, `CommentDeleted` |
-| Git integráció | `IntegrationCreated`, `IntegrationUpdated`, `IntegrationDeleted`, `IntegrationVerified`, `CommitLinked`, `PrLinked` |
+| Git integráció | `IntegrationCreated`, `IntegrationUpdated`, `IntegrationDeleted`, `IntegrationVerified`, `CommitLinked`, `PrLinked`, `BackfillUpdated` |
 | Fájl | `AttachmentUploaded`, `AttachmentDeleted` |
 | Napló | `ActivityCreated` |
 
@@ -198,7 +200,7 @@ A broadcast soha nem buktatja el a műveletet: az adat mentése után a SignalR 
 | Refresh token | `HttpOnly` + `SameSite=Strict` + `Secure` süti, minden használatkor rotálva |
 | Munkamenet-érvénytelenítés | Jelszóváltás, 2FA-művelet és token-visszajátszás esetén minden munkamenet visszavonódik |
 | Kétfaktoros hitelesítés | Választható TOTP; a kikapcsoláshoz ismételt hitelesítés kell |
-| Titkosítás | AES-GCM a TOTP titkokhoz és a webhook secretekhez, `enc:v1:` verziójelzéssel |
+| Titkosítás | AES-GCM a TOTP titkokhoz, a webhook secretekhez és a git szolgáltatói hozzáférési tokenekhez, `enc:v1:` verziójelzéssel |
 | Rate limiting | E-mail és IP szintű korlát is. A megvalósítás a példányszámtól függ: egy példánynál memóriában, több példánynál Redis-alapú atomikus számláló (`API_REPLICAS`, lásd [`OPERATIONS.md`](./OPERATIONS.md) 3. fejezet) |
 | Webhook hitelesítés | HMAC-SHA256 (GitHub) és konstans idejű token-összevetés (GitLab), fail-closed ismeretlen providerre |
 | Hibakezelés | Tipizált kivétel-hierarchia; csak az `AppException` üzenete hagyja el a szervert, minden más `500` + általános szöveg |

@@ -5707,6 +5707,123 @@ A `presigned_upload:{userId}` rate limit és az induláskor is lefutó cleanup v
 mert a meg nem erősített feltöltés objektuma attól még a tárolóban marad, hogy a típusa és a
 mérete helyes.
 
+## Csonkolt pushok észlelése és pótlása
+
+A git szolgáltatók nem küldik el minden push minden commitját. A korlátok a dokumentációban
+állnak, de a fogadó oldalon eddig semmi nem jelezte őket: egy 25 commitos GitLab pushból 20
+érkezett meg, 5 pedig **némán elveszett** - és ha egy feladatkulcs épp a 21. commit üzenetében
+szerepelt, az a kapcsolat soha nem jött létre. Ez rosszabb egy elvesztett valós idejű
+értesítésnél: azt a következő betöltés pótolja, ezt semmi.
+
+A terv és az indoklások teljes szövege: `docs/private/TERV-GIT-INTEGRACIO-BOVITES.md`.
+
+**A négy korlát, és ami belőlük kezelhető**
+
+| Korlát | Észlelhető a fogadó oldalról? |
+|---|---|
+| GitLab: a `commits` tömb csak az első **20** commit; a valódi darabszám a `total_commits_count` | **igen**, egy mező elolvasásával |
+| GitHub: a `commits` tömb legfeljebb **2048** elemű | csak **sejthető** (a tömb pontosan a határon áll) |
+| GitHub: a **25 MB** feletti payloadot a szolgáltató nem kézbesíti | **nem** - definíció szerint meg sem érkezik |
+| GitLab: `push_event_hooks_limit` (alapból **3 ág**) felett nem indul webhook | **nem** |
+
+**Elvégzett munkák**
+- **Észlelés és nyilvántartás** - a normalizált `GitPushEvent` megkapta a szolgáltatói
+  darabszámot és a push azonosítóit (`before`/`after`/`ref`), a csonkolás eldöntése pedig a
+  parserbe került, mert szolgáltatófüggő: GitLabnál TÉNY, GitHubnál csak VALÓSZÍNŰ. A hiányból
+  `CommitBackfills` sor keletkezik, újraküldés ellen egyedi indexszel
+- **A törölt hozzáférési token visszahozása**, ezúttal **AES-GCM-mel titkosítva**, opcionálisan
+  (publikus tárházból token nélkül is olvasható a commitlista). Az üres és a hiányzó token egy
+  állapot: egy üres szöveg titkosított alakja érvényes ciphertext lenne
+- **Kimenő lekérő réteg** - a rendszer eddig nem indított kimenő hívást. Providerenkénti
+  megvalósítás a parserek mintájára, named `HttpClient`-tel, a GitHub ágán lapozással (100-as
+  lapok, 10 lap felső határ), a GitLab ágán a `compare_timeout` és a token nélküli 100-as vágás
+  figyelésével. A hibák osztályozva: hitelesítési / nem található / átmeneti / végleges
+- **Saját telepítésű szolgáltató támogatása** (`InstanceUrl`): a webhook irányban mindegy, hol
+  áll a szolgáltató, a pótlásnál viszont nekünk kell tudnunk, kit kérdezzünk
+- **Kézi pótlás** - foglalás feltételes `UPDATE`-tel és **lejárattal**, a lekért commitok a
+  MEGLÉVŐ illesztő úton mennek át (`ProcessPushEventAsync`), az idempotenciát az adatbázis adja
+- **Automatikus kísérlet**, integrációnként bekapcsolható, **pontosan egyszer**: a webhook csak
+  várólistára tesz és válaszol, a lekérés háttérfutásból indul
+- **Felület** - a git nézet hiányos push listája négy állapottal, és az integrációs kártya
+  pótlás-beállításai (kiszolgálócím, token, automatika)
+- **Naplózás** kísérletenként, a szintekkel együtt: a hitelesítési hiba és az ismétlődő hiba
+  `Error`, mert emberi beavatkozást kér
+
+**Kihagyott elemek (tudatos döntés)**
+- **Automatikus ismétlés hiba után.** A tipikus hibaok nem átmeneti (visszavont token,
+  átnevezett tárház), egy második hívás nem segít, viszont kvótát éget. Hiba után a felületről
+  indítható újra: azt már ember döntötte el, nem egy ciklus
+- **A pótlás a webhook kérésében.** A lapozó API-hívás a webhook válaszidejét a szolgáltató
+  válaszidejéhez kötné, a lassú webhookot pedig a GitHub és a GitLab is hibásnak jelöli, és
+  végül kikapcsolja
+- **Megosztott (Redis-es) várólista.** A sort az adatbázisbeli foglalás védi, nem a várólista;
+  amelyik példány észlelte a hiányt, ugyanaz pótolja. Az ára kimondva: egy deploy a még le nem
+  futott automatikus kísérleteket elveszti, a sor ilyenkor `Pending` marad, és kézzel indítható
+- **A PR commitjainak behúzása.** A pull request payload egyáltalán nem tartalmaz commitlistát,
+  tehát ez nem hiánypótlás, hanem ÚJ képesség - külön döntés
+- **A két észlelhetetlen korlát.** A nem kézbesített payload és az ágkorlát ellen a fogadó
+  oldalon nincs mit tenni. Erre nem kód a válasz, hanem kimondás: a git integráció **nem
+  garantálja a teljességet**, és ennek a határa nem a mi kódunkban van. Üzemeltetési oldalon a
+  szolgáltató saját kézbesítési naplója az egyetlen hely, ahol utólag látszik
+
+### A feltételes UPDATE harmadik előfordulása
+
+**Probléma:**
+Ha két ember egyszerre nyomja meg a Pótlás gombot, két lapozó API-hívás indulna ugyanarra az
+intervallumra: dupla kvótafogyás és egymásba futó beillesztések. Az ellenőrzés-majd-írás itt nem
+elég, mert a kettő között épp a másik kérés írna.
+
+**Megoldás:**
+Ugyanaz a minta, amely a projektben már kétszer előállt - a refresh token rotációjánál és a
+feltöltés megerősítésénél -, most **harmadszor, egymástól függetlenül**: feltételes `UPDATE`, és
+a döntés az érintett sorok számából születik. Nulla sor esetén a hívó `409`-et kap, és **nem
+indít kimenő hívást**.
+
+Egy részlet, ami nélkül a megoldás beragad: a foglalásnak **lejárata** van (10 perc). Enélkül
+egy megszakadt futás (újraindítás, telepítés) örökre `InProgress` állapotban hagyná a sort, és
+senki nem tudná újraindítani - a funkció csendben használhatatlanná válna. Ugyanaz a gondolat,
+mint a rotáció türelmi ablakánál, csak ellenkező irányba: ott a friss állapot volt a kivétel,
+itt az elévült.
+
+A felületen ez külön állapot („Megszakadt futás"), és a döntést a **szerver** hozza meg a soron
+adott `canRun` jelzéssel: a lejárat szerveroldali szabály, egy kliensoldali másolat második
+igazságforrás lenne.
+
+### A visszahozott hitelesítő adat
+
+**Probléma:**
+Az `Integration.AccessToken` oszlop egyszer már létezett, és tudatosan töröltük
+(`RemoveUnusedIntegrationAccessToken`). Az akkori indok: *„Egy sosem használt hitelesítő adat
+törlése jobb, mint a titkosítása […] itt viszont nincs mire várni."*
+
+**Megoldás:**
+Most lett mire várni: a kimaradt commitok CSAK a szolgáltató API-jából kérhetők le. A döntés
+tehát megfordul - de érdemes pontosan látni, hogy **nem a döntés volt hibás, hanem a feltétele
+változott meg**. Az eredeti érv a saját feltételén belül helyes volt.
+
+A visszahozás négy helyen járt következménnyel: séma (titkosítva), űrlap, az **adatkezelési
+tájékoztató** git sora és a 32. cikkes felsorolása (a „két titok" háromra bővült), valamint az
+5. fejezet ugyanerre a felsorolásra épülő szakasza.
+
+**Tesztek (+96 unit, +33 integrációs):**
+- `PushTruncationDetectionTests` - a csonkolás észlelése mindkét szolgáltatónál, és külön az,
+  hogy az ÉRTELMEZHETETLEN commit (amit a mi parserünk hagyott ki) nem csonkolás
+- `GitHubCommitFetcherTests`, `GitLabCommitFetcherTests`, `GitFetchErrorClassifierTests`,
+  `GitApiRootTests`, `BackfillQueueTests` - kézi HTTP válaszadóval, Docker és hálózat nélkül;
+  a hibaágak (401, 403 kifogyott kvótával, 500, időtúllépés) élesben szándékosan nem
+  előállíthatók
+- `CommitBackfillRecordingTests`, `IntegrationAccessTokenTests`, `IntegrationInstanceUrlTests`,
+  `CommitBackfillRunTests`, `CommitBackfillAutomaticTests` - a nyilvántartás, a titok tárolása
+  (a token egyetlen szerializált válaszban sem jelenik meg), a párhuzamos indítás, az elévült
+  foglalás, az idempotencia és az „pontosan egyszer" invariáns
+- `backfillStore.test.ts`, `validators.test.ts` - a megjelenítendő szövegek: a részleges pótlás
+  nem siker, az automatikus kudarc nem a felhasználó mulasztása, és a GitHub hiányát nem
+  számmal írjuk le, mert nem ismerjük
+
+**Nyitva maradt:** az üzemeltetési ellenőrzés (`OPERATIONS.md` 8. szakasz) a `Failed` sorokra,
+illetve a megjelenítést javító és a statisztikai tervek (a terv 3-6. pontja), amelyek mind a
+commitlista teljességét feltételezik - ezért vártak erre a munkára.
+
 ## Git View Sprint Overview
 Sprint-based task grouping in Git View with associated commits and PRs. Manual commit/PR reassignment between tasks. Sprint selector filter. Built on existing TaskResponse.commitLinks/prLinks - no new backend endpoints required.
 
