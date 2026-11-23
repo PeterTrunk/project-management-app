@@ -14,6 +14,7 @@ using ProjectManager.API.Services.CounterService;
 using ProjectManager.API.Services.TeamService;
 using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EncryptionService;
+using ProjectManager.API.Services.GitBackfillService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.IntegrationService;
 using ProjectManager.API.Services.GitWebhookService;
@@ -28,6 +29,17 @@ namespace ProjectManager.IntegrationTests.Infrastructure
     /// Amit a szolgáltatás a teszt alatt kap, és amit a teszt utólag megvizsgálhat.
     /// </summary>
     public sealed record ServiceContext(AppDbContext Db, RecordingHubContext Hub);
+
+    /// <summary>
+    /// Amit a commit pótlás a teszt alatt kap. A titkosítót azért adjuk vissza, mert a teszt
+    /// ezzel tud VALÓDI, visszafejthető tokent elhelyezni az integráción - a pótlás ugyanis a
+    /// tárolt titkot fejti vissza, és ezt az utat is ellenőrizni kell.
+    /// </summary>
+    public sealed record BackfillContext(
+        AppDbContext Db,
+        RecordingHubContext Hub,
+        FakeRateLimitService RateLimit,
+        IEncryptionService Encryption);
 
     /// <summary>
     /// Szolgáltatásokat állít össze VALÓDI függőségekkel.
@@ -248,6 +260,40 @@ namespace ProjectManager.IntegrationTests.Infrastructure
                 NullLogger<GitWebhookService>.Instance);
 
             return (sut, new ServiceContext(context, hub));
+        }
+
+        /// <summary>
+        /// A commit pótlás. A szolgáltatói lekérés dupla (lásd StubGitCommitFetcher), MINDEN
+        /// más valódi: a foglalás feltételes UPDATE-je, a titkosítás, az illesztés és a
+        /// tevékenységnapló is - azok adják a teszt értelmét.
+        /// </summary>
+        public static (GitBackfillService Sut, BackfillContext Ctx) CreateGitBackfillService(
+            AppDbContext context, Guid currentUserId, params IGitCommitFetcher[] fetchers)
+        {
+            var (user, hub, activity) = Common(context, currentUserId, "Teszt Elek");
+
+            var encryption = new EncryptionService(
+                Options.Create(new EncryptionOptions { Key = TestEncryptionKey }));
+
+            var rateLimit = new FakeRateLimitService();
+
+            //A webhook feldolgozó VALÓDI: a pótlás pont azt állítja magáról, hogy ugyanazon az
+            //illesztő úton vezeti át a lekért commitokat, mint a beérkező push
+            var webhook = new GitWebhookService(
+                context, hub, activity, NullLogger<GitWebhookService>.Instance);
+
+            var sut = new GitBackfillService(
+                context,
+                fetchers,
+                webhook,
+                encryption,
+                rateLimit,
+                user,
+                activity,
+                hub,
+                NullLogger<GitBackfillService>.Instance);
+
+            return (sut, new BackfillContext(context, hub, rateLimit, encryption));
         }
 
         public static (SprintService Sut, ServiceContext Ctx) CreateSprintService(

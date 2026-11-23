@@ -364,6 +364,10 @@ namespace ProjectManager.API.Extensions
             services.AddScoped<IIntegrationService, IntegrationService>();
             services.AddScoped<IGitWebhookService, GitWebhookService>();
             services.AddScoped<IGitService, GitService>();
+
+            //A pótlás a lekérőket, a webhook feldolgozót és a titkosítást is használja,
+            //ezért scoped: adatbázis-kontextussal dolgozik.
+            services.AddScoped<IGitBackfillService, GitBackfillService>();
             services.AddScoped<IStatisticsService, StatisticsService>();
             services.AddScoped<ICounterService, CounterService>();
             services.AddScoped<ICurrentUserService, CurrentUserService>();
