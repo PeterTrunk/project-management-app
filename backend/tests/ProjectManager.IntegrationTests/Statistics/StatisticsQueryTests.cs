@@ -20,14 +20,22 @@ namespace ProjectManager.IntegrationTests.Statistics
 
         private static StatisticsService Sut(AppDbContext context) => new(context);
 
-        /// <summary>Egy 0-nál nagyobb pozíciójú oszlop a megadott állapotnévvel.</summary>
+        /// <summary>
+        /// Egy 0-nál nagyobb pozíciójú oszlop a megadott állapotnévvel.
+        ///
+        /// A megjelenített <paramref name="name"/> és a <paramref name="mapsToStatus"/> azért
+        /// külön paraméter, mert az adatbázisban is két külön dolog: a NÉV táblánként egyedi
+        /// (<c>IX_ColumnDefinitions_BoardId_Name</c>), az állapotnév viszont szabad szöveg,
+        /// amely ismétlődhet. Pont ez teszi lehetővé azt az esetet, amit a „Backlog" nevű
+        /// állapotról szóló teszt vizsgál.
+        /// </summary>
         private static async Task<ColumnDefinition> AddColumnAsync(
-            AppDbContext context, Guid boardId, string mapsToStatus, int position)
+            AppDbContext context, Guid boardId, string mapsToStatus, int position, string? name = null)
         {
             var column = new ColumnDefinition
             {
                 BoardId = boardId,
-                Name = mapsToStatus,
+                Name = name ?? mapsToStatus,
                 MapsToStatus = mapsToStatus,
                 Position = position
             };
@@ -38,17 +46,35 @@ namespace ProjectManager.IntegrationTests.Statistics
             return column;
         }
 
+        /// <summary>
+        /// Állapotváltozás a megadott időpontban.
+        ///
+        /// Az időpontot BESZÚRÁS UTÁN írjuk be, külön utasítással, és ez nem kerülőút: az
+        /// <see cref="AppDbContext.SaveChangesAsync"/> minden új entitás <c>CreatedAt</c>
+        /// mezőjét a mentés idejére állítja (triggerek helyett, egy helyen). Élesben ez a
+        /// helyes viselkedés - az átlépés akkor történik -, egy teszt visszadátumozását viszont
+        /// NÉMÁN felülírja: a sor a mai nappal kerül be, és az időszak előtti állapotot vizsgáló
+        /// tesztek üres nyitóállapotot látnak.
+        ///
+        /// Az <c>ExecuteUpdateAsync</c> a követőt és vele a mentési logikát is kihagyja -
+        /// ugyanaz a megoldás, mint a token-visszadátumozásnál a rotációs teszteknél.
+        /// </summary>
         private static async Task AddHistoryAsync(
             AppDbContext context, Guid taskId, Guid? columnId, DateTime createdAt)
         {
-            context.TaskStatusHistories.Add(new TaskStatusHistory
+            var history = new TaskStatusHistory
             {
                 TaskId = taskId,
-                ColumnId = columnId,
-                CreatedAt = DateTime.SpecifyKind(createdAt, DateTimeKind.Utc)
-            });
+                ColumnId = columnId
+            };
 
+            context.TaskStatusHistories.Add(history);
             await context.SaveChangesAsync();
+
+            await context.TaskStatusHistories
+                .Where(h => h.Id == history.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(
+                    h => h.CreatedAt, DateTime.SpecifyKind(createdAt, DateTimeKind.Utc)));
         }
 
         //A kumulatív folyamatábra
@@ -121,7 +147,9 @@ namespace ProjectManager.IntegrationTests.Statistics
         {
             await using var context = CreateContext();
             var seeded = await TestData.SeedProjectAsync(context, "CFB");
-            await AddColumnAsync(context, seeded.Board.Id, "Backlog", 1);
+            //A név táblánként egyedi, az állapotnév nem: a beépített "Backlog" oszlop mellé
+            //így kerül egy MÁSIK oszlop, UGYANAZZAL az állapotnévvel - ez a vizsgált eset
+            await AddColumnAsync(context, seeded.Board.Id, "Backlog", 1, name: "Visszatéve");
 
             var result = await Sut(context).GetCumulativeFlowAsync(
                 seeded.Project.Id, DateTime.UtcNow.AddDays(-3), DateTime.UtcNow);
