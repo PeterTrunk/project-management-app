@@ -16,6 +16,12 @@
         public string WebhookSecret { get; set; } = string.Empty;
 
         /// <summary>
+        /// Saját telepítésű szolgáltató kiszolgálójának címe (pl. https://git.ceg.hu).
+        /// Üresen hagyva a szolgáltató felhős változatát használjuk.
+        /// </summary>
+        public string? InstanceUrl { get; set; }
+
+        /// <summary>
         /// Opcionális hozzáférési token a szolgáltató API-jához. Csak a hiányosan érkezett
         /// pushok pótlásához kell: publikus tárháznál elhagyható, privát tárháznál nélküle
         /// nincs pótlás. Titkosítva tárolódik, és kimenő válaszban SOSEM szerepel.

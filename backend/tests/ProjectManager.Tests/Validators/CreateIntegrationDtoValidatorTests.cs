@@ -198,6 +198,31 @@ namespace ProjectManager.Tests.Validators
             _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.AuthorityConfirmed);
         }
 
+        //InstanceUrl: opcionális, üresen a szolgáltató felhős változatát használjuk
+
+        [Fact]
+        public void InstanceUrl_Missing_ShouldNotHaveError()
+        {
+            _validator.TestValidate(Valid()).ShouldNotHaveValidationErrorFor(x => x.InstanceUrl);
+        }
+
+        [Fact]
+        public void InstanceUrl_SelfHostedServer_ShouldNotHaveError()
+        {
+            var dto = Valid();
+            dto.InstanceUrl = "https://git.ceg.hu";
+            _validator.TestValidate(dto).ShouldNotHaveAnyValidationErrors();
+        }
+
+        //A tokent ezen a címen küldjük ki: titkosítatlan csatornán nem adjuk ki
+        [Fact]
+        public void InstanceUrl_PlainHttp_ShouldHaveError()
+        {
+            var dto = Valid();
+            dto.InstanceUrl = "http://git.ceg.hu";
+            _validator.TestValidate(dto).ShouldHaveValidationErrorFor(x => x.InstanceUrl);
+        }
+
         //AccessToken: opcionális, mert publikus tárházból token nélkül is olvasható a commitlista
 
         [Fact]

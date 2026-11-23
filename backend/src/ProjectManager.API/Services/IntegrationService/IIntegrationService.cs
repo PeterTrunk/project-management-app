@@ -24,5 +24,11 @@ namespace ProjectManager.API.Services.IntegrationService
         /// Az automatikus commit-pótlás be- vagy kikapcsolása az integráción.
         /// </summary>
         Task SetAutoBackfillAsync(Guid projectId, Guid integrationId, bool isEnabled);
+
+        /// <summary>
+        /// A saját telepítésű szolgáltató kiszolgálójának címe. Üres érték esetén az integráció
+        /// a szolgáltató felhős változatát használja.
+        /// </summary>
+        Task SetInstanceUrlAsync(Guid projectId, Guid integrationId, string? instanceUrl);
     }
 }

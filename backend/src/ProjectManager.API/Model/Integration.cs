@@ -12,6 +12,17 @@
         public bool IsVerified { get; set; } = false;
 
         /// <summary>
+        /// Saját telepítésű szolgáltató kiszolgálójának címe (pl. https://git.ceg.hu), vagy
+        /// null, ha a szolgáltató felhős változatáról van szó.
+        ///
+        /// A webhook irányban erre nincs szükség: a szolgáltató hív minket, bárhol is áll.
+        /// A pótlásnál viszont NEKÜNK kell tudnunk, melyik kiszolgálót kérdezzük - és egy
+        /// céges GitLab címe nem a gitlab.com. A verziós útvonalat (/api/v4, illetve /api/v3)
+        /// a szolgáltató szerinti lekérő teszi rá, tehát ide a kiszolgáló címe kerül.
+        /// </summary>
+        public string? InstanceUrl { get; set; }
+
+        /// <summary>
         /// A szolgáltató API-jának hívásához használt hozzáférési token, <b>titkosítva</b>
         /// tárolva (AES-GCM, ugyanúgy, mint a WebhookSecret).
         ///

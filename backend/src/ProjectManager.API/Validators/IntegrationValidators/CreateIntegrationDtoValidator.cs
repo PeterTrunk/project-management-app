@@ -29,6 +29,13 @@ namespace ProjectManager.API.Validators.IntegrationValidators
                 .MinimumLength(16)
                 .WithMessage("A webhook secret legalább 16 karakter kell legyen!");
 
+            //A kiszolgáló címe opcionális: üresen a szolgáltató felhős változatát használjuk
+            RuleFor(x => x.InstanceUrl)
+                .MaximumLength(InstanceUrlRule.MaxLength)
+                .WithMessage($"A kiszolgáló címe maximum {InstanceUrlRule.MaxLength} karakter lehet!")
+                .Must(InstanceUrlRule.IsValid)
+                .WithMessage(InstanceUrlRule.Message);
+
             //A hozzáférési token opcionális: publikus tárházból token nélkül is olvasható a
             //commitlista. Ezért nincs NotEmpty, csak felső korlát.
             RuleFor(x => x.AccessToken)

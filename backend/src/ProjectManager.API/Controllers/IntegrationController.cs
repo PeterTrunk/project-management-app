@@ -81,6 +81,19 @@ namespace ProjectManager.API.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// A saját telepítésű szolgáltató kiszolgálójának címe. Üres törzzsel az integráció a
+        /// szolgáltató felhős változatára áll vissza.
+        /// </summary>
+        [HttpPut("{integrationId}/instance-url")]
+        [Authorize(Policy = PolicyNames.ProjectAdmin)]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> SetInstanceUrlAsync(Guid projectId, Guid integrationId, [FromBody] SetInstanceUrlDto dto)
+        {
+            await _integrationService.SetInstanceUrlAsync(projectId, integrationId, dto.InstanceUrl);
+            return NoContent();
+        }
+
         [HttpPatch("{integrationId}/auto-backfill")]
         [Authorize(Policy = PolicyNames.ProjectAdmin)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]

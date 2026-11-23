@@ -24,6 +24,7 @@ using ProjectManager.API.Services.CurrentUserService;
 using ProjectManager.API.Services.EmailService;
 using ProjectManager.API.Services.EncryptionService;
 using ProjectManager.API.Services.FileStorageService;
+using ProjectManager.API.Services.GitBackfillService;
 using ProjectManager.API.Services.GitService;
 using ProjectManager.API.Services.GitWebhookService;
 using ProjectManager.API.Services.GitWebhookService.Payloads;
@@ -333,6 +334,18 @@ namespace ProjectManager.API.Extensions
             //és a Provider alapján választ: ez a "factory", külön regiszter-osztály nélkül.
             services.AddSingleton<IGitPayloadParser, GitHubPayloadParser>();
             services.AddSingleton<IGitPayloadParser, GitLabPayloadParser>();
+
+            //A commit lekérők a parserek párjai a KIMENŐ irányban: ugyanaz a választás a
+            //Provider alapján. Named HttpClient, hogy a factory kezelje a kapcsolatokat,
+            //és hogy az időtúllépés egy helyen legyen kimondva.
+            services.AddHttpClient(GitApiHttpClient.Name, client =>
+            {
+                client.Timeout = GitApiHttpClient.Timeout;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(GitApiHttpClient.UserAgent);
+            });
+
+            services.AddSingleton<IGitCommitFetcher, GitHubCommitFetcher>();
+            services.AddSingleton<IGitCommitFetcher, GitLabCommitFetcher>();
 
             //Scoped service-ek
             services.AddScoped<IAuthService, AuthService>();

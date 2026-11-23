@@ -72,6 +72,9 @@ namespace ProjectManager.API.Services.IntegrationService
                 AccessToken = Normalize(dto.AccessToken) is { } token
                     ? _encryptionService.Encrypt(token)
                     : null,
+
+                //Saját telepítésű szolgáltató címe; üresen a felhős változat
+                InstanceUrl = Normalize(dto.InstanceUrl)?.TrimEnd('/'),
                 AutoBackfillEnabled = dto.AutoBackfillEnabled,
                 IsEnabled = true,
                 AuthorityConfirmedAt = DateTime.UtcNow,
@@ -413,6 +416,57 @@ namespace ProjectManager.API.Services.IntegrationService
             }
         }
 
+        public async Task SetInstanceUrlAsync(Guid projectId, Guid integrationId, string? instanceUrl)
+        {
+            var integration = await _context.Integrations
+                .FirstOrDefaultAsync(i => i.Id == integrationId && i.ProjectId == projectId);
+            if (integration == null)
+                throw new NotFoundException("Integráció nem található!");
+
+            //A záró perjel levágása nélkül a felépített API-cím kettős perjelet kapna
+            var url = Normalize(instanceUrl)?.TrimEnd('/');
+
+            integration.InstanceUrl = url;
+            integration.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("IntegrationUpdated", new
+                    {
+                        integrationId = integration.Id,
+                        instanceUrl = integration.InstanceUrl
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: {Event} | ProjectId: {ProjectId}",
+                    "IntegrationUpdated", projectId);
+            }
+
+            try
+            {
+                var activity = await _activityService.LogActivityAsync(
+                    projectId,
+                    "Integration",
+                    integration.Id,
+                    url is null ? "InstanceUrlRemoved" : "InstanceUrlSet",
+                    url is null
+                        ? $"{{actor}} visszaállította a szolgáltató felhős változatát: {integration.RepoFullName}"
+                        : $"{{actor}} beállította a szolgáltató kiszolgálóját: {url}"
+                );
+                await _hubContext.Clients
+                    .Group($"project-{projectId}")
+                    .SendAsync("ActivityCreated", activity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR broadcast hiba | Event: ActivityCreated | ProjectId: {ProjectId}", projectId);
+            }
+        }
+
         public async Task VerifyIntegrationAsync(Guid integrationId)
         {
             var integration = await _context.Integrations
@@ -484,6 +538,8 @@ namespace ProjectManager.API.Services.IntegrationService
                 WebhookUrl = $"{_apiOptions.BaseUrl}/api/git/webhook/{integration.WebhookToken}",
                 IsEnabled = integration.IsEnabled,
                 IsVerified = integration.IsVerified,
+
+                InstanceUrl = integration.InstanceUrl,
 
                 //A token értéke SOSEM kerül ki, csak a léte
                 HasAccessToken = integration.AccessToken != null,
