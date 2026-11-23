@@ -23,6 +23,8 @@
     import { setSprints } from '../lib/stores/sprintStore';
     import { getCommitLinksAsync, getPrLinksAsync } from '../lib/api/gitApi';
     import { setGitLinks } from '../lib/stores/gitLinkStore';
+    import { getBackfillsAsync } from '../lib/api/gitBackfillApi';
+    import { setBackfills } from '../lib/stores/backfillStore';
     import { getProjectAttachmentsAsync } from '../lib/api/attachmentApi';
     import { setAttachments } from '../lib/stores/attachmentStore';
 
@@ -281,6 +283,11 @@
                 //gyorsítótár marad, és a git nézet megnyitása nem tölt.
                 Promise.all([getCommitLinksAsync(projectId), getPrLinksAsync(projectId)])
                     .then(([commits, prs]) => setGitLinks(commits, prs)),
+                //A hiányos pushok ugyanezen a megfontoláson: a lista rövid (jellemzően üres),
+                //a többivel PÁRHUZAMOS, és utána az események tartják frissen - tehát a git
+                //nézet megnyitása ettől sem tölt.
+                getBackfillsAsync(projectId)
+                    .then(backfills => setBackfills(backfills)),
                 //A projekt MINDEN csatolmánya, a feladatokhoz tartozókkal együtt - egy
                 //lekérésben. A korábbi út a projekt-szintűeket külön kérte, a feladatokhoz
                 //tartozókat pedig a teljes feladatgráfból szedte ki, és ezt minden

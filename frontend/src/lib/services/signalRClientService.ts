@@ -5,6 +5,7 @@ import { handleTaskCreated, handleTaskUpdated, handleTaskMoved,
          taskStore } from '../stores/taskStore';
 import { handleAttachmentUploaded, handleAttachmentDeleted } from '../stores/attachmentStore';
 import { handleCommitLinked, handlePrLinked } from '../stores/gitLinkStore';
+import { handleBackfillUpdated } from '../stores/backfillStore';
 import { handleCommentAdded, handleCommentDeleted } from '../stores/commentStore';
 import { handleSprintCreated, handleSprintUpdated, handleSprintDeleted } from '../stores/sprintStore';
 import { handleBoardCreated, handleBoardUpdated, handleBoardDeleted,
@@ -57,6 +58,9 @@ export function registerSignalREvents() {
     signalRService.on('TaskLabelRemoved', handleTaskLabelRemoved);
     signalRService.on('CommitLinked', handleCommitLinked);
     signalRService.on('PrLinked', handlePrLinked);
+    //A pótlás állapotváltozása: enélkül egy másik felhasználó indítása csak oldalfrissítésre
+    //látszódna, és ugyanazt a sort ketten is megpróbálnák elindítani
+    signalRService.on('BackfillUpdated', handleBackfillUpdated);
 
     // Comment events
     //Korábban ezt a kettőt a CommentSection kezelte, lokálisan. A központi regisztráció

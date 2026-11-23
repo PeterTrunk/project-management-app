@@ -462,6 +462,43 @@ namespace ProjectManager.IntegrationTests.GitWebhook
             Assert.Equal(1, fetcher.Calls);
         }
 
+        /// <summary>
+        /// A felületnek tudnia kell, hogy egy futó sorhoz hozzá lehet-e nyúlni. A foglalás
+        /// lejárata SZERVEROLDALI szabály, ezért a sor maga hordozza a választ: egy kliensoldali
+        /// másolat második igazságforrás lenne, és egy megszakadt futás örökre „folyamatban"
+        /// állóként látszódna, amelyhez senki nem tud hozzányúlni.
+        /// </summary>
+        [Fact]
+        public async Task AFreshClaimIsNotRunnable_AnExpiredOneIs()
+        {
+            await using var context = CreateContext();
+            var seed = await TestData.SeedProjectAsync(context, "AAA");
+            var integration = await TestData.SeedIntegrationAsync(context, seed.Project.Id);
+
+            var running = await SeedBackfillAsync(
+                context, integration.Id,
+                state: BackfillStates.InProgress,
+                claimedAt: DateTime.UtcNow,
+                claimedById: seed.Owner.Id,
+                attemptCount: 1);
+
+            var stuck = await SeedBackfillAsync(
+                context, integration.Id,
+                afterSha: "3333333333333333333333333333333333333333",
+                state: BackfillStates.InProgress,
+                claimedAt: DateTime.UtcNow - GitBackfillService.ClaimExpiry - TimeSpan.FromMinutes(1),
+                claimedById: seed.Owner.Id,
+                attemptCount: 1);
+
+            var (sut, _) = ServiceFactory.CreateGitBackfillService(
+                context, seed.Owner.Id, new StubGitCommitFetcher());
+
+            var rows = await sut.GetBackfillsAsync(seed.Project.Id);
+
+            Assert.False(rows.Single(r => r.Id == running.Id).CanRun);
+            Assert.True(rows.Single(r => r.Id == stuck.Id).CanRun);
+        }
+
         [Fact]
         public async Task GetBackfills_ReturnsTheProjectsRowsNewestFirst()
         {

@@ -479,10 +479,17 @@ namespace ProjectManager.API.Services.GitBackfillService
             AttemptCount = backfill.AttemptCount,
             LastError = backfill.LastError,
 
+            //A futó sor NEM indítható - kivéve, ha a foglalása elévült, mert akkor a futás
+            //megszakadt. A lejárat SZERVEROLDALI szabály, ezért itt dől el: egy kliensoldali
+            //másolat második igazságforrás lenne, és a felületen egy örökre "folyamatban" álló
+            //sor maradna, amelyhez senki nem tud hozzányúlni.
             CanRun = backfill.State != BackfillStates.Completed
                      && backfill.BeforeSha != null
                      && backfill.AfterSha != null
-                     && backfill.Integration.IsEnabled,
+                     && backfill.Integration.IsEnabled
+                     && (backfill.State != BackfillStates.InProgress
+                         || backfill.ClaimedAt == null
+                         || backfill.ClaimedAt < DateTime.UtcNow - ClaimExpiry),
 
             //Lefoglalva, de felhasználó nélkül: ezt csak a rendszer tehette. A soha nem
             //foglalt sor azonosítója is üres, ezért a foglalás idejét is meg kell kérdezni.

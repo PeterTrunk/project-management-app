@@ -1,12 +1,13 @@
 <script lang="ts">
     import type { IntegrationResponse } from '../api/integrationApi';
-    import { deleteIntegrationAsync, regenerateWebhookTokenAsync, toggleIntegrationAsync, resetWebhookSecretAsync } from '../api/integrationApi';
+    import { deleteIntegrationAsync, regenerateWebhookTokenAsync, toggleIntegrationAsync, resetWebhookSecretAsync,
+             setAccessTokenAsync, setAutoBackfillAsync, setInstanceUrlAsync } from '../api/integrationApi';
     import { removeIntegration, updateIntegration } from '../stores/integrationStore';
     import ConfirmModal from './ConfirmModal.svelte';
 
     import { 
         GitBranch, Copy, Check, RefreshCw, KeyRound, Trash2, 
-        BookOpen, ToggleLeft, ToggleRight, CircleCheck, Clock 
+        BookOpen, ToggleLeft, ToggleRight, CircleCheck, Clock, DownloadCloud, Server 
     } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
@@ -26,6 +27,77 @@
     let newSecret = '';
     let resetError = '';
     let resetLoading = false;
+
+    //A pótlás beállításai. Külön, összecsukott szakasz: a webhook fogadásához egyikre sincs
+    //szükség, csak a kimaradt commitok utólagos behúzásához.
+    let isBackfillOpen = false;
+    let newAccessToken = '';
+    let tokenLoading = false;
+    let instanceUrlDraft = integration.instanceUrl ?? '';
+    let instanceUrlLoading = false;
+    let autoLoading = false;
+
+    async function handleSaveAccessToken() {
+        tokenLoading = true;
+        try {
+            await setAccessTokenAsync(projectId, integration.id, newAccessToken);
+
+            //A token értéke nem jön vissza, csak a léte - ezt vezetjük át a tárolóba
+            updateIntegration({ ...integration, hasAccessToken: true });
+            notify.success('Hozzáférési token beállítva!');
+            newAccessToken = '';
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a token mentésekor!');
+        } finally {
+            tokenLoading = false;
+        }
+    }
+
+    async function handleRemoveAccessToken() {
+        openConfirm(
+            'Hozzáférési token törlése',
+            'A token törlése után a kimaradt commitok pótlása privát repónál nem fog működni. Folytatod?',
+            async () => {
+                try {
+                    await setAccessTokenAsync(projectId, integration.id, null);
+                    updateIntegration({ ...integration, hasAccessToken: false });
+                    notify.success('Hozzáférési token törölve!');
+                } catch (e: any) {
+                    notify.error(e.response?.data ?? e.message ?? 'Hiba a token törlésekor!');
+                }
+            },
+            'Törlés'
+        );
+    }
+
+    async function handleToggleAutoBackfill() {
+        autoLoading = true;
+        try {
+            const next = !integration.autoBackfillEnabled;
+            await setAutoBackfillAsync(projectId, integration.id, next);
+            updateIntegration({ ...integration, autoBackfillEnabled: next });
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a beállítás mentésekor!');
+        } finally {
+            autoLoading = false;
+        }
+    }
+
+    async function handleSaveInstanceUrl() {
+        instanceUrlLoading = true;
+        try {
+            const value = instanceUrlDraft.trim() === '' ? null : instanceUrlDraft.trim();
+            await setInstanceUrlAsync(projectId, integration.id, value);
+            updateIntegration({ ...integration, instanceUrl: value });
+            notify.success(value === null
+                ? 'A felhős változatra állítva!'
+                : 'Kiszolgáló címe mentve!');
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a cím mentésekor!');
+        } finally {
+            instanceUrlLoading = false;
+        }
+    }
 
     function openConfirm(title: string, message: string, action: () => Promise<void>, text: string = 'Megerősítés') {
         confirmTitle = title;
@@ -137,6 +209,12 @@
                     <ToggleLeft size={12} /> Inaktív
                 {/if}
             </span>
+            {#if integration.autoBackfillEnabled}
+                <span class="badge badge-blue"><DownloadCloud size={12} /> Auto pótlás</span>
+            {/if}
+            {#if integration.instanceUrl}
+                <span class="badge badge-blue"><Server size={12} /> Saját telepítés</span>
+            {/if}
         </div>
     </div>
 
@@ -234,6 +312,84 @@
         </div>
     {/if}
 
+    <button class="guide-toggle" on:click={() => isBackfillOpen = !isBackfillOpen}>
+        <DownloadCloud size={14} /> {isBackfillOpen ? 'Commit pótlás elrejtése' : 'Commit pótlás beállításai'}
+    </button>
+
+    {#if isBackfillOpen}
+        <div class="backfill-settings">
+            <p class="settings-note">
+                A szolgáltatók nem küldik el minden push minden commitját &mdash; a GitLab 20,
+                a GitHub 2048 commitnál vágja le a webhook listáját. A kimaradt commitok csak a
+                szolgáltató API-jából kérhetők le, és az ehhez tartozó beállítások vannak itt.
+            </p>
+
+            <div class="settings-row">
+                <label for="instanceUrl-{integration.id}">Kiszolgáló címe (saját telepítés)</label>
+                <div class="copy-row">
+                    <input
+                        id="instanceUrl-{integration.id}"
+                        type="text"
+                        placeholder="Üresen: a szolgáltató felhős változata"
+                        bind:value={instanceUrlDraft}
+                    />
+                    <button class="copy-btn" on:click={handleSaveInstanceUrl} disabled={instanceUrlLoading}>
+                        <Check size={14} /> Mentés
+                    </button>
+                </div>
+                <span class="settings-hint">
+                    A cím https protokollú legyen: a hozzáférési token ezen a címen megy ki.
+                </span>
+            </div>
+
+            <div class="settings-row">
+                <label for="accessToken-{integration.id}">
+                    Hozzáférési token
+                    {#if integration.hasAccessToken}
+                        <span class="badge badge-green"><CircleCheck size={12} /> Beállítva</span>
+                    {/if}
+                </label>
+                <div class="copy-row">
+                    <input
+                        id="accessToken-{integration.id}"
+                        type="password"
+                        placeholder={integration.hasAccessToken ? 'Új token a cseréhez' : 'Privát repónál kötelező'}
+                        bind:value={newAccessToken}
+                    />
+                    <button class="copy-btn" on:click={handleSaveAccessToken}
+                        disabled={tokenLoading || newAccessToken.trim() === ''}>
+                        <Check size={14} /> Mentés
+                    </button>
+                </div>
+                <span class="settings-hint">
+                    Titkosítva tároljuk, és soha nem jelenítjük meg újra &mdash; ezért csak az
+                    látszik, hogy van-e beállítva.
+                </span>
+                {#if integration.hasAccessToken}
+                    <button class="remove-token-btn" on:click={handleRemoveAccessToken}>
+                        <Trash2 size={13} /> Token törlése
+                    </button>
+                {/if}
+            </div>
+
+            <div class="settings-row">
+                <button class="toggle-btn" on:click={handleToggleAutoBackfill} disabled={autoLoading}>
+                    {#if integration.autoBackfillEnabled}
+                        <ToggleLeft size={15} /> Automatikus pótlás kikapcsolása
+                    {:else}
+                        <ToggleRight size={15} /> Automatikus pótlás bekapcsolása
+                    {/if}
+                </button>
+                <span class="settings-hint">
+                    Bekapcsolva a rendszer hiány észlelésekor <strong>egyszer</strong> magától
+                    megpróbálja a pótlást. Hiba esetén nem ismétli &mdash; a git nézetből
+                    újraindítható. Alapból kikapcsolva, mert a lekérés a szolgáltató
+                    kérésszám-korlátját fogyasztja.
+                </span>
+            </div>
+        </div>
+    {/if}
+
     <div class="card-actions">
         <button class="toggle-btn" on:click={handleToggle}>
             {#if integration.isEnabled}
@@ -269,6 +425,57 @@
 {/if}
 
 <style>
+    .backfill-settings {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+        padding: 0.75rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+    }
+
+    .settings-note {
+        margin: 0;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.45;
+    }
+
+    .settings-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .settings-row label {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+
+    .settings-hint {
+        font-size: 0.74rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+
+    .remove-token-btn {
+        align-self: flex-start;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.25rem 0.5rem;
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        border-radius: 5px;
+        color: var(--accent-red);
+        font-size: 0.75rem;
+        cursor: pointer;
+    }
+
     .integration-card {
         background: var(--bg-card);
         border: 1px solid var(--border-subtle);

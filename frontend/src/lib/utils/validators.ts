@@ -264,6 +264,43 @@ export function validateComment(body: string): string | null {
     return errors.length > 0 ? errors.join('\n') : null;
 }
 
+/**
+ * A saját telepítesű git szolgáltató kiszolgálójának címe.
+ *
+ * Ugyanaz a szabály, mint a szerveren, és a szigorúságnak itt is ugyanaz az oka: ezt a címet a
+ * SZERVER hívja meg, a tárolt hozzáférési tokennel a fejlécben. Ezért https kötelező, és nem
+ * lehet benne felhasználónév (az titkosítás nélkül tárolódó hitelesítő adatot csempészne a
+ * mezőbe), sem lekérdezés vagy töredék (azok a végpont útvonalához fűződnének).
+ *
+ * Az üres érték érvényes: az a szolgáltató felhős változata.
+ */
+export function validateInstanceUrl(instanceUrl: string | null | undefined): string | null {
+    if (!instanceUrl || instanceUrl.trim() === '') return null;
+
+    const trimmed = instanceUrl.trim();
+
+    const max = maxLength(trimmed, 300, 'Kiszolgáló címe');
+    if (max) return max;
+
+    let url: URL;
+    try {
+        url = new URL(trimmed);
+    } catch {
+        return 'Érvénytelen kiszolgáló cím! (pl. https://git.ceg.hu)';
+    }
+
+    if (url.protocol !== 'https:')
+        return 'A kiszolgáló címe https protokollú legyen! A hozzáférési token ezen a címen megy ki.';
+
+    if (url.username !== '' || url.password !== '')
+        return 'A kiszolgáló címe ne tartalmazzon felhasználónevet vagy jelszót!';
+
+    if (url.search !== '' || url.hash !== '')
+        return 'A kiszolgáló címe ne tartalmazzon lekérdezést vagy töredéket!';
+
+    return null;
+}
+
 export function validateCreateIntegration(provider: string, repoFullName: string, webhookSecret: string): string | null {
     const errors: string[] = [];
     

@@ -21,6 +21,13 @@
     let error = '';
     let loading = false;
 
+    //A pótláshoz tartozó, OPCIONÁLIS beállítások. A webhook fogadásához egyikre sincs szükség,
+    //ezért külön, összecsukott szakaszban állnak: a gyakori eset ne legyen hosszabb tőlük.
+    let showBackfillOptions = false;
+    let instanceUrl = '';
+    let accessToken = '';
+    let autoBackfillEnabled = false;
+
     function closeModal() {
         isOpen = false;
         reset();
@@ -34,6 +41,10 @@
         authorityConfirmed = false;
         error = '';
         loading = false;
+        showBackfillOptions = false;
+        instanceUrl = '';
+        accessToken = '';
+        autoBackfillEnabled = false;
     }
 
     async function handleCreate() {
@@ -44,7 +55,12 @@
                 provider,
                 repoFullName,
                 webhookSecret,
-                authorityConfirmed
+                authorityConfirmed,
+                //Az üres érték itt NEM üres szöveg, hanem "nincs": a szerver a kettőt
+                //egységesíti, de a kérésben se vigyünk ki értelmetlen üres titkot
+                instanceUrl: instanceUrl.trim() === '' ? null : instanceUrl.trim(),
+                accessToken: accessToken.trim() === '' ? null : accessToken.trim(),
+                autoBackfillEnabled
             });
             notify.success('Integráció létrehozva!');
             closeModal();
@@ -115,6 +131,53 @@
                 </span>
             </div>
 
+            <!-- A pótlás beállításai: a webhook fogadásához nem kellenek, csak a kimaradt
+                 commitok utólagos behúzásához -->
+            <button type="button" class="options-toggle" on:click={() => showBackfillOptions = !showBackfillOptions}>
+                {showBackfillOptions ? '− ' : '+ '} Commit pótlás beállításai (nem kötelező)
+            </button>
+
+            {#if showBackfillOptions}
+                <div class="form-group">
+                    <label for="instanceUrl">Kiszolgáló címe (saját telepítés)</label>
+                    <input
+                        id="instanceUrl"
+                        type="text"
+                        placeholder={provider === 'GitLab' ? 'https://git.ceg.hu' : 'https://ghe.ceg.hu'}
+                        bind:value={instanceUrl}
+                    />
+                    <span class="hint">
+                        Csak saját telepítésű {provider} esetén kell. Üresen hagyva a
+                        szolgáltató felhős változatát használjuk. A címnek <strong>https</strong>
+                        protokollúnak kell lennie, mert a hozzáférési token ezen a címen megy ki.
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="accessToken">Hozzáférési token</label>
+                    <input
+                        id="accessToken"
+                        type="password"
+                        placeholder="Nem kötelező"
+                        bind:value={accessToken}
+                    />
+                    <span class="hint">
+                        A szolgáltatók nem küldik el minden push minden commitját (a GitLab 20,
+                        a GitHub 2048 commitnál vágja le a listát). A kimaradt commitok csak az
+                        API-ból kérhetők le &mdash; privát repónál ehhez token kell, publikusnál
+                        elhagyható. Titkosítva tároljuk, és soha nem jelenítjük meg újra.
+                    </span>
+                </div>
+
+                <label class="authority-check">
+                    <input type="checkbox" bind:checked={autoBackfillEnabled} />
+                    <span>
+                        Hiány észlelésekor a rendszer <strong>egyszer</strong> magától próbálja
+                        meg a pótlást. Hiba esetén nem ismétli: a felületről újraindítható.
+                    </span>
+                </label>
+            {/if}
+
             <label class="authority-check">
                 <input type="checkbox" bind:checked={authorityConfirmed} />
                 <span>
@@ -147,6 +210,16 @@
 </div>
 
 <style>
+    .options-toggle {
+        align-self: flex-start;
+        padding: 0.3rem 0;
+        background: transparent;
+        border: none;
+        color: var(--accent-blue);
+        font-size: 0.82rem;
+        cursor: pointer;
+    }
+
     .modal-overlay {
         position: fixed;
         top: 0; left: 0;

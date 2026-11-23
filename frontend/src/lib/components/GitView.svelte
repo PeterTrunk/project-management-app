@@ -1,13 +1,17 @@
 <script lang="ts">
     import { integrationStore } from '../stores/integrationStore';
     import { assignCommitToTaskAsync, assignPrToTaskAsync } from '../api/gitApi';
+    import { runBackfillAsync } from '../api/gitBackfillApi';
     import { gitLinkStore } from '../stores/gitLinkStore';
+    import { backfillStore, handleBackfillUpdated, describeBackfill, openBackfillCount,
+             backfillBadgeClass } from '../stores/backfillStore';
     import { filterCommitLinks, filterPrLinks } from '../utils/gitLinks';
     import CommitCard from './CommitCard.svelte';
     import PrCard from './PrCard.svelte';
     import TaskPickerModal from '../components/TaskPickerModal.svelte';
 
-    import { GitBranch, CircleCheck, ToggleLeft, ToggleRight, Search, CornerUpRight } from 'lucide-svelte';
+    import { GitBranch, CircleCheck, ToggleLeft, ToggleRight, Search, CornerUpRight,
+             TriangleAlert, DownloadCloud, Loader } from 'lucide-svelte';
 
     import { notify } from '../stores/notificationStore';
 
@@ -35,6 +39,41 @@
     let isTaskPickerOpen = false;
     let pendingCommitId = '';
     let pendingPrId = '';
+
+    //A hiányos pushok ugyanúgy a központi tárolóból jönnek, mint a hivatkozások: a lista a
+    //projekt betöltésével érkezik, utána a `BackfillUpdated` esemény tartja frissen. Ezért a
+    //pótlás után sincs újratöltés - és egy másik felhasználó indítása is azonnal látszik.
+    $: backfills = $backfillStore.backfills;
+    $: openBackfills = openBackfillCount(backfills);
+
+    //Melyik soron fut ÉPP a mi kérésünk. A szerver állapota ettől független (azt a sor
+    //`state` mezője mondja meg); ez csak a gomb letiltásához kell, amíg a válasz megjön.
+    let runningBackfillId = '';
+
+    async function handleRunBackfill(backfillId: string) {
+        runningBackfillId = backfillId;
+
+        try {
+            const updated = await runBackfillAsync(projectId, backfillId);
+
+            //A szerver a csoportnak is kiküldi, de a saját kérésünk válaszát nem várjuk meg
+            //esemény formájában: így a gomb visszajelzése nem a SignalR kapcsolat állapotától
+            //függ. A felvétel azonosító szerinti csere, tehát a kettő nem duplázódik.
+            handleBackfillUpdated(updated);
+
+            if (updated.state === 'Completed') {
+                notify.success('A kimaradt commitok pótolva!');
+            } else if (updated.state === 'Partial') {
+                notify.warning('A pótlás lefutott, de a hiány nem szűnt meg teljesen.');
+            } else {
+                notify.error(updated.lastError ?? 'A pótlás nem sikerült!');
+            }
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba a pótlás indításakor!');
+        } finally {
+            runningBackfillId = '';
+        }
+    }
 
     $: unmatchedCommits = commitLinks.filter(c => c.taskId === null);
     $: unmatchedPrs = prLinks.filter(p => p.taskId === null);
@@ -117,6 +156,68 @@
                     </div>
                 {/if}
             </div>
+
+            <!-- Hiányos pushok: a füleken kívül, mert nem hivatkozás, hanem az adat
+                 TELJESSÉGÉRŐL szól - és azért látszik egyáltalán, mert enélkül a kimaradt
+                 commitok némán elveszett adatok lennének -->
+            {#if backfills.length > 0}
+                <div class="section">
+                    <h3>
+                        Hiányos pushok
+                        {#if openBackfills > 0}
+                            <span class="tab-badge">{openBackfills}</span>
+                        {/if}
+                    </h3>
+                    <p class="section-note">
+                        A git szolgáltatók nem küldik el minden push minden commitját. Ezek a sorok
+                        azt mutatják, hol maradt ki commit &mdash; a pótlás a szolgáltató API-jából
+                        húzza be a hiányzókat, és ugyanúgy illeszti a feladatokhoz, mint a webhook.
+                    </p>
+
+                    <div class="git-list">
+                        {#each backfills as row (row.id)}
+                            {@const view = describeBackfill(row)}
+                            <div class="backfill-item" class:is-done={view.kind === 'done'}>
+                                <div class="backfill-main">
+                                    <span class="backfill-icon" class:warn={view.kind === 'failed' || view.kind === 'partial'}>
+                                        {#if view.kind === 'failed' || view.kind === 'partial'}
+                                            <TriangleAlert size={14} />
+                                        {:else if view.kind === 'running'}
+                                            <Loader size={14} />
+                                        {:else}
+                                            <GitBranch size={14} />
+                                        {/if}
+                                    </span>
+                                    <div class="backfill-text">
+                                        <span class="backfill-where truncate">
+                                            {row.repoFullName}{row.ref ? ` · ${row.ref}` : ''}
+                                        </span>
+                                        <span class="backfill-gap">{view.gap}</span>
+                                        {#if view.note}
+                                            <span class="backfill-note">{view.note}</span>
+                                        {/if}
+                                        {#if row.attemptCount > 1}
+                                            <span class="backfill-attempts">{row.attemptCount}. kísérlet</span>
+                                        {/if}
+                                    </div>
+                                </div>
+                                <div class="backfill-actions">
+                                    <span class="badge {backfillBadgeClass(view.kind)}">{view.label}</span>
+                                    {#if view.actionLabel}
+                                        <button
+                                            class="backfill-btn"
+                                            disabled={!view.canRun || runningBackfillId === row.id}
+                                            on:click={() => handleRunBackfill(row.id)}>
+                                            <DownloadCloud size={14} />
+                                            {runningBackfillId === row.id ? 'Pótlás...' : view.actionLabel}
+                                        </button>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
 
             <div class="git-tabs">
                 <button class="tab-btn" class:active={activeTab === 'unmatched'}
@@ -337,6 +438,102 @@
     }
 
     .disabled { background: var(--bg-hover);        color: var(--text-muted); }
+
+    /* Hianyos pushok */
+    .section-note {
+        margin: 0 0 0.75rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        line-height: 1.45;
+    }
+
+    .backfill-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.6rem 0.75rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        flex-wrap: wrap;
+    }
+
+    /* A potolt sor megmarad - ez a nyoma annak, hogy a push hianyos volt -, de halkabban */
+    .backfill-item.is-done { opacity: 0.7; }
+
+    .backfill-main {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .backfill-icon {
+        display: flex;
+        align-items: center;
+        color: var(--text-muted);
+        padding-top: 0.1rem;
+    }
+
+    .backfill-icon.warn { color: var(--accent-yellow); }
+
+    .backfill-text {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+    }
+
+    .backfill-where {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .backfill-gap {
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+    }
+
+    .backfill-note {
+        font-size: 0.78rem;
+        color: var(--accent-yellow);
+        line-height: 1.4;
+    }
+
+    .backfill-attempts {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+    }
+
+    .backfill-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .backfill-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.6rem;
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        font-size: 0.78rem;
+        cursor: pointer;
+    }
+
+    .backfill-btn:hover:not(:disabled) { background: var(--bg-input); }
+
+    .backfill-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
 
     /* Fulek - ugyanaz az idioma, mint a TaskDetailModal reszletnezetenel */
     .git-tabs {
