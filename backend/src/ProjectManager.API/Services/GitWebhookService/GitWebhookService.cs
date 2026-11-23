@@ -5,6 +5,7 @@ using ProjectManager.API.Data;
 using ProjectManager.API.Hubs;
 using ProjectManager.API.Model;
 using ProjectManager.API.Services.ActivityService;
+using ProjectManager.API.Services.GitBackfillService;
 using ProjectManager.API.Services.GitWebhookService.Payloads;
 using System.Security.Cryptography;
 using System.Text;
@@ -22,17 +23,20 @@ namespace ProjectManager.API.Services.GitWebhookService
         private readonly AppDbContext _context;
         private readonly IHubContext<ProjectHub> _hubContext;
         private readonly IActivityService _activityService;
+        private readonly IBackfillQueue _backfillQueue;
         private readonly ILogger<GitWebhookService> _logger;
 
         public GitWebhookService(
             AppDbContext context,
             IHubContext<ProjectHub> hubContext,
             IActivityService activityService,
+            IBackfillQueue backfillQueue,
             ILogger<GitWebhookService> logger)
         {
             _context = context;
             _hubContext = hubContext;
             _activityService = activityService;
+            _backfillQueue = backfillQueue;
             _logger = logger;
         }
 
@@ -285,6 +289,8 @@ namespace ProjectManager.API.Services.GitWebhookService
                     "Hiányos push payload | Ígért: {Reported} | Érkezett: {Received} | Ref: {Ref} | IntegrationId: {IntegrationId} | BackfillId: {BackfillId}",
                     pushEvent.ProviderReportedCommitCount?.ToString() ?? "ismeretlen (a szolgáltató nem közli)",
                     pushEvent.ReceivedCommitCount, pushEvent.Ref, integrationId, backfill.Id);
+
+                await QueueAutomaticBackfillAsync(integrationId, backfill.Id);
             }
             catch (DbUpdateException ex)
             {
@@ -296,6 +302,41 @@ namespace ProjectManager.API.Services.GitWebhookService
                     "A hiányos push nyilvántartásba vétele nem sikerült | IntegrationId: {IntegrationId}",
                     integrationId);
             }
+        }
+
+        /// <summary>
+        /// Ha az integráción be van kapcsolva az automatikus pótlás, a nyilvántartási sor
+        /// azonosítója várólistára kerül.
+        ///
+        /// Itt szándékosan CSAK a betétel történik: a lekérés a webhook válasza UTÁN, egy
+        /// háttérfutásban indul. A szolgáltató így sosem lát lassú webhookot - a GitHub és a
+        /// GitLab a lassan válaszoló webhookot hibásnak jelöli, és végül kikapcsolja.
+        ///
+        /// A kapcsoló állását a futás pillanatában újra megkérdezzük, tehát ez a lekérdezés
+        /// nem döntés, csak szűrés: a kikapcsolt integráció sora ne is kerüljön a listára.
+        /// </summary>
+        private async Task QueueAutomaticBackfillAsync(Guid integrationId, Guid backfillId)
+        {
+            var autoEnabled = await _context.Integrations
+                .Where(i => i.Id == integrationId)
+                .Select(i => i.AutoBackfillEnabled)
+                .FirstOrDefaultAsync();
+
+            if (!autoEnabled) return;
+
+            if (_backfillQueue.TryEnqueue(backfillId))
+            {
+                _logger.LogInformation(
+                    "Automatikus commit pótlás várólistára került | IntegrationId: {IntegrationId} | BackfillId: {BackfillId}",
+                    integrationId, backfillId);
+                return;
+            }
+
+            //Tele a várólista. A sor Pending marad, tehát semmi nem veszett el: a felhasználó
+            //a felületről elindíthatja. A torlódás viszont tünet, ezért figyelmeztetés.
+            _logger.LogWarning(
+                "Az automatikus pótlás várólistája tele van, a pótlás kézi indításra vár | BackfillId: {BackfillId}",
+                backfillId);
         }
 
         public bool ValidateGitHubSignature(string payload, string signature, string secret)

@@ -21,5 +21,16 @@ namespace ProjectManager.API.Services.GitBackfillService
         /// indítható).
         /// </summary>
         Task<CommitBackfillResponseDto> RunBackfillAsync(Guid projectId, Guid backfillId);
+
+        /// <summary>
+        /// Az automatikus kísérlet, a háttérfutásból. Pontosan egyszer fut le soronként, és
+        /// csak akkor, ha az integráción be van kapcsolva.
+        ///
+        /// Nem dob kivételt, és nem is ad vissza semmit: itt nincs kinek jelezni. Minden
+        /// kimenet a nyilvántartási sorba és a naplóba kerül, a felületet pedig a valós idejű
+        /// esemény frissíti. Ha a kísérlet nem indulhat vagy hibára fut, a sort ezután a
+        /// felhasználó indítja újra - automatikus ismétlés NINCS.
+        /// </summary>
+        Task RunAutomaticAsync(Guid backfillId);
     }
 }

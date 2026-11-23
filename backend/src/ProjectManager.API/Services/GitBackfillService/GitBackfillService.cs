@@ -118,6 +118,111 @@ namespace ProjectManager.API.Services.GitBackfillService
             return await ExecuteAsync(projectId, backfill, fetcher, automatic: false);
         }
 
+        public async Task RunAutomaticAsync(Guid backfillId)
+        {
+            var backfill = await _context.CommitBackfills
+                .Include(b => b.Integration)
+                .FirstOrDefaultAsync(b => b.Id == backfillId);
+
+            if (backfill == null)
+            {
+                _logger.LogWarning(
+                    "Automatikus pótlás: a nyilvántartási sor eltűnt | BackfillId: {BackfillId}", backfillId);
+                return;
+            }
+
+            var integration = backfill.Integration;
+
+            //A kapcsolót a várólistára tétel ÓTA is kikapcsolhatták: a döntés pillanata az
+            //indítás, nem az észlelés
+            if (!integration.AutoBackfillEnabled)
+            {
+                _logger.LogInformation(
+                    "Automatikus pótlás elmarad: az integráción közben kikapcsolták | IntegrationId: {IntegrationId} | BackfillId: {BackfillId}",
+                    integration.Id, backfillId);
+                return;
+            }
+
+            //Itt nincs kinek kivételt dobni: a hívó egy háttérfutás. Ezért minden előfeltétel
+            //naplóba kerül, a sor pedig Pending marad - vagyis a felhasználó kézzel indíthatja.
+            if (backfill.BeforeSha == null || backfill.AfterSha == null)
+            {
+                _logger.LogWarning(
+                    "Automatikus pótlás elmarad: a push azonosítói hiányoznak | BackfillId: {BackfillId}", backfillId);
+                return;
+            }
+
+            if (!integration.IsEnabled)
+            {
+                _logger.LogWarning(
+                    "Automatikus pótlás elmarad: az integráció le van tiltva | IntegrationId: {IntegrationId}",
+                    integration.Id);
+                return;
+            }
+
+            var fetcher = _fetchers.FirstOrDefault(f => f.Provider == integration.Provider);
+            if (fetcher == null)
+            {
+                _logger.LogError(
+                    "Automatikus pótlás elmarad: nincs commit lekérő a providerhez | Provider: {Provider}",
+                    integration.Provider);
+                return;
+            }
+
+            //Ugyanaz a korlát, mint a kézi indításnál: egy hibás szolgáltatói állapotból fakadó
+            //csonkolás-sorozat különben kvótát égetne - azt a kvótát, amely a következő valódi
+            //pótláshoz kell. Korlátozásnál a sor Pending marad, tehát nem veszik el.
+            var (isLimited, _) = await _rateLimitService.IsRateLimitedAsync(
+                $"git-backfill:{integration.ProjectId}", MaxRunsPerWindow, RateLimitWindow);
+
+            if (isLimited)
+            {
+                _logger.LogWarning(
+                    "Automatikus pótlás elmarad: elérte a projekt kérésszám-korlátját, a sor kézzel indítható | ProjectId: {ProjectId} | BackfillId: {BackfillId}",
+                    integration.ProjectId, backfillId);
+                return;
+            }
+
+            if (!await TryClaimAutomaticallyAsync(backfillId))
+            {
+                //Vagy már fut, vagy valaki megelőzött minket - mindkettő rendben van
+                _logger.LogInformation(
+                    "Automatikus pótlás elmarad: a sor már nem érintetlen | BackfillId: {BackfillId}", backfillId);
+                return;
+            }
+
+            await _context.Entry(backfill).ReloadAsync();
+
+            await ExecuteAsync(integration.ProjectId, backfill, fetcher, automatic: true);
+        }
+
+        /// <summary>
+        /// Foglalás az automatikus kísérlethez. Két dologban szigorúbb a kézinél:
+        ///
+        /// - a <c>ClaimedById</c> üresen marad, ami a rendszerindítást jelöli;
+        /// - a feltétel <b>érintetlen</b> sort kíván (<c>Pending</c> és nulla kísérlet), így a
+        ///   „pontosan egyszer" nem a hívási hely véletlenjén múlik, hanem kikényszerített.
+        ///
+        /// Ha a felhasználó ugyanebben a pillanatban nyomja meg a gombot, a vesztes ág itt
+        /// nulla sort frissít, és dolga sincs tovább - második lekérés nem indul.
+        /// </summary>
+        private async Task<bool> TryClaimAutomaticallyAsync(Guid backfillId)
+        {
+            var now = DateTime.UtcNow;
+
+            var claimed = await _context.CommitBackfills
+                .Where(b => b.Id == backfillId
+                            && b.State == BackfillStates.Pending
+                            && b.AttemptCount == 0)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(b => b.State, BackfillStates.InProgress)
+                    .SetProperty(b => b.ClaimedAt, now)
+                    .SetProperty(b => b.ClaimedById, (Guid?)null)
+                    .SetProperty(b => b.AttemptCount, b => b.AttemptCount + 1));
+
+            return claimed > 0;
+        }
+
         /// <summary>
         /// A pótlás előfeltételei. Mind a négy esetben a KÉRÉS nem teljesíthető, nem a
         /// szolgáltató hibázott - ezért kivétel, és nem Failed állapot.
@@ -241,7 +346,8 @@ namespace ProjectManager.API.Services.GitBackfillService
             LogAttempt(backfill, integration, automatic, stopwatch.ElapsedMilliseconds,
                 outcome.Commits.Count, kind: null, succeeded: true, incomplete: outcome.Incomplete);
 
-            await LogActivityAsync(projectId, backfill, integration, outcome.Commits.Count, outcome.Incomplete);
+            await LogActivityAsync(
+                projectId, backfill, integration, outcome.Commits.Count, outcome.Incomplete, automatic);
             await BroadcastAsync(projectId, backfill);
 
             return MapToDto(backfill);
@@ -314,16 +420,26 @@ namespace ProjectManager.API.Services.GitBackfillService
         }
 
         private async Task LogActivityAsync(
-            Guid projectId, CommitBackfill backfill, Integration integration, int commitCount, bool incomplete)
+            Guid projectId, CommitBackfill backfill, Integration integration,
+            int commitCount, bool incomplete, bool automatic)
         {
             try
             {
-                var text = $"{{actor}} pótolta a kimaradt commitokat ({integration.RepoFullName}" +
-                           $"{(backfill.Ref == null ? "" : $", {backfill.Ref}")}): {commitCount} commit" +
-                           (incomplete ? " — a hiány csökkent, de nem szűnt meg" : string.Empty);
+                var where = integration.RepoFullName +
+                            (backfill.Ref == null ? string.Empty : $", {backfill.Ref}");
 
-                var activity = await _activityService.LogActivityAsync(
-                    projectId, "Integration", integration.Id, "CommitsBackfilled", text);
+                var remainder = incomplete ? " — a hiány csökkent, de nem szűnt meg" : string.Empty;
+
+                //Az automatikus kísérletnek NINCS cselekvője: a háttérfutásban nincs
+                //bejelentkezett felhasználó, és egy {actor} helyőrző itt kitöltetlen maradna.
+                //Ugyanaz a megfontolás, mint a webhook ágán.
+                var activity = automatic
+                    ? await _activityService.LogSystemActivityAsync(
+                        projectId, "Integration", integration.Id, "CommitsBackfilled",
+                        $"Automatikus pótlás ({where}): {commitCount} commit{remainder}")
+                    : await _activityService.LogActivityAsync(
+                        projectId, "Integration", integration.Id, "CommitsBackfilled",
+                        $"{{actor}} pótolta a kimaradt commitokat ({where}): {commitCount} commit{remainder}");
 
                 await _hubContext.Clients
                     .Group($"project-{projectId}")

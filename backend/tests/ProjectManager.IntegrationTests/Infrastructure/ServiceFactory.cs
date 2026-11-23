@@ -251,15 +251,28 @@ namespace ProjectManager.IntegrationTests.Infrastructure
         /// </summary>
         public static (GitWebhookService Sut, ServiceContext Ctx) CreateGitWebhookService(AppDbContext context)
         {
+            var (sut, ctx, _) = CreateGitWebhookServiceWithQueue(context);
+            return (sut, ctx);
+        }
+
+        /// <summary>
+        /// Ugyanaz, de a pótlás várólistájához is hozzáférést ad: a hiányos push észlelésekor
+        /// azt is vizsgálni kell, bekerült-e a sor az automatikus kísérlet listájára.
+        /// </summary>
+        public static (GitWebhookService Sut, ServiceContext Ctx, RecordingBackfillQueue Queue)
+            CreateGitWebhookServiceWithQueue(AppDbContext context)
+        {
             var (_, hub, activity) = Common(context, Guid.Empty, "System");
+            var queue = new RecordingBackfillQueue();
 
             var sut = new GitWebhookService(
                 context,
                 hub,
                 activity,
+                queue,
                 NullLogger<GitWebhookService>.Instance);
 
-            return (sut, new ServiceContext(context, hub));
+            return (sut, new ServiceContext(context, hub), queue);
         }
 
         /// <summary>
@@ -280,7 +293,8 @@ namespace ProjectManager.IntegrationTests.Infrastructure
             //A webhook feldolgozó VALÓDI: a pótlás pont azt állítja magáról, hogy ugyanazon az
             //illesztő úton vezeti át a lekért commitokat, mint a beérkező push
             var webhook = new GitWebhookService(
-                context, hub, activity, NullLogger<GitWebhookService>.Instance);
+                context, hub, activity, new RecordingBackfillQueue(),
+                NullLogger<GitWebhookService>.Instance);
 
             var sut = new GitBackfillService(
                 context,

@@ -368,6 +368,10 @@ namespace ProjectManager.API.Extensions
             //A pótlás a lekérőket, a webhook feldolgozót és a titkosítást is használja,
             //ezért scoped: adatbázis-kontextussal dolgozik.
             services.AddScoped<IGitBackfillService, GitBackfillService>();
+
+            //A várólista singleton: a webhook kérése beteszi, a háttérfutás kiveszi.
+            //Folyamaton belüli - a sor védelme az adatbázisbeli foglalás, nem a várólista.
+            services.AddSingleton<IBackfillQueue, BackfillQueue>();
             services.AddScoped<IStatisticsService, StatisticsService>();
             services.AddScoped<ICounterService, CounterService>();
             services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -378,6 +382,9 @@ namespace ProjectManager.API.Extensions
 
             //TokenCleanupJob - lejárt hitelesítési tokenek és elévült feltöltés-naplósorok
             services.AddHostedService<TokenCleanupJob>();
+
+            //Nem időzített: az esemény maga a hiány észlelése
+            services.AddHostedService<BackfillWorker>();
 
             //FluentValidation Validators
             services.AddValidatorsFromAssemblyContaining<Program>();
