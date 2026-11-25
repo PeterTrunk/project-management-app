@@ -2,6 +2,7 @@
 using ProjectManager.API.Common.Exceptions;
 using ProjectManager.API.Data;
 using ProjectManager.API.DTOs.Statistics;
+using ProjectManager.API.Services.GitWebhookService.Payloads;
 
 namespace ProjectManager.API.Services.StatisticsService
 {
@@ -211,6 +212,70 @@ namespace ProjectManager.API.Services.StatisticsService
                     CompletedTasks = s.ProjectTasks.Count(t => t.CompletedAt != null)
                 })
                 .ToListAsync();
+        }
+
+        public async Task<List<CycleTimeDataPointDto>> GetCycleTimeAsync(
+            Guid projectId, DateTime dateFrom, DateTime dateTo)
+        {
+            dateFrom = DateTime.SpecifyKind(dateFrom, DateTimeKind.Utc);
+
+            //A záró nap VÉGÉIG, ugyanúgy, mint a kumulatív folyamatábránál: a felhasználó egy
+            //napot ad meg, nem egy időpontot
+            dateTo = DateTime.SpecifyKind(dateTo, DateTimeKind.Utc).AddDays(1).AddSeconds(-1);
+
+            //Az összesítés az ADATBÁZISBAN marad: feladatonként egy-egy aggregátum, nem a
+            //hivatkozások teljes betöltése. A projekt-szűrés a legkülső feltétel - a
+            //kimutatások projekt-hatókörűek, és ez a szűrés tartja azzá.
+            var points = await _context.ProjectTasks
+                .Where(t => t.ProjectId == projectId)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.TaskKey,
+                    t.Title,
+
+                    //Nullozható alakra kényszerítve: hivatkozás nélküli feladatnál a Min()
+                    //üres halmazra futna
+                    FirstCommitAt = t.CommitLinks.Min(cl => (DateTime?)cl.CommittedAt),
+
+                    //A LEGUTÓBBI összeolvadás, nem az első: amíg egy újabb pull request
+                    //beolvad a feladathoz, a munka nem ért véget
+                    MergedAt = t.PrLinks
+                        .Where(pl => pl.State == GitPrStates.Merged && pl.MergedAt != null)
+                        .Max(pl => pl.MergedAt),
+
+                    //Ugyanannak a sornak a sorszáma, korrelált alkérdéssel
+                    PrNumber = t.PrLinks
+                        .Where(pl => pl.State == GitPrStates.Merged && pl.MergedAt != null)
+                        .OrderByDescending(pl => pl.MergedAt)
+                        .Select(pl => pl.PrNumber)
+                        .FirstOrDefault(),
+
+                    CommitCount = t.CommitLinks.Count()
+                })
+                .Where(x => x.FirstCommitAt != null && x.MergedAt != null)
+                .Where(x => x.MergedAt >= dateFrom && x.MergedAt <= dateTo)
+                .OrderBy(x => x.MergedAt)
+                .ToListAsync();
+
+            return points
+                .Select(x => new CycleTimeDataPointDto
+                {
+                    TaskId = x.Id,
+                    TaskKey = x.TaskKey,
+                    Title = x.Title,
+                    FirstCommitAt = x.FirstCommitAt!.Value,
+                    MergedAt = x.MergedAt!.Value,
+
+                    //Negatív is lehet, és ez nem hiba: a commit időbélyege a fejlesztő gépéről
+                    //jön, és egy commit utólag is hozzárendelhető egy már összeolvadt pull
+                    //requesthez. A szűrés a megjelenítés dolga - a lekérdezés nem dönt arról,
+                    //mit nem mutatunk meg.
+                    Hours = (x.MergedAt!.Value - x.FirstCommitAt!.Value).TotalHours,
+                    CommitCount = x.CommitCount,
+                    PrNumber = x.PrNumber
+                })
+                .ToList();
         }
 
         public async Task<List<WorkloadDataPointDto>> GetWorkloadAsync(Guid projectId, Guid? sprintId = null)

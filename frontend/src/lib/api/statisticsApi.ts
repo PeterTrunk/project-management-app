@@ -34,6 +34,25 @@ export interface CumulativeFlowDataPoint {
     statusCounts: StatusCount[];
 }
 
+/**
+ * Egy feladat átfutási ideje: az első hozzá kapcsolt committól a pull request
+ * összeolvadásáig.
+ *
+ * Az `hours` LEHET negatív, és ezt nem a szerver szűri ki: a commit időbélyege a fejlesztő
+ * gépéről jön, és egy commit utólag is hozzárendelhető egy már összeolvadt pull requesthez.
+ * Az összegzés ezért a kliensen dönt róla - lásd `utils/cycleTime.ts`.
+ */
+export interface CycleTimeDataPoint {
+    taskId: string;
+    taskKey: string;
+    title: string;
+    firstCommitAt: string;
+    mergedAt: string;
+    hours: number;
+    commitCount: number;
+    prNumber: number;
+}
+
 export async function getTaskStatusDistributionAsync(projectId: string, sprintId?: string): Promise<TaskStatusDistribution[]> {
     const response = await apiClient.get(
         `/projects/${projectId}/statistics/task-status`,
@@ -72,6 +91,17 @@ export async function getCumulativeFlowAsync(projectId: string, dateFrom: string
     const response = await apiClient.get(
         `/projects/${projectId}/statistics/cumulative-flow`,
         { params: { dateFrom, dateTo, boardId } }
+    );
+    return response.data;
+}
+
+export async function getCycleTimeAsync(projectId: string, dateFrom: string, dateTo: string): Promise<CycleTimeDataPoint[]> {
+    const error = validateDateRange(dateFrom, dateTo);
+    if (error) throw new Error(error);
+
+    const response = await apiClient.get(
+        `/projects/${projectId}/statistics/cycle-time`,
+        { params: { dateFrom, dateTo } }
     );
     return response.data;
 }

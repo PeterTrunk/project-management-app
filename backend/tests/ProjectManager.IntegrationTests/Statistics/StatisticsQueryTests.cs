@@ -159,6 +159,208 @@ namespace ProjectManager.IntegrationTests.Statistics
                 Assert.Single(point.StatusCounts, s => s.Status == "Backlog"));
         }
 
+        //Az átfutási idő
+
+        private static async Task AddCommitLinkAsync(
+            AppDbContext context, Guid integrationId, Guid taskId, string sha, DateTime committedAt)
+        {
+            context.CommitLinks.Add(new CommitLink
+            {
+                IntegrationId = integrationId,
+                TaskId = taskId,
+                CommitSha = sha,
+                Message = "PMA-1 teszt commit",
+                AuthorName = "Teszt Elek",
+                AuthorEmail = "teszt@example.com",
+                CommittedAt = DateTime.SpecifyKind(committedAt, DateTimeKind.Utc)
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        private static async Task AddPrLinkAsync(
+            AppDbContext context, Guid integrationId, Guid? taskId, int prNumber,
+            string state, DateTime? mergedAt)
+        {
+            context.PrLinks.Add(new PrLink
+            {
+                IntegrationId = integrationId,
+                TaskId = taskId,
+                PrNumber = prNumber,
+                Title = $"PMA-1 pull request #{prNumber}",
+                State = state,
+                AuthorName = "Teszt Elek",
+                MergedAt = mergedAt == null
+                    ? null
+                    : DateTime.SpecifyKind(mergedAt.Value, DateTimeKind.Utc)
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        private static DateTime Day(int daysAgo, int hour = 12) =>
+            DateTime.SpecifyKind(DateTime.UtcNow.Date.AddDays(-daysAgo).AddHours(hour), DateTimeKind.Utc);
+
+        private static (DateTime From, DateTime To) Window() =>
+            (DateTime.UtcNow.Date.AddDays(-30), DateTime.UtcNow.Date);
+
+        /// <summary>
+        /// A mérés az ELSŐ committól a LEGUTÓBBI összeolvadásig tart. Az első commit azért,
+        /// mert a munka akkor kezdődött; a legutóbbi összeolvadás azért, mert amíg egy újabb
+        /// pull request beolvad a feladathoz, a munka nem ért véget.
+        /// </summary>
+        [Fact]
+        public async Task CycleTime_MeasuresFromTheFirstCommitToTheMerge()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CT");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(10));
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('b', 40), Day(8));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 42, "merged", Day(5));
+
+            var (from, to) = Window();
+            var result = await Sut(context).GetCycleTimeAsync(seeded.Project.Id, from, to);
+
+            var point = Assert.Single(result);
+            Assert.Equal(seeded.Task.TaskKey, point.TaskKey);
+            Assert.Equal(42, point.PrNumber);
+            Assert.Equal(2, point.CommitCount);
+            Assert.Equal(Day(10), point.FirstCommitAt);
+            Assert.Equal(Day(5), point.MergedAt);
+
+            //Öt nap, órában
+            Assert.Equal(120, point.Hours, precision: 1);
+        }
+
+        [Fact]
+        public async Task CycleTime_SeveralMergedPullRequests_UseTheLastMerge()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CTM");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(10));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 1, "merged", Day(8));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 2, "merged", Day(6));
+
+            var (from, to) = Window();
+            var result = await Sut(context).GetCycleTimeAsync(seeded.Project.Id, from, to);
+
+            var point = Assert.Single(result);
+            Assert.Equal(Day(6), point.MergedAt);
+
+            //A sorszám ugyanahhoz a sorhoz tartozik, mint az időpont
+            Assert.Equal(2, point.PrNumber);
+        }
+
+        /// <summary>
+        /// A mérőszám csak akkor áll elő, ha mindkét vége megvan. A nyitott pull request még nem
+        /// vég, a commit nélküli feladatnak pedig nincs kezdete - egyik sem hiba, csak nem
+        /// mérhető.
+        /// </summary>
+        [Fact]
+        public async Task CycleTime_WithoutAMergeOrWithoutACommit_IsNotMeasured()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CTN");
+            var second = await TestData.AddTaskAsync(context, seeded, "CTN-2");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            //Nyitott pull request, committal
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(10));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 1, "open", null);
+
+            //Összeolvadt pull request, commit nélkül
+            await AddPrLinkAsync(context, integration.Id, second.Id, 2, "merged", Day(5));
+
+            var (from, to) = Window();
+            var result = await Sut(context).GetCycleTimeAsync(seeded.Project.Id, from, to);
+
+            Assert.Empty(result);
+        }
+
+        //Az időszak az ÖSSZEOLVADÁS napjára szűr: a mérőszám akkor válik ismertté
+        [Fact]
+        public async Task CycleTime_FiltersOnTheMergeDate()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CTW");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(60));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 1, "merged", Day(45));
+
+            var sut = Sut(context);
+
+            //Az ablakon kívüli összeolvadás kimarad, akkor is, ha a commit még régebbi
+            Assert.Empty(await sut.GetCycleTimeAsync(
+                seeded.Project.Id, DateTime.UtcNow.Date.AddDays(-30), DateTime.UtcNow.Date));
+
+            //A régebbi commit viszont a mérés KEZDETE, tehát a hosszabb ablakban látszik
+            var point = Assert.Single(await sut.GetCycleTimeAsync(
+                seeded.Project.Id, DateTime.UtcNow.Date.AddDays(-90), DateTime.UtcNow.Date));
+
+            Assert.Equal(15 * 24, point.Hours, precision: 1);
+        }
+
+        /// <summary>
+        /// A negatív érték nem hiba, és nem is szűrjük ki a lekérdezésben: a commit időbélyege a
+        /// fejlesztő gépéről jön (a git engedi átírni), és egy commit utólag is hozzárendelhető
+        /// egy már összeolvadt pull requesthez. A lekérdezés nem dönt arról, mit nem mutatunk
+        /// meg - azt a megjelenítés teszi, és ott kimondjuk, hány sort hagytunk ki.
+        /// </summary>
+        [Fact]
+        public async Task CycleTime_ACommitAfterTheMerge_StaysInTheResultAsNegative()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CTX");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(3));
+            await AddPrLinkAsync(context, integration.Id, seeded.Task.Id, 1, "merged", Day(5));
+
+            var (from, to) = Window();
+            var point = Assert.Single(await Sut(context).GetCycleTimeAsync(seeded.Project.Id, from, to));
+
+            Assert.True(point.Hours < 0);
+        }
+
+        //A kimutatások projekt-hatókörűek: a másik projekt feladata nem kerülhet bele
+        [Fact]
+        public async Task CycleTime_StaysInsideTheProject()
+        {
+            await using var context = CreateContext();
+            var mine = await TestData.SeedProjectAsync(context, "CTA");
+            var other = await TestData.SeedProjectAsync(context, "CTB");
+            var otherIntegration = await TestData.SeedIntegrationAsync(context, other.Project.Id);
+
+            await AddCommitLinkAsync(context, otherIntegration.Id, other.Task.Id, new string('a', 40), Day(10));
+            await AddPrLinkAsync(context, otherIntegration.Id, other.Task.Id, 1, "merged", Day(5));
+
+            var (from, to) = Window();
+
+            Assert.Empty(await Sut(context).GetCycleTimeAsync(mine.Project.Id, from, to));
+            Assert.Single(await Sut(context).GetCycleTimeAsync(other.Project.Id, from, to));
+        }
+
+        //A hozzárendeletlen pull request nem tartozik feladathoz, tehát nem is mérhető
+        [Fact]
+        public async Task CycleTime_IgnoresUnmatchedLinks()
+        {
+            await using var context = CreateContext();
+            var seeded = await TestData.SeedProjectAsync(context, "CTU");
+            var integration = await TestData.SeedIntegrationAsync(context, seeded.Project.Id);
+
+            await AddCommitLinkAsync(context, integration.Id, seeded.Task.Id, new string('a', 40), Day(10));
+            await AddPrLinkAsync(context, integration.Id, null, 7, "merged", Day(5));
+
+            var (from, to) = Window();
+
+            Assert.Empty(await Sut(context).GetCycleTimeAsync(seeded.Project.Id, from, to));
+        }
+
         //A csapatterhelés
 
         /// <summary>

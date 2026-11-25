@@ -53,6 +53,22 @@ namespace ProjectManager.API.Controllers
             return Ok(response);
         }
         
+        /// <summary>
+        /// Átfutási idő: az első committól az összeolvadásig. Az időszak az ÖSSZEOLVADÁS
+        /// napjára szűr, mert a mérőszám akkor válik ismertté.
+        /// </summary>
+        [HttpGet("cycle-time")]
+        [Authorize(Policy = PolicyNames.ProjectViewer)]
+        [ProducesResponseType(typeof(List<CycleTimeDataPointDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<List<CycleTimeDataPointDto>>> GetCycleTimeAsync(
+            Guid projectId,
+            [FromQuery] DateTime dateFrom,
+            [FromQuery] DateTime dateTo)
+        {
+            var response = await _statisticsService.GetCycleTimeAsync(projectId, dateFrom, dateTo);
+            return Ok(response);
+        }
+
         [HttpGet("cumulative-flow")]
         [Authorize(Policy = PolicyNames.ProjectViewer)]
         [ProducesResponseType(typeof(List<CumulativeFlowDataPointDto>), StatusCodes.Status200OK)]

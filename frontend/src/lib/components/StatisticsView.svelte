@@ -8,11 +8,13 @@
         getWorkloadAsync,
         getVelocityAsync,
         getCumulativeFlowAsync,
+        getCycleTimeAsync,
         type TaskStatusDistribution,
         type BurndownDataPoint,
         type WorkloadDataPoint,
         type VelocityDataPoint,
-        type CumulativeFlowDataPoint
+        type CumulativeFlowDataPoint,
+        type CycleTimeDataPoint
     } from '../api/statisticsApi';
     import { getSprintsAsync } from '../api/sprintApi';
 
@@ -21,6 +23,7 @@
     import TeamWorkloadChart from './TeamWorkloadChart.svelte';
     import VelocityChart from './VelocityChart.svelte';
     import CumulativeFlowChart from './CumulativeFlowChart.svelte';
+    import CycleTimeChart from './CycleTimeChart.svelte';
     import type { BoardResponse } from '../api/boardApi';
     import { boardStore } from '../stores/boardStore';
 
@@ -42,6 +45,13 @@
     let workloadData: WorkloadDataPoint[] = [];
     let velocityData: VelocityDataPoint[] = [];
     let cumulativeFlowData: CumulativeFlowDataPoint[] = [];
+    let cycleTimeData: CycleTimeDataPoint[] = [];
+
+    //Az átfutási időnek SAJÁT időszaka van, és hosszabb az alapértelmezett harminc napnál:
+    //egy feladat átfutása napokban-hetekben mérhető, tehát egy rövid ablakban néhány pont
+    //maradna, amiből középértéket képezni félrevezető lenne.
+    let cycleDateFrom: string = toLocalDateKey(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    let cycleDateTo: string = toLocalDateKey();
 
     // Loading states
     let loadingStatus = false;
@@ -49,6 +59,7 @@
     let loadingWorkload = false;
     let loadingVelocity = false;
     let loadingCFD = false;
+    let loadingCycleTime = false;
     let selectedBoardId: string ='';
 
     let allSprints: SprintResponse[] = [];
@@ -73,7 +84,8 @@
             loadTaskStatus(),
             loadWorkload(),
             loadVelocity(),
-            loadCumulativeFlow()
+            loadCumulativeFlow(),
+            loadCycleTime()
         ]);
     }
 
@@ -125,6 +137,17 @@
             notify.error(e.response?.data ?? e.message ?? 'Hiba a velocity lekérésekor!');
         } finally {
             loadingVelocity = false;
+        }
+    }
+
+    async function loadCycleTime() {
+        loadingCycleTime = true;
+        try {
+            cycleTimeData = await getCycleTimeAsync(projectId, cycleDateFrom, cycleDateTo);
+        } catch (e: any) {
+            notify.error(e.response?.data ?? e.message ?? 'Hiba az átfutási idő lekérésekor!');
+        } finally {
+            loadingCycleTime = false;
         }
     }
 
@@ -275,6 +298,41 @@
                     <div class="empty">Nincs adat a megadott intervallumra</div>
                 {:else}
                     <CumulativeFlowChart data={cumulativeFlowData} />
+                {/if}
+            </div>
+        </div>
+
+        <!-- Ötödik sor: átfutási idő. Ez az egyetlen kimutatás, amely nem a feladatkezelésből
+             dolgozik, hanem a verziókezelőből: az első committól az összeolvadásig. Ezért van
+             saját, hosszabb időszaka, és ezért marad üres git integráció nélkül. -->
+        <div class="chart-card full-width">
+            <div class="chart-header">
+                <div class="date-filters">
+                    <label for="cycleDateFrom">Tól:</label>
+                    <input
+                        id="cycleDateFrom"
+                        type="date"
+                        bind:value={cycleDateFrom}
+                        on:change={loadCycleTime}
+                    />
+                    <label for="cycleDateTo">Ig:</label>
+                    <input
+                        id="cycleDateTo"
+                        type="date"
+                        bind:value={cycleDateTo}
+                        on:change={loadCycleTime}
+                    />
+                </div>
+            </div>
+            <div class="chart-scroll scroll-x">
+                {#if loadingCycleTime}
+                    <div class="loading">Betöltés...</div>
+                {:else if cycleTimeData.length === 0}
+                    <div class="empty">
+                        Nincs mérhető feladat: ehhez kapcsolt commit és összeolvadt pull request is kell.
+                    </div>
+                {:else}
+                    <CycleTimeChart data={cycleTimeData} />
                 {/if}
             </div>
         </div>
