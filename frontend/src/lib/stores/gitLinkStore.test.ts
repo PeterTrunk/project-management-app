@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
     gitLinkStore, setGitLinks, clearGitLinks,
-    handleCommitLinked, handlePrLinked, linksForTask
+    handleCommitLinked, handlePrLinked, linksForTask,
+    indexLinksByTask, gitLinksByTask
 } from './gitLinkStore';
 import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
 
@@ -174,6 +175,51 @@ describe('gitLinkStore', () => {
             setGitLinks([commit({ id: 'cm3', taskId: null })], []);
 
             expect(linksForTask(get(gitLinkStore).commits, 't1')).toHaveLength(0);
+        });
+    });
+    /**
+     * A feladatonkénti index.
+     *
+     * Azért van a `linksForTask` mellett, mert a két felhasználási hely mérete különbözik: a
+     * részletnézetben egy feladat van, a tábla- és backlog-nézetben viszont egyszerre sok
+     * kártya - ott a kártyánkénti szűrés minden git eseményre egy-egy végigjárást jelentene.
+     */
+    describe('indexLinksByTask', () => {
+        it('feladatonként gyűjti a commitokat és a pull requesteket', () => {
+            const index = indexLinksByTask(
+                [commit({ id: 'cm1', taskId: 't1' }), commit({ id: 'cm2', taskId: 't2' })],
+                [pr({ id: 'pr1', taskId: 't1' })]);
+
+            expect(index.get('t1')!.commits.map(c => c.id)).toEqual(['cm1']);
+            expect(index.get('t1')!.prs.map(p => p.id)).toEqual(['pr1']);
+            expect(index.get('t2')!.commits.map(c => c.id)).toEqual(['cm2']);
+            expect(index.get('t2')!.prs).toHaveLength(0);
+        });
+
+        //A hozzárendeletlen sor a git nézet külön listája: nincs feladat, amelyhez tartozna
+        it('a hozzárendeletlen sorokat kihagyja', () => {
+            const index = indexLinksByTask(
+                [commit({ id: 'cm3', taskId: null })],
+                [pr({ id: 'pr3', taskId: null })]);
+
+            expect(index.size).toBe(0);
+        });
+
+        it('a hivatkozás nélküli feladat kulcsa sem kerül bele', () => {
+            const index = indexLinksByTask([commit({ taskId: 't1' })], []);
+
+            expect(index.has('t2')).toBe(false);
+        });
+
+        it('a származtatott tároló követi a hivatkozások változását', () => {
+            setGitLinks([commit({ id: 'cm1', taskId: 't1' })], []);
+            expect(get(gitLinksByTask).get('t1')!.commits).toHaveLength(1);
+
+            handleCommitLinked(commit({ id: 'cm2', taskId: 't1' }));
+            expect(get(gitLinksByTask).get('t1')!.commits).toHaveLength(2);
+
+            clearGitLinks();
+            expect(get(gitLinksByTask).size).toBe(0);
         });
     });
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { TaskResponse } from '../api/taskApi';
     import LabelCard from './LabelCard.svelte';
+    import TaskGitBadges from './TaskGitBadges.svelte';
     import { projectStore } from '../stores/projectStore';
     import type { LabelResponse } from '../api/labelApi';
     import { teamStore } from '../stores/teamStore';
@@ -83,6 +84,8 @@
     {#if isCompleted}
         <span class="completed-badge"><Check size={12} /> Kész</span>
     {/if}
+    
+    <TaskGitBadges taskId={task.id} {isCompleted} isClosed={task.closedAt != null} />
 </div>
 
 <style>

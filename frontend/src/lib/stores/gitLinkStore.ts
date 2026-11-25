@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
 
 /**
@@ -7,7 +7,7 @@ import type { LinkedCommitResponse, LinkedPrResponse } from '../api/gitApi';
  * **Miért LAPOS, és miért a hivatkozás azonosítója szerint.** Egy commit üzenete több task
  * kulcsát is tartalmazhatja, és a webhook ilyenkor TÖBB sort hoz létre - egyet minden
  * illeszkedő taskra, mindegyiket a saját azonosítójával és `taskId`-jével. A tároló ezt az
- * alakot tükrözi, leképezés nélkül. Egy `taskId → hivatkozások` szerinti tároló ugyanazt az
+ * alakot tükrözi, leképezés nélkül. Egy `taskId <-> hivatkozások` szerinti tároló ugyanazt az
  * adatot egy szűkebb feltevésre fordítaná le, és a hozzárendeletlen sor (ahol a `taskId`
  * `null`) külön esetté válna benne.
  *
@@ -103,6 +103,56 @@ function dropPromotedPlaceholder<T extends { id: string; taskId: string | null }
     return items.filter(link =>
         link.id === incoming.id || link.taskId !== null || !sameSubject(link, incoming));
 }
+
+/**
+ * Feladatonkénti leképezés, EGY bejárásból.
+ *
+ * Azért kell a `linksForTask` mellé, mert a két felhasználási hely mérete különbözik. A
+ * részletnézetben egyetlen feladat van, ott a szűrés rendben van; a tábla- és backlog-nézetben
+ * viszont EGYSZERRE sok kártya áll a képernyőn, és ha mindegyik maga szűrné a teljes listát,
+ * akkor minden git esemény kártyánként egy végigjárást jelentene. Az index ezt egyetlen
+ * bejárásra hozza le, és a kártya csak kikeres.
+ *
+ * A hozzárendeletlen sorok (`taskId === null`) nem kerülnek bele: nincs feladat, amelyhez
+ * tartoznának - azok a git nézet külön listája.
+ */
+export interface TaskGitLinks {
+    commits: LinkedCommitResponse[];
+    prs: LinkedPrResponse[];
+}
+
+export function indexLinksByTask(
+    commits: LinkedCommitResponse[],
+    prs: LinkedPrResponse[]
+): Map<string, TaskGitLinks> {
+    const index = new Map<string, TaskGitLinks>();
+
+    const slot = (taskId: string): TaskGitLinks => {
+        let entry = index.get(taskId);
+        if (entry === undefined) {
+            entry = { commits: [], prs: [] };
+            index.set(taskId, entry);
+        }
+        return entry;
+    };
+
+    for (const commit of commits) {
+        if (commit.taskId !== null) slot(commit.taskId).commits.push(commit);
+    }
+
+    for (const pr of prs) {
+        if (pr.taskId !== null) slot(pr.taskId).prs.push(pr);
+    }
+
+    return index;
+}
+
+/** A tároló tartalmából származtatott index. A kártyák ebből olvasnak. */
+export const gitLinksByTask = derived(gitLinkStore, state =>
+    indexLinksByTask(state.commits, state.prs));
+
+/** Üres hivatkozáshalmaz - a kártya enélkül minden hiányzó kulcsra saját objektumot gyártana. */
+export const noTaskGitLinks: TaskGitLinks = { commits: [], prs: [] };
 
 /**
  * Egy feladat hivatkozásai - a részletnézet ebből dolgozik.
